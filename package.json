@@ -1,10 +1,18 @@
 {
   "name": "url-forensics",
   "version": "1.0.0",
-  "description": "{{synopsis}}",
+  "description": "Tooling and checks for the URL Forensics Workbench Firefox extension.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build:extension": "web-ext build --source-dir \"lab/firefox-extension\" --artifacts-dir \"web-ext-artifacts\" --overwrite-dest",
+    "check": "npm run check:syntax && npm run lint:js && npm run lint:extension && npm run duplicates && npm run check:resources && npm run smoke",
+    "check:resources": "node tools/check-extension-resources.js",
+    "check:syntax": "node tools/check-syntax.js",
+    "duplicates": "jscpd \"lab/firefox-extension\" --format javascript --min-lines 10 --min-tokens 80 --max-lines 10000 --max-size 1mb --reporters console --ignore \"**/resources/fonts/**\"",
+    "lint:extension": "web-ext lint --source-dir \"lab/firefox-extension\" --self-hosted",
+    "lint:js": "eslint \"lab/firefox-extension/**/*.js\"",
+    "smoke": "node tools/smoke-pipeline.js",
+    "test": "npm run check"
   },
   "keywords": [],
   "author": "",

@@ -1,5 +1,6 @@
 node_modules/
 backups/
+web-ext-artifacts/
 link lab source/
 lab/firefox-extension-dev/amo-assets/
 
