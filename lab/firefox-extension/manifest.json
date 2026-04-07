@@ -52,6 +52,7 @@
         "debug.js",
         "pipeline.js",
         "storage-model.js",
+        "inbox-detectors.js",
         "content-script.js"
       ],
       "run_at": "document_idle"
