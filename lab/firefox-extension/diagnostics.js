@@ -274,55 +274,104 @@
     };
   }
 
-  // Function: build general diagnostics rows.
-  function buildGeneralDiagnosticsRows(storageUsage, memoryUsage) {
-    const manifest = diagnosticsState.manifest || {};
-    const geckoSettings =
+  // Function: get diagnostics manifest.
+  function getDiagnosticsManifest() {
+    return diagnosticsState.manifest || {};
+  }
+
+  // Function: get diagnostics manifest Gecko settings.
+  function getDiagnosticsGeckoSettings(manifest) {
+    return (
       manifest &&
       manifest.browser_specific_settings &&
       manifest.browser_specific_settings.gecko &&
       typeof manifest.browser_specific_settings.gecko === "object"
-        ? manifest.browser_specific_settings.gecko
-        : {};
-    const dataCollectionPermissions =
+    )
+      ? manifest.browser_specific_settings.gecko
+      : {};
+  }
+
+  // Function: get diagnostics data collection permissions.
+  function getDiagnosticsDataCollectionPermissions(geckoSettings) {
+    return (
       geckoSettings &&
       geckoSettings.data_collection_permissions &&
       Array.isArray(geckoSettings.data_collection_permissions.required)
-        ? geckoSettings.data_collection_permissions.required
-        : [];
-    const permissions = Array.isArray(manifest.permissions) ? manifest.permissions : [];
-    const hostPermissions = Array.isArray(manifest.host_permissions) ? manifest.host_permissions : [];
-    const runtimeId = extensionApi && extensionApi.runtime && extensionApi.runtime.id
+    )
+      ? geckoSettings.data_collection_permissions.required
+      : [];
+  }
+
+  // Function: get diagnostics runtime id.
+  function getDiagnosticsRuntimeId() {
+    return extensionApi && extensionApi.runtime && extensionApi.runtime.id
       ? extensionApi.runtime.id
       : "Unavailable";
-    const safeStorageUsage = storageUsage || {};
-    const safeMemoryUsage = memoryUsage || {};
-    const rows = [
+  }
+
+  // Function: build extension identity diagnostics rows.
+  function buildExtensionIdentityRows(manifest, geckoSettings) {
+    const dataCollectionPermissions = getDiagnosticsDataCollectionPermissions(geckoSettings);
+    const permissions = Array.isArray(manifest.permissions) ? manifest.permissions : [];
+    const hostPermissions = Array.isArray(manifest.host_permissions) ? manifest.host_permissions : [];
+
+    return [
       { label: "Extension", value: String(manifest.name || "URL Forensics Workbench") },
       { label: "Version", value: String(manifest.version || "Unavailable") },
       { label: "Manifest Version", value: String(manifest.manifest_version || "Unavailable") },
       { label: "Gecko ID", value: String(geckoSettings.id || "Unavailable") },
-      { label: "Runtime ID", value: String(runtimeId) },
+      { label: "Runtime ID", value: String(getDiagnosticsRuntimeId()) },
       { label: "Firefox Min Version", value: String(geckoSettings.strict_min_version || "Unavailable") },
       { label: "Permissions", value: formatPermissionList(permissions) },
       { label: "Host Permissions", value: formatPermissionList(hostPermissions) },
-      { label: "Data Collection", value: formatPermissionList(dataCollectionPermissions) },
+      { label: "Data Collection", value: formatPermissionList(dataCollectionPermissions) }
+    ];
+  }
+
+  // Function: build diagnostics page runtime rows.
+  function buildDiagnosticsPageRuntimeRows() {
+    return [
       { label: "Diagnostics Page", value: shortenValue(window.location.href, 120) },
       { label: "Ready State", value: String(document.readyState || "unknown") },
       { label: "Visibility", value: String(document.visibilityState || "unknown") },
       { label: "Uptime", value: formatTimingValue(typeof performance !== "undefined" ? performance.now() : NaN) },
       { label: "Online", value: typeof navigator !== "undefined" && navigator.onLine === false ? "no" : "yes" },
-      { label: "Language", value: typeof navigator !== "undefined" ? String(navigator.language || "Unavailable") : "Unavailable" },
+      {
+        label: "Language",
+        value: typeof navigator !== "undefined" ? String(navigator.language || "Unavailable") : "Unavailable"
+      },
       { label: "Platform", value: typeof navigator !== "undefined" ? String(navigator.platform || "Unavailable") : "Unavailable" },
-      { label: "User Agent", value: typeof navigator !== "undefined" ? shortenValue(navigator.userAgent, 160) : "Unavailable" },
+      { label: "User Agent", value: typeof navigator !== "undefined" ? shortenValue(navigator.userAgent, 160) : "Unavailable" }
+    ];
+  }
+
+  // Function: build target tab diagnostics rows.
+  function buildTargetTabRows() {
+    return [
       { label: "Target Tab ID", value: diagnosticsState.activeTabId ? String(diagnosticsState.activeTabId) : "Unavailable" },
       { label: "Target Tab Title", value: shortenValue(diagnosticsState.activeTabTitle, 120) },
-      { label: "Target Tab URL", value: shortenValue(diagnosticsState.activeTabUrl, 140) },
+      { label: "Target Tab URL", value: shortenValue(diagnosticsState.activeTabUrl, 140) }
+    ];
+  }
+
+  // Function: build memory diagnostics rows.
+  function buildMemoryDiagnosticsRows(memoryUsage) {
+    const safeMemoryUsage = memoryUsage || {};
+
+    return [
       { label: "Memory Source", value: String(safeMemoryUsage.source || "Unavailable") },
       { label: "Memory Used", value: formatByteCount(safeMemoryUsage.usedBytes) },
       { label: "Memory Total", value: formatByteCount(safeMemoryUsage.totalBytes) },
       { label: "Memory Limit", value: formatByteCount(safeMemoryUsage.limitBytes) },
-      { label: "Memory Note", value: String(safeMemoryUsage.note || "Unavailable") },
+      { label: "Memory Note", value: String(safeMemoryUsage.note || "Unavailable") }
+    ];
+  }
+
+  // Function: build storage usage diagnostics rows.
+  function buildStorageUsageDiagnosticsRows(storageUsage) {
+    const safeStorageUsage = storageUsage || {};
+
+    return [
       { label: "Storage Source", value: String(safeStorageUsage.source || "Unavailable") },
       { label: "Storage Keys", value: String(safeStorageUsage.keyCount || "Unavailable") },
       { label: "Storage Used", value: formatByteCount(safeStorageUsage.bytesUsed) },
@@ -330,10 +379,27 @@
       { label: "Storage Note", value: String(safeStorageUsage.note || "Unavailable") },
       { label: "Debug Output Storage", value: "Not persisted; in-memory only" }
     ];
+  }
 
+  // Function: append general diagnostics error row.
+  function appendGeneralDiagnosticsErrorRow(rows) {
     if (diagnosticsState.generalDiagnosticsError) {
       rows.push({ label: "General Diagnostics Error", value: diagnosticsState.generalDiagnosticsError });
     }
+  }
+
+  // Function: build general diagnostics rows.
+  function buildGeneralDiagnosticsRows(storageUsage, memoryUsage) {
+    const manifest = getDiagnosticsManifest();
+    const geckoSettings = getDiagnosticsGeckoSettings(manifest);
+    const rows = []
+      .concat(buildExtensionIdentityRows(manifest, geckoSettings))
+      .concat(buildDiagnosticsPageRuntimeRows())
+      .concat(buildTargetTabRows())
+      .concat(buildMemoryDiagnosticsRows(memoryUsage))
+      .concat(buildStorageUsageDiagnosticsRows(storageUsage));
+
+    appendGeneralDiagnosticsErrorRow(rows);
 
     return rows;
   }
