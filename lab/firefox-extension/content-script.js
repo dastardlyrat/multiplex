@@ -979,74 +979,115 @@
     );
   }
 
-  // Function: is likely standalone email body.
-  function isLikelyStandaloneEmailBody(element, signalData) {
-    // Branch: follow this path only when the current condition passes.
+  // Function: check whether an element can be evaluated as standalone email content.
+  function canEvaluateStandaloneEmailElement(element) {
     if (!element || !element.isConnected) {
       return false;
     }
 
-    // Branch: follow this path only when the current condition passes.
     if (element.id === "merged-link-lab-page-pane" || element.closest("#merged-link-lab-page-pane")) {
       return false;
     }
 
-    // Branch: follow this path only when the current condition passes.
     if (!isElementVisibleAndLargeEnough(element)) {
       return false;
     }
 
-    // Branch: follow this path only when the current condition passes.
-    if (hasComposeContext(element)) {
-      return false;
-    }
+    return !hasComposeContext(element);
+  }
 
+  // Function: check whether an ARIA role is not useful for standalone email detection.
+  function hasBlockedStandaloneEmailRole(element) {
     const roleValue = String(element.getAttribute("role") || "").toLowerCase();
-    // Branch: follow this path only when the current condition passes.
-    if (/row|gridcell|option|menuitem|tab|navigation|banner|complementary/.test(roleValue)) {
-      return false;
-    }
+    return /row|gridcell|option|menuitem|tab|navigation|banner|complementary/.test(roleValue);
+  }
 
+  // Function: check minimum standalone email text density.
+  function hasStandaloneEmailTextDensity(textMetrics) {
+    return textMetrics.text.length >= 120 && textMetrics.words >= 25 && textMetrics.lines >= 3;
+  }
+
+  // Function: check minimum standalone email visual size.
+  function hasStandaloneEmailVisualSize(elementBounds) {
+    return elementBounds.width >= 240 && elementBounds.height >= 100;
+  }
+
+  // Function: build standalone email detection context.
+  function createStandaloneEmailDetectionContext(element, signalData) {
     const textMetrics = measureElementText(element);
     const elementBounds = element.getBoundingClientRect();
     const standaloneSignals = signalData || measureStandaloneEmailSignals(element, textMetrics);
-    const isInboxHost = inboxHostPattern.test(window.location.hostname || "");
     const isGenericContainer = isGenericInboxContainer(element);
-    const hasKnownBodyMarker = hasExplicitInboxBodyMarker(element, {
-      matchSelfOnly: isGenericContainer
-    });
-    const hasStrongStandaloneSignal =
+
+    return {
+      textMetrics: textMetrics,
+      elementBounds: elementBounds,
+      standaloneSignals: standaloneSignals,
+      isInboxHost: inboxHostPattern.test(window.location.hostname || ""),
+      isGenericContainer: isGenericContainer,
+      hasKnownBodyMarker: hasExplicitInboxBodyMarker(element, {
+        matchSelfOnly: isGenericContainer
+      })
+    };
+  }
+
+  // Function: check whether generic inbox containers are specific enough.
+  function shouldRejectGenericStandaloneInboxContainer(detectionContext) {
+    return detectionContext.isInboxHost && detectionContext.isGenericContainer && !detectionContext.hasKnownBodyMarker;
+  }
+
+  // Function: check whether standalone email signals are strong enough.
+  function hasStrongStandaloneEmailSignal(standaloneSignals) {
+    return (
       standaloneSignals.headerLineCount >= 1 ||
       standaloneSignals.hasReplyMarker ||
       standaloneSignals.hasMimeHint ||
-      (standaloneSignals.hasStandaloneHint && standaloneSignals.hasMarketingFooter);
+      (standaloneSignals.hasStandaloneHint && standaloneSignals.hasMarketingFooter)
+    );
+  }
 
-    // Branch: follow this path only when the current condition passes.
-    if (textMetrics.text.length < 120 || textMetrics.words < 25 || textMetrics.lines < 3) {
-      return false;
-    }
+  // Function: check whether content has enough email-specific evidence after scoring.
+  function hasStandaloneEmailContentEvidence(element, detectionContext) {
+    const standaloneSignals = detectionContext.standaloneSignals;
+    const textMetrics = detectionContext.textMetrics;
 
-    // Branch: follow this path only when the current condition passes.
-    if (elementBounds.width < 240 || elementBounds.height < 100) {
-      return false;
-    }
-
-    // Branch: follow this path only when the current condition passes.
-    if (isInboxHost && isGenericContainer && !hasKnownBodyMarker) {
-      return false;
-    }
-
-    // Branch: follow this path only when the current condition passes.
-    if (!hasStrongStandaloneSignal) {
-      return false;
-    }
-
-    return standaloneSignals.score >= 6 && (
+    return (
       hasMessageStructure(element) ||
       /https?:\/\//i.test(textMetrics.text) ||
       standaloneSignals.headerLineCount >= 2 ||
       standaloneSignals.hasReplyMarker
     );
+  }
+
+  // Function: is likely standalone email body.
+  function isLikelyStandaloneEmailBody(element, signalData) {
+    if (!canEvaluateStandaloneEmailElement(element)) {
+      return false;
+    }
+
+    if (hasBlockedStandaloneEmailRole(element)) {
+      return false;
+    }
+
+    const detectionContext = createStandaloneEmailDetectionContext(element, signalData);
+
+    if (!hasStandaloneEmailTextDensity(detectionContext.textMetrics)) {
+      return false;
+    }
+
+    if (!hasStandaloneEmailVisualSize(detectionContext.elementBounds)) {
+      return false;
+    }
+
+    if (shouldRejectGenericStandaloneInboxContainer(detectionContext)) {
+      return false;
+    }
+
+    if (!hasStrongStandaloneEmailSignal(detectionContext.standaloneSignals)) {
+      return false;
+    }
+
+    return detectionContext.standaloneSignals.score >= 6 && hasStandaloneEmailContentEvidence(element, detectionContext);
   }
 
   // Function: register email root candidate.
