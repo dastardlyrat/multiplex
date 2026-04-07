@@ -2432,69 +2432,115 @@
     return value.toFixed(value >= 10 || unitIndex === 0 ? 0 : 1) + " " + units[unitIndex];
   }
 
-  // Function: build diagnostics sections.
-  function buildDiagnosticsSections(snapshot) {
-    const pipelineResult = snapshot && snapshot.pipeline ? snapshot.pipeline : null;
-    const pipelineSettings = snapshot && snapshot.pipelineSettings
-      ? snapshot.pipelineSettings
-      : (pipelineResult && pipelineResult.options ? pipelineResult.options : getPipelineSettings());
+  // Function: get snapshot pipeline result.
+  function getSnapshotPipelineResult(snapshot) {
+    return snapshot && snapshot.pipeline ? snapshot.pipeline : null;
+  }
+
+  // Function: get snapshot pipeline settings.
+  function getSnapshotPipelineSettings(snapshot, pipelineResult) {
+    if (snapshot && snapshot.pipelineSettings) {
+      return snapshot.pipelineSettings;
+    }
+
+    return pipelineResult && pipelineResult.options ? pipelineResult.options : getPipelineSettings();
+  }
+
+  // Function: get navigation performance entry.
+  function getNavigationPerformanceEntry() {
+    if (typeof performance === "undefined" || typeof performance.getEntriesByType !== "function") {
+      return null;
+    }
+
+    return performance.getEntriesByType("navigation")[0] || null;
+  }
+
+  // Function: build extension diagnostics section.
+  function buildExtensionDiagnosticsSection(snapshot, pipelineSettings) {
+    return {
+      title: "Extension Details",
+      lines: [
+        "Name: " + (extensionManifest.name || "URL Forensics Workbench"),
+        "Version: " + (extensionManifest.version || "0.0.0"),
+        "URL Normalization + Repair: " + (pipelineSettings.enableUrlNormalizationRepair ? "enabled" : "disabled"),
+        "Replace Email Body With Mirror: " + (extensionSettings.replaceEmailBodyWithMirrorContent ? "enabled" : "disabled"),
+        "Auto-Apply Mirror For Configured Senders: " + (extensionSettings.autoApplyMirrorForConfiguredSenders ? "enabled" : "disabled"),
+        "Configured Auto-Apply Sender Count: " + String(extensionSettings.autoApplyMirrorSenderEmailList.length),
+        "Inbox Snapshot Ready: " + (snapshot ? "yes" : "no")
+      ]
+    };
+  }
+
+  // Function: build runtime diagnostics section.
+  function buildRuntimeDiagnosticsSection(navigationEntry) {
+    return {
+      title: "Runtime Status",
+      lines: [
+        "Ready State: " + (document.readyState || "unknown"),
+        "Navigation Type: " + (navigationEntry && navigationEntry.type ? navigationEntry.type : "unavailable"),
+        "DOM Interactive: " + formatTimingValue(navigationEntry ? navigationEntry.domInteractive : NaN),
+        "DOMContentLoaded End: " + formatTimingValue(navigationEntry ? navigationEntry.domContentLoadedEventEnd : NaN),
+        "Load Event End: " + formatTimingValue(navigationEntry ? navigationEntry.loadEventEnd : NaN),
+        "Time Since Navigation Start: " + formatTimingValue(typeof performance !== "undefined" ? performance.now() : NaN)
+      ]
+    };
+  }
+
+  // Function: build waiting pipeline diagnostics lines.
+  function buildWaitingPipelineDiagnosticsLines() {
+    return [
+      "Waiting for a detected email body.",
+      "Open an inbox message so the panel can populate the converted output and Link Lab tabs."
+    ];
+  }
+
+  // Function: build active pipeline diagnostics lines.
+  function buildActivePipelineDiagnosticsLines(snapshot, pipelineResult) {
     const pipelineDiagnostics = pipelineResult && pipelineResult.diagnostics && pipelineResult.diagnostics.lines
       ? pipelineResult.diagnostics.lines
       : [];
     const pipelineErrors = pipelineResult && pipelineResult.errors ? pipelineResult.errors : [];
-    const navigationEntry =
-      typeof performance !== "undefined" && typeof performance.getEntriesByType === "function"
-        ? performance.getEntriesByType("navigation")[0] || null
-        : null;
+    const summaryLines = [
+      "Detected At: " + formatTimestamp(snapshot.detectedAt),
+      "Detection Mode: " + (snapshot.detectionMode || "unknown"),
+      "Section Label: " + (snapshot.sectionLabel || "Opened email body"),
+      "Source Type: " + (snapshot.sourceHtml ? "HTML email body snapshot" : "Plain text email snapshot"),
+      "Raw URL Tokens: " + String(pipelineResult && pipelineResult.items ? pipelineResult.items.length : 0),
+      "Final URL Count: " + String(pipelineResult && pipelineResult.finalUrls ? pipelineResult.finalUrls.length : 0),
+      "Changed URL Count: " + String(pipelineResult && pipelineResult.changedUrls ? pipelineResult.changedUrls.length : 0),
+      "Rewritten Count: " + String(pipelineResult && pipelineResult.rewrittenCount ? pipelineResult.rewrittenCount : 0),
+      "Digest Entry Count: " + String(pipelineResult && pipelineResult.digestEntries ? pipelineResult.digestEntries.length : 0),
+      "Pipeline Errors: " + (pipelineErrors.length ? pipelineErrors.join(" | ") : "none"),
+      ""
+    ];
+
+    return summaryLines.concat(
+      pipelineDiagnostics.length
+        ? pipelineDiagnostics
+        : ["No pipeline diagnostics are available for the current snapshot."]
+    );
+  }
+
+  // Function: build pipeline diagnostics section.
+  function buildPipelineDiagnosticsSection(snapshot, pipelineResult) {
+    return {
+      title: "Pipeline Diagnostics",
+      lines: snapshot
+        ? buildActivePipelineDiagnosticsLines(snapshot, pipelineResult)
+        : buildWaitingPipelineDiagnosticsLines()
+    };
+  }
+
+  // Function: build diagnostics sections.
+  function buildDiagnosticsSections(snapshot) {
+    const pipelineResult = getSnapshotPipelineResult(snapshot);
+    const pipelineSettings = getSnapshotPipelineSettings(snapshot, pipelineResult);
+    const navigationEntry = getNavigationPerformanceEntry();
+
     return [
-      {
-        title: "Extension Details",
-        lines: [
-          "Name: " + (extensionManifest.name || "URL Forensics Workbench"),
-          "Version: " + (extensionManifest.version || "0.0.0"),
-          "URL Normalization + Repair: " + (pipelineSettings.enableUrlNormalizationRepair ? "enabled" : "disabled"),
-          "Replace Email Body With Mirror: " + (extensionSettings.replaceEmailBodyWithMirrorContent ? "enabled" : "disabled"),
-          "Auto-Apply Mirror For Configured Senders: " + (extensionSettings.autoApplyMirrorForConfiguredSenders ? "enabled" : "disabled"),
-          "Configured Auto-Apply Sender Count: " + String(extensionSettings.autoApplyMirrorSenderEmailList.length),
-          "Inbox Snapshot Ready: " + (snapshot ? "yes" : "no")
-        ]
-      },
-      {
-        title: "Runtime Status",
-        lines: [
-          "Ready State: " + (document.readyState || "unknown"),
-          "Navigation Type: " + (navigationEntry && navigationEntry.type ? navigationEntry.type : "unavailable"),
-          "DOM Interactive: " + formatTimingValue(navigationEntry ? navigationEntry.domInteractive : NaN),
-          "DOMContentLoaded End: " + formatTimingValue(navigationEntry ? navigationEntry.domContentLoadedEventEnd : NaN),
-          "Load Event End: " + formatTimingValue(navigationEntry ? navigationEntry.loadEventEnd : NaN),
-          "Time Since Navigation Start: " + formatTimingValue(typeof performance !== "undefined" ? performance.now() : NaN)
-        ]
-      },
-      {
-        title: "Pipeline Diagnostics",
-        lines: snapshot
-          ? [
-              "Detected At: " + formatTimestamp(snapshot.detectedAt),
-              "Detection Mode: " + (snapshot.detectionMode || "unknown"),
-              "Section Label: " + (snapshot.sectionLabel || "Opened email body"),
-              "Source Type: " + (snapshot.sourceHtml ? "HTML email body snapshot" : "Plain text email snapshot"),
-              "Raw URL Tokens: " + String(pipelineResult && pipelineResult.items ? pipelineResult.items.length : 0),
-              "Final URL Count: " + String(pipelineResult && pipelineResult.finalUrls ? pipelineResult.finalUrls.length : 0),
-              "Changed URL Count: " + String(pipelineResult && pipelineResult.changedUrls ? pipelineResult.changedUrls.length : 0),
-              "Rewritten Count: " + String(pipelineResult && pipelineResult.rewrittenCount ? pipelineResult.rewrittenCount : 0),
-              "Digest Entry Count: " + String(pipelineResult && pipelineResult.digestEntries ? pipelineResult.digestEntries.length : 0),
-              "Pipeline Errors: " + (pipelineErrors.length ? pipelineErrors.join(" | ") : "none"),
-              ""
-            ].concat(
-              pipelineDiagnostics.length
-                ? pipelineDiagnostics
-                : ["No pipeline diagnostics are available for the current snapshot."]
-            )
-          : [
-              "Waiting for a detected email body.",
-              "Open an inbox message so the panel can populate the converted output and Link Lab tabs."
-            ]
-      }
+      buildExtensionDiagnosticsSection(snapshot, pipelineSettings),
+      buildRuntimeDiagnosticsSection(navigationEntry),
+      buildPipelineDiagnosticsSection(snapshot, pipelineResult)
     ];
   }
 
@@ -2877,48 +2923,34 @@
     }
   }
 
-  // Function: sync email snapshot.
-  function syncEmailSnapshot(options) {
+  // Function: handle snapshot location change.
+  function handleSnapshotLocationChange(currentLocationHref) {
+    const hasLocationChanged = currentLocationHref !== lastObservedLocationHref;
+
+    if (!hasLocationChanged) {
+      return false;
+    }
+
+    lastObservedLocationHref = currentLocationHref;
+    resetLatestEmailDetectionState();
+
     if (debugApi) {
-      debugApi.functionIn("content.syncEmailSnapshot", {
-        forcePublish: !!(options && options.forcePublish)
+      debugApi.conditional("content observed location changed", {
+        forcePublish: true
       });
     }
 
-    const optionBag = options || {};
-    let shouldForcePublish = !!optionBag.forcePublish;
-    const syncStartedAt = Date.now();
+    return true;
+  }
 
-    // Branch: follow this path only when the current condition passes.
-    if (!isPageCurrentlyVisible()) {
-      if (debugApi) {
-        debugApi.conditional("content snapshot sync skipped: page not visible");
-        debugApi.functionOut("content.syncEmailSnapshot", { synced: false });
-      }
-      return;
-    }
-
-    const currentLocationHref = getCurrentLocationHref();
-    const hasLocationChanged = currentLocationHref !== lastObservedLocationHref;
-    // Branch: follow this path only when the current condition passes.
-    if (hasLocationChanged) {
-      lastObservedLocationHref = currentLocationHref;
-      resetLatestEmailDetectionState();
-      shouldForcePublish = true;
-      if (debugApi) {
-        debugApi.conditional("content observed location changed", {
-          forcePublish: shouldForcePublish
-        });
-      }
-    }
-
-    const inboxRootCandidates = getInboxRootCandidates();
+  // Function: observe inbox root candidates.
+  function observeInboxRootCandidates(inboxRootCandidates) {
     if (debugApi) {
       debugApi.variable("content inbox candidate count assigned", {
         candidateCount: inboxRootCandidates.length
       });
     }
-    // Loop: iterate through each item in the current collection.
+
     inboxRootCandidates.forEach(function observeCandidate(candidate) {
       if (debugApi && candidate) {
         debugApi.loop("content observing inbox candidate", {
@@ -2928,80 +2960,105 @@
       }
       observeEmailRoot(candidate.root);
     });
+  }
 
-    const primaryInboxCandidate = choosePrimaryEmailCandidate(inboxRootCandidates);
-    // Branch: follow this path only when the current condition passes.
-    if (!primaryInboxCandidate || !primaryInboxCandidate.root) {
-      if (debugApi) {
-        debugApi.conditional("content no primary inbox candidate found", {
-          hadLatestSnapshot: !!latestSnapshot
-        });
-      }
-      // Branch: follow this path only when the current condition passes.
-      if (latestSnapshot) {
-        // Branch: follow this path only when the current condition passes.
-        if (hasLocationChanged) {
-          publishClear();
-          return;
-        }
-
-        const missingGraceWindow = getCandidateMissingGraceWindow();
-        // Branch: follow this path only when the current condition passes.
-        if (!inboxCandidateMissingSince) {
-          inboxCandidateMissingSince = syncStartedAt;
-        }
-        const missingDuration = syncStartedAt - inboxCandidateMissingSince;
-        const hasRecentCandidate =
-          latestInboxCandidateSeenAt > 0 && (syncStartedAt - latestInboxCandidateSeenAt) <= missingGraceWindow;
-        const hasRecentSnapshot =
-          latestSnapshot.detectedAt && (syncStartedAt - Number(latestSnapshot.detectedAt || 0)) <= missingGraceWindow;
-
-        // Branch: follow this path only when the current condition passes.
-        if (missingGraceWindow > 0 && (missingDuration <= missingGraceWindow || hasRecentCandidate || hasRecentSnapshot)) {
-          scheduleSnapshotSync();
-          return;
-        }
-
-        const fallbackRoot = latestDetectedEmailRoot;
-        // Branch: follow this path only when the current condition passes.
-        if (fallbackRoot && fallbackRoot.isConnected && !fallbackRoot.closest("#merged-link-lab-page-pane")) {
-          const fallbackText = mergedLinkLabPipeline.cleanInputText(fallbackRoot.innerText || fallbackRoot.textContent || "");
-          const fallbackHasStructuredContent =
-            typeof fallbackRoot.querySelector === "function" &&
-            !!fallbackRoot.querySelector("a[href], p, div, span, table, li, br");
-          // Branch: follow this path only when the current condition passes.
-          if (fallbackText.length >= 8 || fallbackHasStructuredContent) {
-            const fallbackSnapshot = summarizeEmailRoot(fallbackRoot, latestDetectedEmailMode);
-            const fallbackSnapshotSignature = createSnapshotSignature(fallbackSnapshot);
-
-            // Branch: follow this path only when the current condition passes.
-            if (fallbackSnapshotSignature !== lastPublishedSnapshotSignature || shouldForcePublish) {
-              publishSnapshot(fallbackSnapshot);
-            }
-
-            scheduleSnapshotSync();
-            return;
-          }
-        }
-
-        publishClear();
-      }
-      if (debugApi) {
-        debugApi.functionOut("content.syncEmailSnapshot", { synced: false, reason: "no-primary-candidate" });
-      }
-      return;
+  // Function: should wait for missing-candidate grace window.
+  function shouldWaitForMissingCandidateGrace(syncStartedAt, missingGraceWindow) {
+    if (!inboxCandidateMissingSince) {
+      inboxCandidateMissingSince = syncStartedAt;
     }
 
+    const missingDuration = syncStartedAt - inboxCandidateMissingSince;
+    const hasRecentCandidate =
+      latestInboxCandidateSeenAt > 0 && (syncStartedAt - latestInboxCandidateSeenAt) <= missingGraceWindow;
+    const hasRecentSnapshot =
+      latestSnapshot && latestSnapshot.detectedAt && (syncStartedAt - Number(latestSnapshot.detectedAt || 0)) <= missingGraceWindow;
+
+    return missingGraceWindow > 0 && (missingDuration <= missingGraceWindow || hasRecentCandidate || hasRecentSnapshot);
+  }
+
+  // Function: can use fallback email root.
+  function canUseFallbackEmailRoot(fallbackRoot) {
+    if (!fallbackRoot || !fallbackRoot.isConnected || fallbackRoot.closest("#merged-link-lab-page-pane")) {
+      return false;
+    }
+
+    const fallbackText = mergedLinkLabPipeline.cleanInputText(fallbackRoot.innerText || fallbackRoot.textContent || "");
+    const fallbackHasStructuredContent =
+      typeof fallbackRoot.querySelector === "function" &&
+      !!fallbackRoot.querySelector("a[href], p, div, span, table, li, br");
+
+    return fallbackText.length >= 8 || fallbackHasStructuredContent;
+  }
+
+  // Function: try publishing fallback snapshot.
+  function tryPublishFallbackSnapshot(shouldForcePublish) {
+    const fallbackRoot = latestDetectedEmailRoot;
+
+    if (!canUseFallbackEmailRoot(fallbackRoot)) {
+      return false;
+    }
+
+    const fallbackSnapshot = summarizeEmailRoot(fallbackRoot, latestDetectedEmailMode);
+    const fallbackSnapshotSignature = createSnapshotSignature(fallbackSnapshot);
+
+    if (fallbackSnapshotSignature !== lastPublishedSnapshotSignature || shouldForcePublish) {
+      publishSnapshot(fallbackSnapshot);
+    }
+
+    scheduleSnapshotSync();
+    return true;
+  }
+
+  // Function: handle missing primary inbox candidate.
+  function handleMissingPrimaryInboxCandidate(syncState) {
+    if (debugApi) {
+      debugApi.conditional("content no primary inbox candidate found", {
+        hadLatestSnapshot: !!latestSnapshot
+      });
+    }
+
+    if (latestSnapshot) {
+      if (syncState.hasLocationChanged) {
+        publishClear();
+        return;
+      }
+
+      const missingGraceWindow = getCandidateMissingGraceWindow();
+
+      if (shouldWaitForMissingCandidateGrace(syncState.startedAt, missingGraceWindow)) {
+        scheduleSnapshotSync();
+        return;
+      }
+
+      if (tryPublishFallbackSnapshot(syncState.shouldForcePublish)) {
+        return;
+      }
+
+      publishClear();
+    }
+
+    if (debugApi) {
+      debugApi.functionOut("content.syncEmailSnapshot", { synced: false, reason: "no-primary-candidate" });
+    }
+  }
+
+  // Function: prepare primary candidate snapshot.
+  function preparePrimaryCandidateSnapshot(primaryInboxCandidate, syncState) {
     inboxCandidateMissingSince = 0;
-    latestInboxCandidateSeenAt = syncStartedAt;
+    latestInboxCandidateSeenAt = syncState.startedAt;
     latestDetectedEmailRoot = primaryInboxCandidate.root;
     latestDetectedEmailMode = primaryInboxCandidate.detectionMode || "";
 
-    const nextSnapshot = summarizeEmailRoot(primaryInboxCandidate.root, latestDetectedEmailMode);
+    return summarizeEmailRoot(primaryInboxCandidate.root, latestDetectedEmailMode);
+  }
+
+  // Function: publish primary candidate snapshot.
+  function publishPrimaryCandidateSnapshot(primaryInboxCandidate, syncState) {
+    const nextSnapshot = preparePrimaryCandidateSnapshot(primaryInboxCandidate, syncState);
     const nextSnapshotSignature = createSnapshotSignature(nextSnapshot);
 
-    // Branch: follow this path only when the current condition passes.
-    if (nextSnapshotSignature === lastPublishedSnapshotSignature && !shouldForcePublish) {
+    if (nextSnapshotSignature === lastPublishedSnapshotSignature && !syncState.shouldForcePublish) {
       if (debugApi) {
         debugApi.conditional("content snapshot unchanged; publish skipped");
         debugApi.functionOut("content.syncEmailSnapshot", { synced: false, reason: "unchanged" });
@@ -3017,6 +3074,49 @@
       });
       debugApi.functionOut("content.syncEmailSnapshot", { synced: true });
     }
+  }
+
+  // Function: sync email snapshot.
+  function syncEmailSnapshot(options) {
+    if (debugApi) {
+      debugApi.functionIn("content.syncEmailSnapshot", {
+        forcePublish: !!(options && options.forcePublish)
+      });
+    }
+
+    const optionBag = options || {};
+    const syncState = {
+      shouldForcePublish: !!optionBag.forcePublish,
+      startedAt: Date.now(),
+      hasLocationChanged: false
+    };
+
+    // Branch: follow this path only when the current condition passes.
+    if (!isPageCurrentlyVisible()) {
+      if (debugApi) {
+        debugApi.conditional("content snapshot sync skipped: page not visible");
+        debugApi.functionOut("content.syncEmailSnapshot", { synced: false });
+      }
+      return;
+    }
+
+    const currentLocationHref = getCurrentLocationHref();
+    syncState.hasLocationChanged = handleSnapshotLocationChange(currentLocationHref);
+    if (syncState.hasLocationChanged) {
+      syncState.shouldForcePublish = true;
+    }
+
+    const inboxRootCandidates = getInboxRootCandidates();
+    observeInboxRootCandidates(inboxRootCandidates);
+
+    const primaryInboxCandidate = choosePrimaryEmailCandidate(inboxRootCandidates);
+    // Branch: follow this path only when the current condition passes.
+    if (!primaryInboxCandidate || !primaryInboxCandidate.root) {
+      handleMissingPrimaryInboxCandidate(syncState);
+      return;
+    }
+
+    publishPrimaryCandidateSnapshot(primaryInboxCandidate, syncState);
   }
 
   // Function: schedule snapshot sync.
