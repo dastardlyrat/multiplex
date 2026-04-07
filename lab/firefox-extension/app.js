@@ -5,6 +5,7 @@
   const componentKit = typeof ComponentKit !== "undefined" ? ComponentKit : null;
   const mergedLinkLabPipeline = typeof MergedLinkLabPipeline !== "undefined" ? MergedLinkLabPipeline : null;
   const extensionApi = typeof browser !== "undefined" ? browser : (typeof chrome !== "undefined" ? chrome : null);
+  const settingsOpener = typeof globalThis !== "undefined" ? globalThis.urlForensicsSettingsOpener : null;
   const debugApi = typeof globalThis !== "undefined" ? globalThis.mergedLinkLabDebug : null;
   if (debugApi && typeof debugApi.configure === "function") {
     debugApi.configure({ context: "workbench", module: "app" });
@@ -144,38 +145,8 @@
 
   // Function: open settings page.
   async function openSettingsPage() {
-    // Branch: follow this path only when the current condition passes.
-    if (!extensionApi || !extensionApi.runtime) {
-      return;
-    }
-
-    // Branch: follow this path only when the current condition passes.
-    if (typeof extensionApi.runtime.sendMessage === "function") {
-      // Branch: try the primary operation before handling failures.
-      try {
-        const response = await extensionApi.runtime.sendMessage({
-          type: "merged-link-lab:open-settings-page"
-        });
-
-        // Branch: follow this path only when the current condition passes.
-        if (response && response.ok) {
-          return;
-        }
-      // Branch: handle errors from the guarded operation.
-      } catch {
-        // Fall through to direct open below.
-      }
-    }
-
-    // Branch: follow this path only when the current condition passes.
-    if (typeof extensionApi.runtime.openOptionsPage === "function") {
-      await extensionApi.runtime.openOptionsPage();
-      return;
-    }
-
-    // Branch: follow this path only when the current condition passes.
-    if (typeof extensionApi.runtime.getURL === "function") {
-      window.open(extensionApi.runtime.getURL("settings.html"), "_blank", "noopener");
+    if (settingsOpener && typeof settingsOpener.openSettingsPage === "function") {
+      await settingsOpener.openSettingsPage(extensionApi);
     }
   }
 

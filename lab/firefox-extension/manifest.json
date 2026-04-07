@@ -56,6 +56,7 @@
         "pipeline.js",
         "storage-model.js",
         "inbox-detectors.js",
+        "settings-opener.js",
         "content-script.js"
       ],
       "run_at": "document_idle"
@@ -72,6 +73,7 @@
         "debug.js",
         "pipeline-base.js",
         "pipeline.js",
+        "settings-opener.js",
         "core-components/components.css",
         "core-components/components.js",
         "resources/fonts/material-symbols-outlined.woff2",
