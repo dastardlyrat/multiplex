@@ -8,21 +8,13 @@
     debugApi.configure({ context: "popup", module: "popup" });
     debugApi.runtime("popup initialization started");
   }
-  const storageKeys = {
-    enableUrlNormalizationRepair: "enableUrlNormalizationRepair",
-    replaceEmailBodyWithMirrorContent: "replaceEmailBodyWithMirrorContent",
-    autoApplyMirrorForConfiguredSenders: "autoApplyMirrorForConfiguredSenders",
-    autoApplyMirrorSenderEmailList: "autoApplyMirrorSenderEmailList"
-  };
-  const legacyStorageKeys = {
-    autoApplyMirrorForNamedSender: "autoApplyMirrorForNamedSender"
-  };
-  const defaults = {
-    enableUrlNormalizationRepair: false,
-    replaceEmailBodyWithMirrorContent: false,
-    autoApplyMirrorForConfiguredSenders: false,
-    autoApplyMirrorSenderEmailList: []
-  };
+  // Shared model keeps storage migration and formatting consistent across extension pages.
+  const storageModel = globalThis.urlForensicsStorageModel;
+  const storageKeys = storageModel.storageKeys;
+  const defaults = storageModel.defaultSettings;
+  const formatStorageBooleanEntry = storageModel.formatStorageBooleanEntry;
+  const formatStorageEmailListEntry = storageModel.formatStorageEmailListEntry;
+  const getStorageSourceLabel = storageModel.getStorageSourceLabel;
   const popupState = {
     activeTabId: null,
     activeTabUrl: "",
@@ -93,183 +85,13 @@
     return normalizedValue || "Unavailable";
   }
 
-  // Function: normalize sender email address.
-  function normalizeSenderEmailAddress(value) {
-    const safeValue = String(value || "").trim().toLowerCase();
-    const mailtoMatch = safeValue.match(/^mailto:\s*([^?]+)/i);
-    const candidateValue = mailtoMatch ? mailtoMatch[1].trim() : safeValue;
-
-    if (!candidateValue) {
-      return "";
-    }
-
-    return /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i.test(candidateValue)
-      ? candidateValue
-      : "";
-  }
-
-  // Function: sanitize sender email list.
-  function sanitizeSenderEmailList(value) {
-    const candidateValues = Array.isArray(value) ? value : (value ? [value] : []);
-    const uniqueEmailMap = new Map();
-
-    candidateValues.forEach(function registerSenderEmail(candidateValue) {
-      const normalizedEmail = normalizeSenderEmailAddress(candidateValue);
-
-      if (!normalizedEmail || uniqueEmailMap.has(normalizedEmail)) {
-        return;
-      }
-
-      uniqueEmailMap.set(normalizedEmail, true);
-    });
-
-    return Array.from(uniqueEmailMap.keys());
-  }
-
-  // Function: resolve stored configured-sender auto-apply value.
-  function resolveStoredAutoApplyConfiguredSendersValue(storedSettings) {
-    const safeStoredSettings = storedSettings && typeof storedSettings === "object" ? storedSettings : {};
-
-    if (Object.prototype.hasOwnProperty.call(safeStoredSettings, storageKeys.autoApplyMirrorForConfiguredSenders)) {
-      return safeStoredSettings[storageKeys.autoApplyMirrorForConfiguredSenders];
-    }
-
-    if (Object.prototype.hasOwnProperty.call(safeStoredSettings, legacyStorageKeys.autoApplyMirrorForNamedSender)) {
-      return safeStoredSettings[legacyStorageKeys.autoApplyMirrorForNamedSender];
-    }
-
-    return undefined;
-  }
-
-  // Function: build storage boolean entry.
-  function buildStorageBooleanEntry(storedSettings, key, defaultValue) {
-    const hasStoredValue = !!(
-      storedSettings &&
-      typeof storedSettings === "object" &&
-      Object.prototype.hasOwnProperty.call(storedSettings, key)
-    );
-    const rawValue = hasStoredValue ? storedSettings[key] : undefined;
-
-    return {
-      hasStoredValue: hasStoredValue,
-      rawValue: rawValue,
-      effectiveValue: hasStoredValue ? rawValue === true : defaultValue === true
-    };
-  }
-
-  // Function: build storage email list entry.
-  function buildStorageEmailListEntry(storedSettings, key, defaultValue) {
-    const hasStoredValue = !!(
-      storedSettings &&
-      typeof storedSettings === "object" &&
-      Object.prototype.hasOwnProperty.call(storedSettings, key)
-    );
-    const rawValue = hasStoredValue ? storedSettings[key] : undefined;
-
-    return {
-      hasStoredValue: hasStoredValue,
-      rawValue: rawValue,
-      effectiveValue: hasStoredValue ? sanitizeSenderEmailList(rawValue) : sanitizeSenderEmailList(defaultValue)
-    };
-  }
-
-  // Function: format storage boolean entry.
-  function formatStorageBooleanEntry(entry) {
-    if (!entry || typeof entry !== "object") {
-      return "Unavailable";
-    }
-
-    if (entry.hasStoredValue) {
-      if (entry.rawValue === true || entry.rawValue === false) {
-        return (entry.rawValue ? "true" : "false") + " (stored)";
-      }
-
-      return String(entry.rawValue) + " (stored non-boolean)";
-    }
-
-    return (entry.effectiveValue ? "true" : "false") + " (default)";
-  }
-
-  // Function: format storage email list entry.
-  function formatStorageEmailListEntry(entry) {
-    if (!entry || typeof entry !== "object") {
-      return "Unavailable";
-    }
-
-    const effectiveValue = Array.isArray(entry.effectiveValue) ? entry.effectiveValue : [];
-    const sourceLabel = entry.hasStoredValue ? "stored" : "default";
-
-    if (!effectiveValue.length) {
-      return "0 addresses (" + sourceLabel + ")";
-    }
-
-    return (
-      String(effectiveValue.length) +
-      " address" +
-      (effectiveValue.length === 1 ? "" : "es") +
-      " (" +
-      sourceLabel +
-      "): " +
-      effectiveValue.slice(0, 3).join(", ") +
-      (effectiveValue.length > 3 ? ", +" + String(effectiveValue.length - 3) + " more" : "")
-    );
-  }
-
   // Function: set popup storage snapshot.
   function setPopupStorageSnapshot(source, storedSettings, errorMessage) {
-    const safeStoredSettings = storedSettings && typeof storedSettings === "object" ? storedSettings : {};
-    const normalizedStoredSettings = Object.assign({}, safeStoredSettings);
-
-    if (
-      !Object.prototype.hasOwnProperty.call(normalizedStoredSettings, storageKeys.autoApplyMirrorForConfiguredSenders) &&
-      Object.prototype.hasOwnProperty.call(normalizedStoredSettings, legacyStorageKeys.autoApplyMirrorForNamedSender)
-    ) {
-      normalizedStoredSettings[storageKeys.autoApplyMirrorForConfiguredSenders] =
-        normalizedStoredSettings[legacyStorageKeys.autoApplyMirrorForNamedSender];
-    }
-
-    popupState.storageSnapshot = {
-      source: String(source || "unavailable"),
-      loadedAt: Date.now(),
-      errorMessage: errorMessage ? String(errorMessage) : "",
-      enableUrlNormalizationRepair: buildStorageBooleanEntry(
-        normalizedStoredSettings,
-        storageKeys.enableUrlNormalizationRepair,
-        defaults.enableUrlNormalizationRepair
-      ),
-      replaceEmailBodyWithMirrorContent: buildStorageBooleanEntry(
-        normalizedStoredSettings,
-        storageKeys.replaceEmailBodyWithMirrorContent,
-        defaults.replaceEmailBodyWithMirrorContent
-      ),
-      autoApplyMirrorForConfiguredSenders: buildStorageBooleanEntry(
-        normalizedStoredSettings,
-        storageKeys.autoApplyMirrorForConfiguredSenders,
-        defaults.autoApplyMirrorForConfiguredSenders
-      ),
-      autoApplyMirrorSenderEmailList: buildStorageEmailListEntry(
-        normalizedStoredSettings,
-        storageKeys.autoApplyMirrorSenderEmailList,
-        defaults.autoApplyMirrorSenderEmailList
-      )
-    };
-  }
-
-  // Function: get storage source label.
-  function getStorageSourceLabel(storageSource) {
-    if (storageSource === "storage.local") {
-      return "storage.local";
-    }
-
-    if (storageSource === "storage-unavailable") {
-      return "Storage API unavailable";
-    }
-
-    if (storageSource === "storage-error") {
-      return "Storage read error";
-    }
-
-    return "Unavailable";
+    popupState.storageSnapshot = storageModel.createStorageSnapshot({
+      source: source,
+      storedSettings: storedSettings,
+      errorMessage: errorMessage
+    });
   }
 
   // Function: get storage diagnostic rows.
@@ -438,9 +260,7 @@
     }
 
     try {
-      const storedSettings = await extensionApi.storage.local.get(
-        Object.values(storageKeys).concat(Object.values(legacyStorageKeys))
-      );
+      const storedSettings = await extensionApi.storage.local.get(storageModel.getStorageReadKeys());
       setPopupStorageSnapshot("storage.local", storedSettings, "");
 
       if (DOM.enableUrlNormalizationRepair) {

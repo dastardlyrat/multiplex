@@ -4,6 +4,7 @@
 
   const extensionApi = typeof browser !== "undefined" ? browser : chrome;
   const mergedLinkLabPipeline = typeof MergedLinkLabPipeline !== "undefined" ? MergedLinkLabPipeline : null;
+  const storageModel = typeof globalThis !== "undefined" ? globalThis.urlForensicsStorageModel : null;
   const debugApi = typeof globalThis !== "undefined" ? globalThis.mergedLinkLabDebug : null;
   if (debugApi && typeof debugApi.configure === "function") {
     debugApi.configure({ context: "content-script", module: "content-script" });
@@ -14,12 +15,13 @@
   }
 
   // Branch: follow this path only when the current condition passes.
-  if (!extensionApi || !extensionApi.runtime || !mergedLinkLabPipeline) {
+  if (!extensionApi || !extensionApi.runtime || !mergedLinkLabPipeline || !storageModel) {
     if (debugApi) {
       debugApi.error("content script initialization aborted: required modules unavailable", {
         hasExtensionApi: !!extensionApi,
         hasRuntime: !!(extensionApi && extensionApi.runtime),
-        hasPipeline: !!mergedLinkLabPipeline
+        hasPipeline: !!mergedLinkLabPipeline,
+        hasStorageModel: !!storageModel
       });
     }
     return;
@@ -277,12 +279,19 @@
   const unavailableMirrorLinkHoverMessage = "Mirror hover inspection is unavailable for this email body.";
   let mirrorHoverListenerCleanup = null;
   let latestDetectedMirrorHoverInfoText = "";
-  const pipelineSettingStorageKey = "enableUrlNormalizationRepair";
-  const replaceEmailBodyWithMirrorContentStorageKey = "replaceEmailBodyWithMirrorContent";
-  const autoApplyMirrorForConfiguredSendersStorageKey = "autoApplyMirrorForConfiguredSenders";
-  const autoApplyMirrorSenderEmailListStorageKey = "autoApplyMirrorSenderEmailList";
-  const legacyAutoApplyMirrorForNamedSenderStorageKey = "autoApplyMirrorForNamedSender";
-  const defaultAutoApplyMirrorSenderEmails = [];
+  const pipelineSettingStorageKey = storageModel.storageKeys.enableUrlNormalizationRepair;
+  const replaceEmailBodyWithMirrorContentStorageKey = storageModel.storageKeys.replaceEmailBodyWithMirrorContent;
+  const autoApplyMirrorForConfiguredSendersStorageKey = storageModel.storageKeys.autoApplyMirrorForConfiguredSenders;
+  const autoApplyMirrorSenderEmailListStorageKey = storageModel.storageKeys.autoApplyMirrorSenderEmailList;
+  const legacyAutoApplyMirrorForNamedSenderStorageKey = storageModel.legacyStorageKeys.autoApplyMirrorForNamedSender;
+  const defaultAutoApplyMirrorSenderEmails = storageModel.defaultSettings.autoApplyMirrorSenderEmailList;
+  const sanitizeSenderEmailList = storageModel.sanitizeSenderEmailList;
+  const resolveStoredAutoApplyConfiguredSendersValue = storageModel.resolveStoredAutoApplyConfiguredSendersValue;
+  const buildStorageBooleanSnapshotEntry = storageModel.buildStorageBooleanEntry;
+  const buildStorageEmailListSnapshotEntry = storageModel.buildStorageEmailListEntry;
+  const formatStorageSnapshotSourceLabel = storageModel.getStorageSourceLabel;
+  const formatStorageSnapshotEntry = storageModel.formatStorageBooleanEntry;
+  const formatStorageEmailListSnapshotEntry = storageModel.formatStorageEmailListEntry;
   let autoApplyMirrorSenderSelector = "";
   let autoApplyMirrorSenderEmailPattern = null;
   let autoApplyMirrorSenderHeaderPattern = null;
@@ -379,39 +388,6 @@
     return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
 
-  // Function: normalize sender email address.
-  function normalizeSenderEmailAddress(value) {
-    const safeValue = String(value || "").trim().toLowerCase();
-    const mailtoMatch = safeValue.match(/^mailto:\s*([^?]+)/i);
-    const candidateValue = mailtoMatch ? mailtoMatch[1].trim() : safeValue;
-
-    if (!candidateValue) {
-      return "";
-    }
-
-    return /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i.test(candidateValue)
-      ? candidateValue
-      : "";
-  }
-
-  // Function: sanitize sender email list.
-  function sanitizeSenderEmailList(value) {
-    const candidateValues = Array.isArray(value) ? value : (value ? [value] : []);
-    const uniqueEmailMap = new Map();
-
-    candidateValues.forEach(function registerSenderEmail(candidateValue) {
-      const normalizedEmail = normalizeSenderEmailAddress(candidateValue);
-
-      if (!normalizedEmail || uniqueEmailMap.has(normalizedEmail)) {
-        return;
-      }
-
-      uniqueEmailMap.set(normalizedEmail, true);
-    });
-
-    return Array.from(uniqueEmailMap.keys());
-  }
-
   // Function: escape selector attribute value.
   function escapeSelectorAttributeValue(value) {
     if (typeof CSS !== "undefined" && CSS && typeof CSS.escape === "function") {
@@ -471,55 +447,11 @@
     );
   }
 
-  // Function: build storage boolean snapshot entry.
-  function buildStorageBooleanSnapshotEntry(storedSettings, key, fallbackValue) {
-    const hasStoredValue = !!(
-      storedSettings &&
-      typeof storedSettings === "object" &&
-      Object.prototype.hasOwnProperty.call(storedSettings, key)
-    );
-    const rawValue = hasStoredValue ? storedSettings[key] : undefined;
-
-    return {
-      hasStoredValue: hasStoredValue,
-      rawValue: rawValue,
-      effectiveValue: hasStoredValue ? rawValue === true : fallbackValue === true
-    };
-  }
-
-  // Function: build storage email list snapshot entry.
-  function buildStorageEmailListSnapshotEntry(storedSettings, key, fallbackValue) {
-    const hasStoredValue = !!(
-      storedSettings &&
-      typeof storedSettings === "object" &&
-      Object.prototype.hasOwnProperty.call(storedSettings, key)
-    );
-    const rawValue = hasStoredValue ? storedSettings[key] : undefined;
-    const effectiveValue = hasStoredValue
-      ? sanitizeSenderEmailList(rawValue)
-      : sanitizeSenderEmailList(fallbackValue);
-
-    return {
-      hasStoredValue: hasStoredValue,
-      rawValue: rawValue,
-      effectiveValue: effectiveValue
-    };
-  }
-
   refreshAutoApplyConfiguredSenderDetectionState();
 
   // Function: set extension storage snapshot.
   function setExtensionStorageSnapshot(source, storedSettings, errorMessage) {
-    const safeStoredSettings = storedSettings && typeof storedSettings === "object" ? storedSettings : {};
-    const normalizedStoredSettings = Object.assign({}, safeStoredSettings);
-
-    if (
-      !Object.prototype.hasOwnProperty.call(normalizedStoredSettings, autoApplyMirrorForConfiguredSendersStorageKey) &&
-      Object.prototype.hasOwnProperty.call(normalizedStoredSettings, legacyAutoApplyMirrorForNamedSenderStorageKey)
-    ) {
-      normalizedStoredSettings[autoApplyMirrorForConfiguredSendersStorageKey] =
-        normalizedStoredSettings[legacyAutoApplyMirrorForNamedSenderStorageKey];
-    }
+    const normalizedStoredSettings = storageModel.normalizeStoredSettings(storedSettings);
 
     extensionStorageSnapshot.source = String(source || "defaults");
     extensionStorageSnapshot.loadedAt = Date.now();
@@ -546,69 +478,6 @@
         extensionSettings.autoApplyMirrorSenderEmailList
       )
     };
-  }
-
-  // Function: format storage snapshot source label.
-  function formatStorageSnapshotSourceLabel(source) {
-    if (source === "storage.local") {
-      return "storage.local";
-    }
-
-    if (source === "storage.onChanged") {
-      return "storage.onChanged event";
-    }
-
-    if (source === "storage-unavailable") {
-      return "storage.local unavailable";
-    }
-
-    if (source === "storage-error") {
-      return "storage read error";
-    }
-
-    return "defaults";
-  }
-
-  // Function: format storage snapshot entry.
-  function formatStorageSnapshotEntry(entry) {
-    if (!entry || typeof entry !== "object") {
-      return "unavailable";
-    }
-
-    if (entry.hasStoredValue) {
-      if (entry.rawValue === true || entry.rawValue === false) {
-        return (entry.rawValue ? "true" : "false") + " (stored)";
-      }
-
-      return String(entry.rawValue) + " (stored non-boolean)";
-    }
-
-    return (entry.effectiveValue ? "true" : "false") + " (default)";
-  }
-
-  // Function: format storage email list snapshot entry.
-  function formatStorageEmailListSnapshotEntry(entry) {
-    if (!entry || typeof entry !== "object") {
-      return "unavailable";
-    }
-
-    const effectiveValue = Array.isArray(entry.effectiveValue) ? entry.effectiveValue : [];
-    const sourceLabel = entry.hasStoredValue ? "stored" : "default";
-
-    if (!effectiveValue.length) {
-      return "0 addresses (" + sourceLabel + ")";
-    }
-
-    return (
-      String(effectiveValue.length) +
-      " address" +
-      (effectiveValue.length === 1 ? "" : "es") +
-      " (" +
-      sourceLabel +
-      "): " +
-      effectiveValue.slice(0, 3).join(", ") +
-      (effectiveValue.length > 3 ? ", +" + String(effectiveValue.length - 3) + " more" : "")
-    );
   }
 
   // Function: does text mention a configured sender email address.
@@ -762,21 +631,6 @@
     refreshAutoApplyConfiguredSenderDetectionState();
   }
 
-  // Function: resolve stored configured-sender auto-apply value.
-  function resolveStoredAutoApplyConfiguredSendersValue(storedSettings) {
-    const safeStoredSettings = storedSettings && typeof storedSettings === "object" ? storedSettings : {};
-
-    if (Object.prototype.hasOwnProperty.call(safeStoredSettings, autoApplyMirrorForConfiguredSendersStorageKey)) {
-      return safeStoredSettings[autoApplyMirrorForConfiguredSendersStorageKey];
-    }
-
-    if (Object.prototype.hasOwnProperty.call(safeStoredSettings, legacyAutoApplyMirrorForNamedSenderStorageKey)) {
-      return safeStoredSettings[legacyAutoApplyMirrorForNamedSenderStorageKey];
-    }
-
-    return undefined;
-  }
-
   // Function: load pipeline settings.
   async function loadPipelineSettings() {
     if (debugApi) {
@@ -795,13 +649,7 @@
 
     // Branch: try the primary operation before handling failures.
     try {
-      const storedSettings = await extensionApi.storage.local.get([
-        pipelineSettingStorageKey,
-        replaceEmailBodyWithMirrorContentStorageKey,
-        autoApplyMirrorForConfiguredSendersStorageKey,
-        autoApplyMirrorSenderEmailListStorageKey,
-        legacyAutoApplyMirrorForNamedSenderStorageKey
-      ]);
+      const storedSettings = await extensionApi.storage.local.get(storageModel.getStorageReadKeys());
       applyStoredPipelineSetting(storedSettings[pipelineSettingStorageKey]);
       applyStoredReplaceEmailBodySetting(storedSettings[replaceEmailBodyWithMirrorContentStorageKey]);
       applyStoredAutoApplyMirrorForConfiguredSendersSetting(resolveStoredAutoApplyConfiguredSendersValue(storedSettings));
@@ -1780,60 +1628,6 @@
     return safeCount > 99 ? "99+" : String(safeCount);
   }
 
-  // Function: set pane expanded.
-  function setPaneExpanded(isExpanded) {
-    workflowRailElements.isExpanded = !!isExpanded && !!latestSnapshot;
-
-    // Branch: follow this path only when the current condition passes.
-    if (!workflowRailElements.root) {
-      return;
-    }
-
-    workflowRailElements.root.classList.toggle("has-snapshot", !!latestSnapshot);
-    workflowRailElements.root.classList.toggle("is-expanded", workflowRailElements.isExpanded);
-    workflowRailElements.root.setAttribute("aria-hidden", latestSnapshot ? "false" : "true");
-
-    // Branch: follow this path only when the current condition passes.
-    if (workflowRailElements.railToggleButton) {
-      workflowRailElements.railToggleButton.setAttribute("aria-expanded", String(workflowRailElements.isExpanded));
-      workflowRailElements.railToggleButton.setAttribute(
-        "aria-label",
-        workflowRailElements.isExpanded
-          ? "Collapse URL Forensics Workbench workflow"
-          : "Expand URL Forensics Workbench workflow"
-      );
-    }
-  }
-
-  // Function: show pane.
-  function showPane() {
-    const paneRoot = ensurePane();
-    // Branch: follow this path only when the current condition passes.
-    if (!paneRoot || !latestSnapshot) {
-      return;
-    }
-
-    setPaneExpanded(workflowRailElements.isExpanded);
-  }
-
-  // Function: hide pane.
-  function hidePane() {
-    workflowRailElements.isExpanded = false;
-
-    // Branch: follow this path only when the current condition passes.
-    if (!workflowRailElements.root) {
-      return;
-    }
-
-    workflowRailElements.root.classList.remove("has-snapshot", "is-expanded");
-    workflowRailElements.root.setAttribute("aria-hidden", "true");
-
-    // Branch: follow this path only when the current condition passes.
-    if (workflowRailElements.railToggleButton) {
-      workflowRailElements.railToggleButton.setAttribute("aria-expanded", "false");
-    }
-  }
-
   // Function: copy plain text.
   async function copyPlainText(value) {
     // Branch: follow this path only when the current condition passes.
@@ -1919,556 +1713,6 @@
     applySidePanelIconFallbacks(targetElement);
   }
 
-  // Function: render detected items.
-  function renderDetectedItems(items) {
-    // Branch: follow this path only when the current condition passes.
-    if (!workflowRailElements.detectedPane) {
-      return;
-    }
-
-    // Branch: follow this path only when the current condition passes.
-    if (!items.length) {
-      replaceElementMarkup(workflowRailElements.detectedPane, renderEmptyState("No URLs were detected in the current email body."));
-      return;
-    }
-
-    replaceElementMarkup(workflowRailElements.detectedPane, items
-      // Loop: transform each item in the current collection.
-      .map(function createDetectedItemMarkup(item) {
-        const tokenNotes = item.notes && item.notes.length
-          ? '<div class="merged-link-lab-page-pane__token-notes">' + mergedLinkLabPipeline.escapeHtml(item.notes.join(" · ")) + "</div>"
-          : "";
-
-        return [
-          '<article class="merged-link-lab-page-pane__token-card">',
-          '  <span class="merged-link-lab-page-pane__token-index">#' + String(item.id).padStart(2, "0") + "</span>",
-          '  <div class="merged-link-lab-page-pane__token-body">',
-          '    <div class="merged-link-lab-page-pane__token-url">' + mergedLinkLabPipeline.escapeHtml(item.original) + "</div>",
-          tokenNotes,
-          "  </div>",
-          "</article>"
-        ].join("");
-      })
-      .join(""));
-  }
-
-  // Function: render resolved items.
-  function renderResolvedItems(items) {
-    // Branch: follow this path only when the current condition passes.
-    if (!workflowRailElements.resolvedPane) {
-      return;
-    }
-
-    // Branch: follow this path only when the current condition passes.
-    if (!items.length) {
-      workflowRailElements.resolvedPane.textContent = "No normalization or resolve steps have run yet.";
-      return;
-    }
-
-    const resolutionLines = [];
-
-    // Loop: iterate through each item in the current collection.
-    items.forEach(function appendResolutionLines(item) {
-      resolutionLines.push("SOURCE " + item.id + ": " + item.original);
-      resolutionLines.push("NORMALIZED: " + (item.normalized || "(none)"));
-      resolutionLines.push("RESOLVED: " + (item.resolved && item.resolved.length ? item.resolved.join(" | ") : "(none)"));
-      resolutionLines.push("VALID: " + (item.validResolved && item.validResolved.length ? item.validResolved.join(" | ") : "(none)"));
-      resolutionLines.push("NOTES: " + (item.notes && item.notes.length ? item.notes.join(", ") : "(none)"));
-      resolutionLines.push("");
-    });
-
-    workflowRailElements.resolvedPane.textContent = resolutionLines.join("\n").trim();
-  }
-
-  // Function: render final urls.
-  function renderFinalUrls(finalUrlEntries) {
-    // Branch: follow this path only when the current condition passes.
-    if (!workflowRailElements.finalPane) {
-      return;
-    }
-
-    // Branch: follow this path only when the current condition passes.
-    if (!finalUrlEntries.length) {
-      replaceElementMarkup(workflowRailElements.finalPane, renderEmptyState("Final destination URLs will appear here once the pipeline resolves them."));
-      return;
-    }
-
-    replaceElementMarkup(workflowRailElements.finalPane, finalUrlEntries
-      // Loop: transform each item in the current collection.
-      .map(function createFinalUrlMarkup(finalUrlEntry) {
-        const finalUrlLabel = mergedLinkLabPipeline.buildFinalUrlLinkText(finalUrlEntry);
-
-        return [
-          '<article class="merged-link-lab-page-pane__url-card">',
-          '  <a class="merged-link-lab-page-pane__url-link" href="' + mergedLinkLabPipeline.escapeHtml(finalUrlEntry.url) + '" target="_blank" rel="noopener noreferrer">' + mergedLinkLabPipeline.escapeHtml(finalUrlLabel) + "</a>",
-          '  <div class="merged-link-lab-page-pane__url-meta">',
-          '    <span class="merged-link-lab-page-pane__subtle">' + mergedLinkLabPipeline.escapeHtml(finalUrlEntry.host || "unknown-host") + "</span>",
-          "  </div>",
-          "</article>"
-        ].join("");
-      })
-      .join(""));
-  }
-
-  // Function: render digest entries.
-  function renderDigestEntries(digestEntries) {
-    // Branch: follow this path only when the current condition passes.
-    if (!workflowRailElements.digestPane) {
-      return;
-    }
-
-    // Branch: follow this path only when the current condition passes.
-    if (!digestEntries.length) {
-      replaceElementMarkup(workflowRailElements.digestPane, renderEmptyState("Digest-ready entries will appear here when titles can be matched to URLs."));
-      return;
-    }
-
-    replaceElementMarkup(workflowRailElements.digestPane, digestEntries
-      // Loop: transform each item in the current collection.
-      .map(function createDigestEntryMarkup(entry) {
-        return [
-          '<article class="merged-link-lab-page-pane__digest-card">',
-          '  <div class="merged-link-lab-page-pane__digest-title">' + mergedLinkLabPipeline.escapeHtml(entry.title) + "</div>",
-          '  <div class="merged-link-lab-page-pane__digest-meta">',
-          '    <a class="merged-link-lab-page-pane__digest-link" href="' + mergedLinkLabPipeline.escapeHtml(entry.url) + '" target="_blank" rel="noopener noreferrer">' + mergedLinkLabPipeline.escapeHtml(entry.host || "unknown-host") + "</a>",
-          '    <span class="merged-link-lab-page-pane__pill">' + mergedLinkLabPipeline.escapeHtml(entry.type || "destination") + "</span>",
-          "  </div>",
-          "</article>"
-        ].join("");
-      })
-      .join(""));
-  }
-
-  // Function: render rewritten html.
-  function renderRewrittenHtml(htmlMarkup) {
-    // Branch: follow this path only when the current condition passes.
-    if (!workflowRailElements.rewrittenPane) {
-      return;
-    }
-
-    replaceElementMarkup(
-      workflowRailElements.rewrittenPane,
-      htmlMarkup || renderEmptyState("The modified email preview will appear here once rewritten output is available.")
-    );
-  }
-
-  // Function: render diagnostics.
-  function renderDiagnostics(diagnosticLines) {
-    // Branch: follow this path only when the current condition passes.
-    if (!workflowRailElements.diagnosticsPane) {
-      return;
-    }
-
-    workflowRailElements.diagnosticsPane.textContent =
-      diagnosticLines && diagnosticLines.length ? diagnosticLines.join("\n") : "No diagnostics available.";
-  }
-
-  // Function: render snapshot pane.
-  function renderSnapshotPane(snapshot) {
-    const paneRoot = ensurePane();
-    // Branch: follow this path only when the current condition passes.
-    if (!paneRoot || !snapshot || !snapshot.pipeline) {
-      return;
-    }
-
-    const pipelineResult = snapshot.pipeline;
-    const detectedItems = pipelineResult.items || [];
-    const finalUrlEntries = mergedLinkLabPipeline.buildFinalUrlEntries(detectedItems);
-    const changedUrls = pipelineResult.changedUrls || [];
-    const digestEntries = pipelineResult.digestEntries || [];
-    const diagnosticLines = pipelineResult.diagnostics && pipelineResult.diagnostics.lines
-      ? pipelineResult.diagnostics.lines
-      : [];
-
-    // Branch: follow this path only when the current condition passes.
-    if (workflowRailElements.statusText) {
-      workflowRailElements.statusText.textContent =
-        "Email body detected. Expand the rail to inspect the complete URL conversion workflow.";
-    }
-
-    // Branch: follow this path only when the current condition passes.
-    if (workflowRailElements.railStatus) {
-      workflowRailElements.railStatus.textContent = "Email ready";
-    }
-
-    // Branch: follow this path only when the current condition passes.
-    if (workflowRailElements.railCount) {
-      workflowRailElements.railCount.textContent = formatMetricCount(finalUrlEntries.length, "URL", "URLs");
-    }
-
-    // Branch: follow this path only when the current condition passes.
-    if (workflowRailElements.pageLink) {
-      workflowRailElements.pageLink.textContent = "Current page";
-      workflowRailElements.pageLink.href = "#";
-    }
-
-    // Branch: follow this path only when the current condition passes.
-    if (workflowRailElements.detectedAt) {
-      workflowRailElements.detectedAt.textContent = formatDetectionTime(snapshot.detectedAt);
-    }
-
-    // Branch: follow this path only when the current condition passes.
-    if (workflowRailElements.sectionLabel) {
-      workflowRailElements.sectionLabel.textContent = "Opened email body";
-    }
-
-    // Branch: follow this path only when the current condition passes.
-    if (workflowRailElements.sourceType) {
-      workflowRailElements.sourceType.textContent = snapshot.sourceHtml ? "HTML email body snapshot" : "Plain text email snapshot";
-    }
-
-    renderStat(workflowRailElements.rawUrlCount, detectedItems.length);
-    renderStat(workflowRailElements.finalUrlCount, finalUrlEntries.length);
-    renderStat(workflowRailElements.changedCount, changedUrls.length);
-    renderStat(workflowRailElements.rewrittenCount, pipelineResult.rewrittenCount || 0);
-    renderStat(workflowRailElements.digestCount, digestEntries.length);
-
-    // Branch: follow this path only when the current condition passes.
-    if (workflowRailElements.inputPane) {
-      workflowRailElements.inputPane.textContent =
-        snapshot.rawText || pipelineResult.rawText || "No input text is available for this message.";
-    }
-
-    renderDetectedItems(detectedItems);
-    renderResolvedItems(detectedItems);
-    renderFinalUrls(finalUrlEntries);
-    renderDigestEntries(digestEntries);
-    renderRewrittenHtml(pipelineResult.rewrittenHtml || "");
-    renderDiagnostics(diagnosticLines);
-  }
-
-  // Function: clear pane.
-  function clearPane() {
-    // Branch: follow this path only when the current condition passes.
-    if (mirrorHoverListenerCleanup) {
-      mirrorHoverListenerCleanup();
-      mirrorHoverListenerCleanup = null;
-    }
-
-    // Branch: follow this path only when the current condition passes.
-    if (!workflowRailElements.root) {
-      return;
-    }
-
-    // Branch: follow this path only when the current condition passes.
-    if (workflowRailElements.statusText) {
-      workflowRailElements.statusText.textContent = "Waiting for a detected email body...";
-    }
-
-    // Branch: follow this path only when the current condition passes.
-    if (workflowRailElements.railStatus) {
-      workflowRailElements.railStatus.textContent = "No email";
-    }
-
-    // Branch: follow this path only when the current condition passes.
-    if (workflowRailElements.railCount) {
-      workflowRailElements.railCount.textContent = "0 URLs";
-    }
-
-    // Branch: follow this path only when the current condition passes.
-    if (workflowRailElements.pageLink) {
-      workflowRailElements.pageLink.textContent = "Current page";
-      workflowRailElements.pageLink.href = "#";
-    }
-
-    // Branch: follow this path only when the current condition passes.
-    if (workflowRailElements.detectedAt) {
-      workflowRailElements.detectedAt.textContent = "Not detected";
-    }
-
-    // Branch: follow this path only when the current condition passes.
-    if (workflowRailElements.sectionLabel) {
-      workflowRailElements.sectionLabel.textContent = "Waiting for an opened email body";
-    }
-
-    // Branch: follow this path only when the current condition passes.
-    if (workflowRailElements.sourceType) {
-      workflowRailElements.sourceType.textContent = "No snapshot";
-    }
-
-    renderStat(workflowRailElements.rawUrlCount, 0);
-    renderStat(workflowRailElements.finalUrlCount, 0);
-    renderStat(workflowRailElements.changedCount, 0);
-    renderStat(workflowRailElements.rewrittenCount, 0);
-    renderStat(workflowRailElements.digestCount, 0);
-
-    // Branch: follow this path only when the current condition passes.
-    if (workflowRailElements.inputPane) {
-      workflowRailElements.inputPane.textContent = "No opened inbox email body is active on this page yet.";
-    }
-
-    // Branch: follow this path only when the current condition passes.
-    if (workflowRailElements.resolvedPane) {
-      workflowRailElements.resolvedPane.textContent =
-        "Normalization and resolve details will appear here when a message is detected.";
-    }
-
-    renderDetectedItems([]);
-    renderFinalUrls([]);
-    renderDigestEntries([]);
-    renderRewrittenHtml("");
-    renderDiagnostics([]);
-  }
-
-  // Function: ensure pane.
-  function ensurePane() {
-    // Branch: follow this path only when the current condition passes.
-    if (workflowRailElements.root && workflowRailElements.root.isConnected) {
-      return workflowRailElements.root;
-    }
-
-    const paneRoot = document.createElement("aside");
-    paneRoot.id = "merged-link-lab-page-pane";
-    paneRoot.setAttribute("aria-hidden", "true");
-    replaceElementMarkup(paneRoot, [
-      '<button type="button" class="merged-link-lab-page-pane__rail" data-role="railToggleButton" aria-expanded="false">',
-      '  <span class="merged-link-lab-page-pane__rail-dot"></span>',
-      '  <span class="merged-link-lab-page-pane__rail-eyebrow">Pipeline</span>',
-      '  <span class="merged-link-lab-page-pane__rail-title">URL Forensics Workbench</span>',
-      '  <span class="merged-link-lab-page-pane__rail-status" data-role="railStatus">No email</span>',
-      '  <span class="merged-link-lab-page-pane__rail-count" data-role="railCount">0 URLs</span>',
-      "</button>",
-      '<div class="merged-link-lab-page-pane__shell">',
-      '  <header class="merged-link-lab-page-pane__hero">',
-      '    <div class="merged-link-lab-page-pane__hero-copy">',
-      '      <p class="merged-link-lab-page-pane__eyebrow">Complete Pipeline Workflow</p>',
-      '      <h2>URL Forensics Workbench</h2>',
-      '      <p class="merged-link-lab-page-pane__status" data-role="statusText">Waiting for a detected email body...</p>',
-      "    </div>",
-      '    <div class="merged-link-lab-page-pane__hero-actions">',
-      '      <button type="button" data-role="collapseButton"><span class="merged-link-lab-page-pane__icon merged-link-lab-page-pane__button-icon" data-icon="close_fullscreen" aria-hidden="true">close_fullscreen</span><span>Collapse</span></button>',
-      '      <button type="button" data-role="applyChangesButton"><span class="merged-link-lab-page-pane__icon merged-link-lab-page-pane__button-icon" data-icon="find_replace" aria-hidden="true">find_replace</span><span>Replace In Email</span></button>',
-      '      <button type="button" data-role="copyConvertedButton"><span class="merged-link-lab-page-pane__icon merged-link-lab-page-pane__button-icon" data-icon="content_copy" aria-hidden="true">content_copy</span><span>Copy Modified Email</span></button>',
-      "    </div>",
-      "  </header>",
-      '  <section class="merged-link-lab-page-pane__meta-grid">',
-      '    <article class="merged-link-lab-page-pane__meta-card">',
-      '      <span class="merged-link-lab-page-pane__meta-label">Page</span>',
-      '      <a data-role="pageLink" href="#" target="_blank" rel="noopener noreferrer">Current page</a>',
-      "    </article>",
-      '    <article class="merged-link-lab-page-pane__meta-card">',
-      '      <span class="merged-link-lab-page-pane__meta-label">Detected</span>',
-      '      <strong data-role="detectedAt">Not detected</strong>',
-      "    </article>",
-      '    <article class="merged-link-lab-page-pane__meta-card">',
-      '      <span class="merged-link-lab-page-pane__meta-label">Section</span>',
-      '      <strong data-role="sectionLabel">Waiting for an opened email body</strong>',
-      "    </article>",
-      "  </section>",
-      '  <section class="merged-link-lab-page-pane__stats-grid">',
-      '    <article class="merged-link-lab-page-pane__stat-card">',
-      '      <span class="merged-link-lab-page-pane__stat-label">Detected</span>',
-      '      <strong data-role="rawUrlCount">0</strong>',
-      '      <p>Raw URL tokens</p>',
-      "    </article>",
-      '    <article class="merged-link-lab-page-pane__stat-card">',
-      '      <span class="merged-link-lab-page-pane__stat-label">Final</span>',
-      '      <strong data-role="finalUrlCount">0</strong>',
-      '      <p>Destination URLs</p>',
-      "    </article>",
-      '    <article class="merged-link-lab-page-pane__stat-card">',
-      '      <span class="merged-link-lab-page-pane__stat-label">Changed</span>',
-      '      <strong data-role="changedCount">0</strong>',
-      '      <p>Replacements queued</p>',
-      "    </article>",
-      '    <article class="merged-link-lab-page-pane__stat-card">',
-      '      <span class="merged-link-lab-page-pane__stat-label">Rewritten</span>',
-      '      <strong data-role="rewrittenCount">0</strong>',
-      '      <p>Updated nodes</p>',
-      "    </article>",
-      '    <article class="merged-link-lab-page-pane__stat-card">',
-      '      <span class="merged-link-lab-page-pane__stat-label">Digest</span>',
-      '      <strong data-role="digestCount">0</strong>',
-      '      <p>Digest-ready entries</p>',
-      "    </article>",
-      "  </section>",
-      '  <main class="merged-link-lab-page-pane__workflow">',
-      '    <section class="merged-link-lab-page-pane__section">',
-      '      <div class="merged-link-lab-page-pane__section-head">',
-      '        <div>',
-      '          <p class="merged-link-lab-page-pane__section-step">Stage 0</p>',
-      '          <h3>Email Snapshot</h3>',
-      '          <p class="merged-link-lab-page-pane__section-copy">The original opened email body captured from the active reading pane.</p>',
-      "        </div>",
-      '        <div class="merged-link-lab-page-pane__section-actions">',
-      '          <span class="merged-link-lab-page-pane__pill merged-link-lab-page-pane__pill--soft" data-role="sourceType">No snapshot</span>',
-      '          <button type="button" data-copy-target="inputPane"><span class="merged-link-lab-page-pane__icon merged-link-lab-page-pane__button-icon" data-icon="content_copy" aria-hidden="true">content_copy</span><span>Copy</span></button>',
-      "        </div>",
-      "      </div>",
-      '      <div class="merged-link-lab-page-pane__code-block" data-role="inputPane">No opened inbox email body is active on this page yet.</div>',
-      "    </section>",
-      '    <div class="merged-link-lab-page-pane__workflow-grid">',
-      '      <section class="merged-link-lab-page-pane__section">',
-      '        <div class="merged-link-lab-page-pane__section-head">',
-      '          <div>',
-      '            <p class="merged-link-lab-page-pane__section-step">Stage 1</p>',
-      '            <h3>Detected URLs</h3>',
-      '            <p class="merged-link-lab-page-pane__section-copy">Raw URL tokens lifted directly from the detected email body.</p>',
-      "          </div>",
-      "        </div>",
-      '        <div class="merged-link-lab-page-pane__card-list" data-role="detectedPane"></div>',
-      "      </section>",
-      '      <section class="merged-link-lab-page-pane__section">',
-      '        <div class="merged-link-lab-page-pane__section-head">',
-      '          <div>',
-      '            <p class="merged-link-lab-page-pane__section-step">Stage 2</p>',
-      '            <h3>Normalize + Resolve</h3>',
-      '            <p class="merged-link-lab-page-pane__section-copy">Token cleanup, decode passes, and destination resolution details.</p>',
-      "          </div>",
-      '          <div class="merged-link-lab-page-pane__section-actions">',
-      '            <button type="button" data-copy-target="resolvedPane"><span class="merged-link-lab-page-pane__icon merged-link-lab-page-pane__button-icon" data-icon="content_copy" aria-hidden="true">content_copy</span><span>Copy</span></button>',
-      "          </div>",
-      "        </div>",
-      '        <div class="merged-link-lab-page-pane__code-block" data-role="resolvedPane">Normalization and resolve details will appear here when a message is detected.</div>',
-      "      </section>",
-      "    </div>",
-      '    <div class="merged-link-lab-page-pane__workflow-grid">',
-      '      <section class="merged-link-lab-page-pane__section">',
-      '        <div class="merged-link-lab-page-pane__section-head">',
-      '          <div>',
-      '            <p class="merged-link-lab-page-pane__section-step">Stage 3</p>',
-      '            <h3>Final URL List</h3>',
-      '            <p class="merged-link-lab-page-pane__section-copy">The cleaned destination URLs that survive the pipeline.</p>',
-      "          </div>",
-      '          <div class="merged-link-lab-page-pane__section-actions">',
-      '            <button type="button" data-role="copyFinalButton"><span class="merged-link-lab-page-pane__icon merged-link-lab-page-pane__button-icon" data-icon="content_copy" aria-hidden="true">content_copy</span><span>Copy</span></button>',
-      "          </div>",
-      "        </div>",
-      '        <div class="merged-link-lab-page-pane__card-list" data-role="finalPane"></div>',
-      "      </section>",
-      '      <section class="merged-link-lab-page-pane__section">',
-      '        <div class="merged-link-lab-page-pane__section-head">',
-      '          <div>',
-      '            <p class="merged-link-lab-page-pane__section-step">Stage 4</p>',
-      '            <h3>Digest Output</h3>',
-      '            <p class="merged-link-lab-page-pane__section-copy">Title-to-link digest entries generated from the message context.</p>',
-      "          </div>",
-      '          <div class="merged-link-lab-page-pane__section-actions">',
-      '            <button type="button" data-role="copyDigestButton"><span class="merged-link-lab-page-pane__icon merged-link-lab-page-pane__button-icon" data-icon="content_copy" aria-hidden="true">content_copy</span><span>Copy</span></button>',
-      "          </div>",
-      "        </div>",
-      '        <div class="merged-link-lab-page-pane__card-list" data-role="digestPane"></div>',
-      "      </section>",
-      "    </div>",
-      '    <section class="merged-link-lab-page-pane__section">',
-      '      <div class="merged-link-lab-page-pane__section-head">',
-      '        <div>',
-      '          <p class="merged-link-lab-page-pane__section-step">Stage 5</p>',
-      '          <h3>Modified Email</h3>',
-      '          <p class="merged-link-lab-page-pane__section-copy">A fully rewritten email preview using the resolved destination URLs.</p>',
-      "        </div>",
-      '        <div class="merged-link-lab-page-pane__section-actions">',
-      '          <button type="button" data-copy-target="rewrittenPane"><span class="merged-link-lab-page-pane__icon merged-link-lab-page-pane__button-icon" data-icon="content_copy" aria-hidden="true">content_copy</span><span>Copy</span></button>',
-      "        </div>",
-      "      </div>",
-      '      <div class="merged-link-lab-page-pane__html-block" data-role="rewrittenPane"></div>',
-      "    </section>",
-      '    <section class="merged-link-lab-page-pane__section">',
-      '      <div class="merged-link-lab-page-pane__section-head">',
-      '        <div>',
-      '          <p class="merged-link-lab-page-pane__section-step">Stage 6</p>',
-      '          <h3>Sidepanel Diagnostics</h3>',
-      '          <p class="merged-link-lab-page-pane__section-copy">Pipeline counts, error traces, and quick verification context.</p>',
-      "        </div>",
-      '        <div class="merged-link-lab-page-pane__section-actions">',
-      '          <button type="button" data-copy-target="diagnosticsPane"><span class="merged-link-lab-page-pane__icon merged-link-lab-page-pane__button-icon" data-icon="content_copy" aria-hidden="true">content_copy</span><span>Copy</span></button>',
-      "        </div>",
-      "      </div>",
-      '      <div class="merged-link-lab-page-pane__code-block" data-role="diagnosticsPane">No diagnostics available.</div>',
-      "    </section>",
-      "  </main>",
-      "</div>"
-    ].join(""));
-
-    const mountTarget = document.body || document.documentElement;
-    // Branch: follow this path only when the current condition passes.
-    if (!mountTarget) {
-      return null;
-    }
-
-    mountTarget.appendChild(paneRoot);
-
-    workflowRailElements.root = paneRoot;
-    workflowRailElements.railToggleButton = paneRoot.querySelector('[data-role="railToggleButton"]');
-    workflowRailElements.railStatus = paneRoot.querySelector('[data-role="railStatus"]');
-    workflowRailElements.railCount = paneRoot.querySelector('[data-role="railCount"]');
-    workflowRailElements.statusText = paneRoot.querySelector('[data-role="statusText"]');
-    workflowRailElements.pageLink = paneRoot.querySelector('[data-role="pageLink"]');
-    workflowRailElements.detectedAt = paneRoot.querySelector('[data-role="detectedAt"]');
-    workflowRailElements.sectionLabel = paneRoot.querySelector('[data-role="sectionLabel"]');
-    workflowRailElements.sourceType = paneRoot.querySelector('[data-role="sourceType"]');
-    workflowRailElements.rawUrlCount = paneRoot.querySelector('[data-role="rawUrlCount"]');
-    workflowRailElements.finalUrlCount = paneRoot.querySelector('[data-role="finalUrlCount"]');
-    workflowRailElements.changedCount = paneRoot.querySelector('[data-role="changedCount"]');
-    workflowRailElements.rewrittenCount = paneRoot.querySelector('[data-role="rewrittenCount"]');
-    workflowRailElements.digestCount = paneRoot.querySelector('[data-role="digestCount"]');
-    workflowRailElements.inputPane = paneRoot.querySelector('[data-role="inputPane"]');
-    workflowRailElements.detectedPane = paneRoot.querySelector('[data-role="detectedPane"]');
-    workflowRailElements.resolvedPane = paneRoot.querySelector('[data-role="resolvedPane"]');
-    workflowRailElements.finalPane = paneRoot.querySelector('[data-role="finalPane"]');
-    workflowRailElements.digestPane = paneRoot.querySelector('[data-role="digestPane"]');
-    workflowRailElements.rewrittenPane = paneRoot.querySelector('[data-role="rewrittenPane"]');
-    workflowRailElements.diagnosticsPane = paneRoot.querySelector('[data-role="diagnosticsPane"]');
-    workflowRailElements.applyChangesButton = paneRoot.querySelector('[data-role="applyChangesButton"]');
-    workflowRailElements.copyConvertedButton = paneRoot.querySelector('[data-role="copyConvertedButton"]');
-    workflowRailElements.copyFinalButton = paneRoot.querySelector('[data-role="copyFinalButton"]');
-    workflowRailElements.copyDigestButton = paneRoot.querySelector('[data-role="copyDigestButton"]');
-    workflowRailElements.collapseButton = paneRoot.querySelector('[data-role="collapseButton"]');
-
-    // Function: toggle workflow rail.
-    workflowRailElements.railToggleButton.addEventListener("click", function toggleWorkflowRail() {
-      // Branch: follow this path only when the current condition passes.
-      if (!latestSnapshot) {
-        return;
-      }
-
-      setPaneExpanded(!workflowRailElements.isExpanded);
-    });
-
-    // Function: collapse workflow rail.
-    workflowRailElements.collapseButton.addEventListener("click", function collapseWorkflowRail() {
-      setPaneExpanded(false);
-    });
-
-    // Function: copy converted pane.
-    workflowRailElements.copyConvertedButton.addEventListener("click", function copyConvertedPane() {
-      copyPaneText(workflowRailElements.rewrittenPane);
-    });
-
-    // Function: copy final pane.
-    workflowRailElements.copyFinalButton.addEventListener("click", function copyFinalPane() {
-      copyPaneText(workflowRailElements.finalPane);
-    });
-
-    // Function: copy digest pane.
-    workflowRailElements.copyDigestButton.addEventListener("click", function copyDigestPane() {
-      copyPaneText(workflowRailElements.digestPane);
-    });
-
-    // Function: apply converted output to email.
-    workflowRailElements.applyChangesButton.addEventListener("click", function applyConvertedOutputToEmail() {
-      applyRewriteToEmailBody();
-    });
-
-    // Loop: iterate through each item in the current collection.
-    paneRoot.querySelectorAll("[data-copy-target]").forEach(function bindCopyTarget(copyButton) {
-      // Function: copy target pane.
-      copyButton.addEventListener("click", function copyTargetPane() {
-        const targetRole = copyButton.getAttribute("data-copy-target");
-        // Branch: follow this path only when the current condition passes.
-        if (!targetRole) {
-          return;
-        }
-
-        const targetElement = paneRoot.querySelector('[data-role="' + targetRole + '"]');
-        copyPaneText(targetElement);
-      });
-    });
-
-    clearPane();
-    return paneRoot;
-  }
-
   // Function: apply rewrite to email body.
   async function applyRewriteToEmailBody() {
     // Branch: follow this path only when the current condition passes.
@@ -2514,76 +1758,6 @@
     scheduleSnapshotSync();
 
     return { ok: true, applied: true, snapshot: refreshedSnapshot };
-  }
-
-  // Function: toggle pane visibility.
-  function togglePaneVisibility() {
-    // Branch: follow this path only when the current condition passes.
-    if (!latestSnapshot) {
-      hidePane();
-      return {
-        ok: false,
-        hasSnapshot: false,
-        visible: false,
-        expanded: false
-      };
-    }
-
-    setPaneExpanded(!workflowRailElements.isExpanded);
-    return {
-      ok: true,
-      hasSnapshot: true,
-      visible: true,
-      expanded: workflowRailElements.isExpanded
-    };
-  }
-
-  // Function: publish snapshot.
-  async function publishSnapshot(snapshot) {
-    latestSnapshot = snapshot;
-    lastPublishedSnapshotSignature = createSnapshotSignature(snapshot);
-
-    const nextPaneKey = createSnapshotPaneKey(snapshot);
-    // Branch: follow this path only when the current condition passes.
-    if (workflowRailElements.currentPaneKey !== nextPaneKey) {
-      workflowRailElements.isExpanded = false;
-    }
-
-    workflowRailElements.currentPaneKey = nextPaneKey;
-    renderSnapshotPane(snapshot);
-    showPane();
-
-    // Branch: try the primary operation before handling failures.
-    try {
-      await extensionApi.runtime.sendMessage({
-        type: "merged-link-lab:email-snapshot",
-        snapshot: snapshot
-      });
-    // Branch: handle errors from the guarded operation.
-    } catch {
-      return;
-    }
-  }
-
-  // Function: publish clear.
-  async function publishClear() {
-    latestSnapshot = null;
-    resetLatestEmailDetectionState();
-    lastPublishedSnapshotSignature = "";
-    workflowRailElements.currentPaneKey = "";
-    workflowRailElements.isExpanded = false;
-    clearPane();
-    hidePane();
-
-    // Branch: try the primary operation before handling failures.
-    try {
-      await extensionApi.runtime.sendMessage({
-        type: "merged-link-lab:email-cleared"
-      });
-    // Branch: handle errors from the guarded operation.
-    } catch {
-      return;
-    }
   }
 
   // Function: format timestamp.
