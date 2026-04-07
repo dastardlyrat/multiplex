@@ -1,0 +1,24 @@
+{
+  "name": "url-forensics",
+  "version": "1.0.0",
+  "description": "{{synopsis}}",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@eslint/js": "9.39.4",
+    "cspell": "^10.0.0",
+    "dependency-cruiser": "^17.3.10",
+    "eslint": "9.39.4",
+    "globals": "14.0.0",
+    "jscpd": "^4.0.8",
+    "knip": "^6.3.0",
+    "prettier": "^3.8.1",
+    "web-ext": "^10.1.0"
+  }
+}

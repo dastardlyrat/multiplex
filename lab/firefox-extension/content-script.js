@@ -1,0 +1,4244 @@
+// Function: initialize merged link lab content script.
+(function initializeMergedLinkLabContentScript() {
+  "use strict";
+
+  const extensionApi = typeof browser !== "undefined" ? browser : chrome;
+  const mergedLinkLabPipeline = typeof MergedLinkLabPipeline !== "undefined" ? MergedLinkLabPipeline : null;
+  const debugApi = typeof globalThis !== "undefined" ? globalThis.mergedLinkLabDebug : null;
+  if (debugApi && typeof debugApi.configure === "function") {
+    debugApi.configure({ context: "content-script", module: "content-script" });
+    debugApi.runtime("content script initialization started", {
+      host: window.location.hostname || "",
+      readyState: document.readyState || "unknown"
+    });
+  }
+
+  // Branch: follow this path only when the current condition passes.
+  if (!extensionApi || !extensionApi.runtime || !mergedLinkLabPipeline) {
+    if (debugApi) {
+      debugApi.error("content script initialization aborted: required modules unavailable", {
+        hasExtensionApi: !!extensionApi,
+        hasRuntime: !!(extensionApi && extensionApi.runtime),
+        hasPipeline: !!mergedLinkLabPipeline
+      });
+    }
+    return;
+  }
+
+  const sidePanelIconFallbacks = Object.freeze({
+    account_tree: "\u251c",
+    analytics: "\u25f7",
+    close_fullscreen: "\u2199",
+    content_copy: "\u25a3",
+    find_replace: "\u21c4",
+    link: "\u26d3",
+    mail: "\u2709",
+    refresh: "\u21bb",
+    settings: "\u2699",
+    travel_explore: "\u2316"
+  });
+
+  // Function: mark side panel icon font ready.
+  function markSidePanelIconFontReady() {
+    if (document.documentElement && document.documentElement.classList) {
+      document.documentElement.classList.add("merged-link-lab-page-pane-icon-font-ready");
+    }
+  }
+
+  // Function: apply side panel fallback icons.
+  function applySidePanelIconFallbacks(rootElement) {
+    if (!rootElement || typeof rootElement.querySelectorAll !== "function") {
+      return;
+    }
+
+    rootElement.querySelectorAll(".merged-link-lab-page-pane__icon[data-icon]").forEach(function applyIconFallback(iconElement) {
+      const iconName = iconElement.getAttribute("data-icon") || "";
+      const fallbackIcon = sidePanelIconFallbacks[iconName] || "\u25cf";
+      iconElement.setAttribute("data-fallback-icon", fallbackIcon);
+    });
+  }
+
+  // Function: install side panel icon font face.
+  function installSidePanelIconFontFace() {
+    if (!extensionApi.runtime || typeof extensionApi.runtime.getURL !== "function") {
+      return;
+    }
+
+    const styleElementId = "merged-link-lab-page-pane-icon-font";
+    const existingStyleElement = document.getElementById(styleElementId);
+    const styleMount = document.head || document.documentElement;
+
+    if (existingStyleElement || !styleMount) {
+      return;
+    }
+
+    const fontUrl = extensionApi.runtime.getURL("resources/fonts/material-symbols-outlined.woff2");
+    const fontFaceSource = 'url("' + fontUrl.replace(/"/g, "%22") + '") format("woff2")';
+    const styleElement = document.createElement("style");
+    styleElement.id = styleElementId;
+    styleElement.textContent =
+      '@font-face{font-family:"Material Symbols Outlined";font-style:normal;font-weight:400;font-display:block;src:url("' +
+      fontUrl.replace(/"/g, "%22") +
+      '") format("woff2");}';
+    styleMount.appendChild(styleElement);
+
+    if (typeof FontFace === "function" && document.fonts && typeof document.fonts.add === "function") {
+      try {
+        const iconFontFace = new FontFace("Material Symbols Outlined", fontFaceSource, {
+          style: "normal",
+          weight: "400",
+          display: "block"
+        });
+        document.fonts.add(iconFontFace);
+        iconFontFace.load().then(markSidePanelIconFontReady).catch(function ignoreIconFontLoadError() {});
+        return;
+      } catch {
+        // The @font-face rule above remains the primary path in older browsers.
+      }
+    }
+
+    if (document.fonts && typeof document.fonts.load === "function") {
+      document.fonts
+        .load('16px "Material Symbols Outlined"', "settings")
+        .then(function handleLoadedFontFaces(fontFaces) {
+          if (fontFaces && fontFaces.length) {
+            markSidePanelIconFontReady();
+          }
+        })
+        .catch(function ignoreDocumentFontsLoadError() {});
+    }
+  }
+
+  installSidePanelIconFontFace();
+
+  const inboxHostPattern =
+    /^(?:(?:[^.]+\.)*mail\.google\.com|(?:[^.]+\.)*outlook\.office\.com|(?:[^.]+\.)*outlook\.live\.com|(?:[^.]+\.)*outlook\.office365\.com|(?:[^.]+\.)*mail\.yahoo\.com|(?:[^.]+\.)*mail\.proton\.me|(?:[^.]+\.)*app\.hey\.com|(?:[^.]+\.)*app\.fastmail\.com)$/i;
+  const gmailHostPattern = /(^|\.)mail\.google\.com$/i;
+  const outlookHostPattern = /(^|\.)outlook\.(office|live|office365)\.com$/i;
+  const yahooHostPattern = /(^|\.)mail\.yahoo\.com$/i;
+  const protonHostPattern = /(^|\.)mail\.proton\.me$/i;
+  const heyHostPattern = /(^|\.)app\.hey\.com$/i;
+  const heyTopicPathPattern = /^\/topics(?:\/|$)/i;
+  const fastmailHostPattern = /(^|\.)app\.fastmail\.com$/i;
+  const outlookMailBodySelector = 'div[data-test-id="mailMessageBodyContainer"]';
+  const inboxCandidateMissingGraceMs = 4000;
+  const outlookCandidateMissingGraceMs = 12000;
+  const protonCandidateMissingGraceMs = 12000;
+  const readViewHintPattern =
+    /\b(message body|message|conversation|thread|mail view|reading pane|preview|viewer|article|body)\b/i;
+  const composeContextHintPattern = /\b(compose|composer|reply|forward|draft|editable|editor)\b/i;
+  const nativeExpansionControlHintPattern =
+    /\b(show\s+(?:trimmed\s+content|quoted\s+text|entire\s+message|all|more)|view\s+(?:entire|full)\s+message|expand|see\s+more|load\s+more)\b/i;
+  const standaloneEmailHintPattern =
+    /\b(email|e-mail|message|mail|subject|forwarded|reply|print|eml|rfc822|sender|recipient)\b/i;
+  const topicDigestLabelPattern = /\btopic digest\b/i;
+  const topicDigestActionPattern = /\bview all topics\b/i;
+  const primaryInboxBodySelectorsByProvider = Object.freeze({
+    gmail: [
+      "div.AO div.adn.ads[data-message-id] .a3s.aiL",
+      "div.AO div[data-message-id].adn.ads .a3s.aiL",
+      "[data-message-id] .a3s.aiL",
+      ".a3s.aiL"
+    ],
+    outlook: [
+      "div[data-test-id='mailMessageBodyContainer']",
+      "[data-app-section='MailReadCompose'] div[role='document']",
+      "div[role='document'][aria-label*='Message']",
+      "div[aria-label='Message body']",
+      "div[aria-label*='Message body']"
+    ],
+    yahoo: [
+      "div.msg-body[data-test-id='message-view-body-content']"
+    ],
+    proton: [
+      "iframe.w-full[title='Email content']"
+    ],
+    hey: [
+      "div[id^='entry_expander_entry_'].entry__body.entry-expander",
+      "#entries .entry__body.entry-expander",
+      "div.entry__body.entry-expander",
+      "article.entry .entry__body.entry-expander",
+      "div.entry__wrapper .entry__body.entry-expander",
+      ".thread-message__body",
+      ".message-body",
+      ".message-content"
+    ],
+    fastmail: [
+      "div.u-containSelection.v-Message-body"
+    ]
+  });
+  const inboxBodySelectors = [
+    "div.AO div.adn.ads[data-message-id] .a3s.aiL",
+    "div.AO div[data-message-id].adn.ads .a3s.aiL",
+    "div[data-test-id='mailMessageBodyContainer']",
+    "[data-message-id] .a3s.aiL",
+    ".a3s.aiL",
+    "iframe.w-full[title='Email content']",
+    "div.msg-body[data-test-id='message-view-body-content']",
+    "div[id^='entry_expander_entry_'].entry__body.entry-expander",
+    "#entries .entry__body.entry-expander",
+    "div.entry__body.entry-expander",
+    "article.entry .entry__body.entry-expander",
+    "div.entry__wrapper .entry__body.entry-expander",
+    "div.u-containSelection.v-Message-body",
+    "[data-app-section='MailReadCompose'] div[role='document']",
+    "div[role='document'][aria-label*='Message']",
+    "div[aria-label='Message body']",
+    "div[aria-label*='Message body']",
+    "[data-testid='message-view-body']",
+    "[data-testid='message-body']",
+    "[data-test-id='message-view-body']",
+    "[data-test-id='message-body']",
+    "[data-testid*='message'][data-testid*='body']",
+    "[data-testid*='message-content']",
+    "[data-test-id*='message'][data-test-id*='body']",
+    "[data-test-id*='message-content']",
+    ".thread-message__body",
+    ".message-body",
+    ".message-content",
+    ".msg-body",
+    "[data-view='message']",
+    ".mail-view",
+    ".conversation-view",
+    "main",
+    "[role='main']",
+    "[role='article']",
+    "article"
+  ];
+  const standaloneEmailBodySelectors = [
+    "[data-email-body]",
+    "[data-message-body]",
+    "div.AO div.adn.ads[data-message-id] .a3s.aiL",
+    "div.AO div[data-message-id].adn.ads .a3s.aiL",
+    "[data-message-id] .a3s.aiL",
+    ".a3s.aiL",
+    "iframe.w-full[title='Email content']",
+    "div.msg-body[data-test-id='message-view-body-content']",
+    "div[id^='entry_expander_entry_'].entry__body.entry-expander",
+    "#entries .entry__body.entry-expander",
+    "div.entry__body.entry-expander",
+    "article.entry .entry__body.entry-expander",
+    "div.entry__wrapper .entry__body.entry-expander",
+    "div.u-containSelection.v-Message-body",
+    "[data-testid='message-view-body']",
+    "[data-testid='message-body']",
+    "[data-testid*='message'][data-testid*='body']",
+    "[data-testid*='message-content']",
+    "[data-test-id*='message'][data-test-id*='body']",
+    "[data-test-id*='message-content']",
+    ".email-body",
+    ".email-content",
+    ".email-message",
+    ".email-view",
+    ".mail-body",
+    ".mail-message",
+    ".mail-view",
+    ".message-view",
+    ".message-body",
+    ".message-content",
+    ".msg-body",
+    ".thread-message__body",
+    ".mimepart",
+    ".rfc822-message",
+    "body > main",
+    "body > article",
+    "body > section",
+    "body > div",
+    "body > table",
+    "[role='article']",
+    "article",
+    "main",
+    "[role='main']"
+  ];
+  const genericInboxContainerSelectors = [
+    "[data-view='message']",
+    ".mail-view",
+    ".conversation-view",
+    "main",
+    "[role='main']",
+    "[role='article']",
+    "article"
+  ];
+  // Loop: keep only items that match the current check.
+  const explicitInboxBodySelectors = inboxBodySelectors.filter(function filterExplicitInboxBodySelector(selector) {
+    return genericInboxContainerSelectors.indexOf(selector) === -1;
+  });
+
+  const observedEmailRoots = new WeakSet();
+  let scheduledSnapshotTimer = 0;
+  let latestSnapshot = null;
+  let latestDetectedEmailRoot = null;
+  let latestDetectedEmailMode = "";
+  let lastPublishedSnapshotSignature = "";
+  let latestInboxCandidateSeenAt = 0;
+  let inboxCandidateMissingSince = 0;
+  let lastObservedLocationHref = String(window.location.href || "");
+  const defaultMirrorLinkHoverMessage = "Hover over a link to reveal URL components";
+  const unavailableMirrorLinkHoverMessage = "Mirror hover inspection is unavailable for this email body.";
+  let mirrorHoverListenerCleanup = null;
+  let latestDetectedMirrorHoverInfoText = "";
+  const pipelineSettingStorageKey = "enableUrlNormalizationRepair";
+  const replaceEmailBodyWithMirrorContentStorageKey = "replaceEmailBodyWithMirrorContent";
+  const autoApplyMirrorForConfiguredSendersStorageKey = "autoApplyMirrorForConfiguredSenders";
+  const autoApplyMirrorSenderEmailListStorageKey = "autoApplyMirrorSenderEmailList";
+  const legacyAutoApplyMirrorForNamedSenderStorageKey = "autoApplyMirrorForNamedSender";
+  const defaultAutoApplyMirrorSenderEmails = [];
+  let autoApplyMirrorSenderSelector = "";
+  let autoApplyMirrorSenderEmailPattern = null;
+  let autoApplyMirrorSenderHeaderPattern = null;
+  const extensionManifest =
+    extensionApi.runtime && typeof extensionApi.runtime.getManifest === "function"
+      ? extensionApi.runtime.getManifest()
+      : { name: "URL Forensics Workbench", version: "0.0.0" };
+  const extensionSettings = {
+    enableUrlNormalizationRepair: !!(
+    mergedLinkLabPipeline.resolvePipelineSettings
+        ? mergedLinkLabPipeline.resolvePipelineSettings(mergedLinkLabPipeline.defaultPipelineSettings).enableUrlNormalizationRepair
+        : false
+    ),
+    replaceEmailBodyWithMirrorContent: false,
+    autoApplyMirrorForConfiguredSenders: false,
+    autoApplyMirrorSenderEmailList: defaultAutoApplyMirrorSenderEmails.slice()
+  };
+  const extensionStorageSnapshot = {
+    source: "defaults",
+    loadedAt: 0,
+    loadError: "",
+    values: {
+      enableUrlNormalizationRepair: {
+        hasStoredValue: false,
+        rawValue: undefined,
+        effectiveValue: extensionSettings.enableUrlNormalizationRepair
+      },
+      replaceEmailBodyWithMirrorContent: {
+        hasStoredValue: false,
+        rawValue: undefined,
+        effectiveValue: extensionSettings.replaceEmailBodyWithMirrorContent
+      },
+      autoApplyMirrorForConfiguredSenders: {
+        hasStoredValue: false,
+        rawValue: undefined,
+        effectiveValue: extensionSettings.autoApplyMirrorForConfiguredSenders
+      },
+      autoApplyMirrorSenderEmailList: {
+        hasStoredValue: false,
+        rawValue: undefined,
+        effectiveValue: extensionSettings.autoApplyMirrorSenderEmailList.slice()
+      }
+    }
+  };
+
+  const workflowRailElements = {
+    root: null,
+    railToggleButton: null,
+    railBadge: null,
+    railStatus: null,
+    railCount: null,
+    statusText: null,
+    pageLink: null,
+    detectedAt: null,
+    sectionLabel: null,
+    sourceType: null,
+    rawUrlCount: null,
+    finalUrlCount: null,
+    changedCount: null,
+    rewrittenCount: null,
+    digestCount: null,
+    refreshButton: null,
+    settingsButton: null,
+    tabButtons: [],
+    tabPanels: [],
+    convertedPane: null,
+    convertedSummary: null,
+    labFrame: null,
+    labFrameLoaded: false,
+    diagnosticsPane: null,
+    diagnosticsSummary: null,
+    hoverLinkInfo: null,
+    hoverLinkInfoValue: null,
+    rewrittenPane: null,
+    applyChangesButton: null,
+    copyConvertedButton: null,
+    copyDiagnosticsButton: null,
+    collapseButton: null,
+    currentPaneKey: "",
+    activeTabKey: "converted",
+    isExpanded: false
+  };
+  const reservedLayoutEntries = [];
+
+  // Function: get pipeline settings.
+  function getPipelineSettings() {
+    return {
+      enableUrlNormalizationRepair: !!extensionSettings.enableUrlNormalizationRepair
+    };
+  }
+
+  // Function: escape regular expression text.
+  function escapeTextForPattern(value) {
+    return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  // Function: normalize sender email address.
+  function normalizeSenderEmailAddress(value) {
+    const safeValue = String(value || "").trim().toLowerCase();
+    const mailtoMatch = safeValue.match(/^mailto:\s*([^?]+)/i);
+    const candidateValue = mailtoMatch ? mailtoMatch[1].trim() : safeValue;
+
+    if (!candidateValue) {
+      return "";
+    }
+
+    return /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i.test(candidateValue)
+      ? candidateValue
+      : "";
+  }
+
+  // Function: sanitize sender email list.
+  function sanitizeSenderEmailList(value) {
+    const candidateValues = Array.isArray(value) ? value : (value ? [value] : []);
+    const uniqueEmailMap = new Map();
+
+    candidateValues.forEach(function registerSenderEmail(candidateValue) {
+      const normalizedEmail = normalizeSenderEmailAddress(candidateValue);
+
+      if (!normalizedEmail || uniqueEmailMap.has(normalizedEmail)) {
+        return;
+      }
+
+      uniqueEmailMap.set(normalizedEmail, true);
+    });
+
+    return Array.from(uniqueEmailMap.keys());
+  }
+
+  // Function: escape selector attribute value.
+  function escapeSelectorAttributeValue(value) {
+    if (typeof CSS !== "undefined" && CSS && typeof CSS.escape === "function") {
+      return CSS.escape(String(value || ""));
+    }
+
+    return String(value || "")
+      .replace(/\\/g, "\\\\")
+      .replace(/"/g, '\\"');
+  }
+
+  // Function: refresh configured sender detection state.
+  function refreshAutoApplyConfiguredSenderDetectionState() {
+    const senderEmailList = sanitizeSenderEmailList(extensionSettings.autoApplyMirrorSenderEmailList);
+
+    extensionSettings.autoApplyMirrorSenderEmailList = senderEmailList;
+
+    if (!senderEmailList.length) {
+      autoApplyMirrorSenderSelector = "";
+      autoApplyMirrorSenderEmailPattern = null;
+      autoApplyMirrorSenderHeaderPattern = null;
+      return;
+    }
+
+    autoApplyMirrorSenderSelector = senderEmailList
+      .map(function createSenderSelectors(emailAddress) {
+        const escapedEmailAddress = escapeSelectorAttributeValue(emailAddress);
+
+        return [
+          '[email="' + escapedEmailAddress + '"]',
+          '[data-hovercard-id="' + escapedEmailAddress + '"]',
+          '[data-email="' + escapedEmailAddress + '"]',
+          '[data-from="' + escapedEmailAddress + '"]',
+          '[data-sender-email="' + escapedEmailAddress + '"]',
+          'a[href="mailto:' + escapedEmailAddress + '"]',
+          'a[href^="mailto:' + escapedEmailAddress + '?"]'
+        ];
+      })
+      .reduce(function flattenSelectors(flattenedSelectors, selectorGroup) {
+        return flattenedSelectors.concat(selectorGroup);
+      }, [])
+      .join(", ");
+
+    const senderEmailAlternation = senderEmailList
+      .map(function escapeSenderEmail(emailAddress) {
+        return escapeTextForPattern(emailAddress);
+      })
+      .join("|");
+
+    autoApplyMirrorSenderEmailPattern = new RegExp(
+      "(^|[^a-z0-9._%+-])(?:" + senderEmailAlternation + ")(?=$|[^a-z0-9._%+-])",
+      "i"
+    );
+    autoApplyMirrorSenderHeaderPattern = new RegExp(
+      "(?:^|\\n|\\r)\\s*(from|sender|reply-to)\\s*[:\\-].{0,260}(?:" + senderEmailAlternation + ")",
+      "i"
+    );
+  }
+
+  // Function: build storage boolean snapshot entry.
+  function buildStorageBooleanSnapshotEntry(storedSettings, key, fallbackValue) {
+    const hasStoredValue = !!(
+      storedSettings &&
+      typeof storedSettings === "object" &&
+      Object.prototype.hasOwnProperty.call(storedSettings, key)
+    );
+    const rawValue = hasStoredValue ? storedSettings[key] : undefined;
+
+    return {
+      hasStoredValue: hasStoredValue,
+      rawValue: rawValue,
+      effectiveValue: hasStoredValue ? rawValue === true : fallbackValue === true
+    };
+  }
+
+  // Function: build storage email list snapshot entry.
+  function buildStorageEmailListSnapshotEntry(storedSettings, key, fallbackValue) {
+    const hasStoredValue = !!(
+      storedSettings &&
+      typeof storedSettings === "object" &&
+      Object.prototype.hasOwnProperty.call(storedSettings, key)
+    );
+    const rawValue = hasStoredValue ? storedSettings[key] : undefined;
+    const effectiveValue = hasStoredValue
+      ? sanitizeSenderEmailList(rawValue)
+      : sanitizeSenderEmailList(fallbackValue);
+
+    return {
+      hasStoredValue: hasStoredValue,
+      rawValue: rawValue,
+      effectiveValue: effectiveValue
+    };
+  }
+
+  refreshAutoApplyConfiguredSenderDetectionState();
+
+  // Function: set extension storage snapshot.
+  function setExtensionStorageSnapshot(source, storedSettings, errorMessage) {
+    const safeStoredSettings = storedSettings && typeof storedSettings === "object" ? storedSettings : {};
+    const normalizedStoredSettings = Object.assign({}, safeStoredSettings);
+
+    if (
+      !Object.prototype.hasOwnProperty.call(normalizedStoredSettings, autoApplyMirrorForConfiguredSendersStorageKey) &&
+      Object.prototype.hasOwnProperty.call(normalizedStoredSettings, legacyAutoApplyMirrorForNamedSenderStorageKey)
+    ) {
+      normalizedStoredSettings[autoApplyMirrorForConfiguredSendersStorageKey] =
+        normalizedStoredSettings[legacyAutoApplyMirrorForNamedSenderStorageKey];
+    }
+
+    extensionStorageSnapshot.source = String(source || "defaults");
+    extensionStorageSnapshot.loadedAt = Date.now();
+    extensionStorageSnapshot.loadError = errorMessage ? String(errorMessage) : "";
+    extensionStorageSnapshot.values = {
+      enableUrlNormalizationRepair: buildStorageBooleanSnapshotEntry(
+        normalizedStoredSettings,
+        pipelineSettingStorageKey,
+        extensionSettings.enableUrlNormalizationRepair
+      ),
+      replaceEmailBodyWithMirrorContent: buildStorageBooleanSnapshotEntry(
+        normalizedStoredSettings,
+        replaceEmailBodyWithMirrorContentStorageKey,
+        extensionSettings.replaceEmailBodyWithMirrorContent
+      ),
+      autoApplyMirrorForConfiguredSenders: buildStorageBooleanSnapshotEntry(
+        normalizedStoredSettings,
+        autoApplyMirrorForConfiguredSendersStorageKey,
+        extensionSettings.autoApplyMirrorForConfiguredSenders
+      ),
+      autoApplyMirrorSenderEmailList: buildStorageEmailListSnapshotEntry(
+        normalizedStoredSettings,
+        autoApplyMirrorSenderEmailListStorageKey,
+        extensionSettings.autoApplyMirrorSenderEmailList
+      )
+    };
+  }
+
+  // Function: format storage snapshot source label.
+  function formatStorageSnapshotSourceLabel(source) {
+    if (source === "storage.local") {
+      return "storage.local";
+    }
+
+    if (source === "storage.onChanged") {
+      return "storage.onChanged event";
+    }
+
+    if (source === "storage-unavailable") {
+      return "storage.local unavailable";
+    }
+
+    if (source === "storage-error") {
+      return "storage read error";
+    }
+
+    return "defaults";
+  }
+
+  // Function: format storage snapshot entry.
+  function formatStorageSnapshotEntry(entry) {
+    if (!entry || typeof entry !== "object") {
+      return "unavailable";
+    }
+
+    if (entry.hasStoredValue) {
+      if (entry.rawValue === true || entry.rawValue === false) {
+        return (entry.rawValue ? "true" : "false") + " (stored)";
+      }
+
+      return String(entry.rawValue) + " (stored non-boolean)";
+    }
+
+    return (entry.effectiveValue ? "true" : "false") + " (default)";
+  }
+
+  // Function: format storage email list snapshot entry.
+  function formatStorageEmailListSnapshotEntry(entry) {
+    if (!entry || typeof entry !== "object") {
+      return "unavailable";
+    }
+
+    const effectiveValue = Array.isArray(entry.effectiveValue) ? entry.effectiveValue : [];
+    const sourceLabel = entry.hasStoredValue ? "stored" : "default";
+
+    if (!effectiveValue.length) {
+      return "0 addresses (" + sourceLabel + ")";
+    }
+
+    return (
+      String(effectiveValue.length) +
+      " address" +
+      (effectiveValue.length === 1 ? "" : "es") +
+      " (" +
+      sourceLabel +
+      "): " +
+      effectiveValue.slice(0, 3).join(", ") +
+      (effectiveValue.length > 3 ? ", +" + String(effectiveValue.length - 3) + " more" : "")
+    );
+  }
+
+  // Function: does text mention a configured sender email address.
+  function hasConfiguredSenderText(value) {
+    const safeValue = String(value || "");
+
+    if (!safeValue || !autoApplyMirrorSenderEmailPattern || !autoApplyMirrorSenderHeaderPattern) {
+      return false;
+    }
+
+    if (autoApplyMirrorSenderHeaderPattern.test(safeValue)) {
+      return true;
+    }
+
+    return autoApplyMirrorSenderEmailPattern.test(safeValue.slice(0, 2400));
+  }
+
+  // Function: does page expose configured sender attributes.
+  function hasConfiguredSenderElement() {
+    if (!autoApplyMirrorSenderSelector) {
+      return false;
+    }
+
+    // Branch: try the primary operation before handling failures.
+    try {
+      return !!document.querySelector(autoApplyMirrorSenderSelector);
+    // Branch: handle errors from the guarded operation.
+    } catch {
+      return false;
+    }
+  }
+
+  // Function: is a configured sender detected for snapshot.
+  function isConfiguredSenderDetected(snapshot) {
+    if (!extensionSettings.autoApplyMirrorSenderEmailList.length) {
+      return false;
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (hasConfiguredSenderElement()) {
+      return true;
+    }
+
+    const activeEmailRoot = getActiveEmailRoot();
+    const messageScope =
+      activeEmailRoot && typeof activeEmailRoot.closest === "function"
+        ? activeEmailRoot.closest(
+            "[data-message-id], [role='listitem'], [role='article'], article, [data-test-id*='message'], [data-test-id*='conversation']"
+          )
+        : null;
+    const sourceSignals = [
+      snapshot && snapshot.rawText ? String(snapshot.rawText).slice(0, 6000) : "",
+      snapshot && snapshot.sourceHtml ? String(snapshot.sourceHtml).slice(0, 16000) : "",
+      messageScope ? String(messageScope.innerText || messageScope.textContent || "").slice(0, 6000) : "",
+      activeEmailRoot ? String(activeEmailRoot.innerText || activeEmailRoot.textContent || "").slice(0, 6000) : "",
+      String(document.title || "")
+    ];
+
+    return sourceSignals.some(function hasSenderSignal(sourceSignal) {
+      return hasConfiguredSenderText(sourceSignal);
+    });
+  }
+
+  // Function: does email expose native expansion controls.
+  function hasNativeEmailExpansionControl(root) {
+    if (!root || typeof root.querySelectorAll !== "function") {
+      return false;
+    }
+
+    const messageScope =
+      typeof root.closest === "function"
+        ? root.closest(
+            "[data-message-id], [role='listitem'], [role='article'], article, [data-test-id*='message'], [data-test-id*='conversation']"
+          ) || root
+        : root;
+    const controlElements = Array.from(messageScope.querySelectorAll(
+      "button, [role='button'], a[href], a[role='button'], summary, [aria-expanded]"
+    ));
+
+    return controlElements.some(function hasMatchingExpansionControl(controlElement) {
+      if (!controlElement || controlElement.closest("#merged-link-lab-page-pane")) {
+        return false;
+      }
+
+      const controlText = String(controlElement.innerText || controlElement.textContent || "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 120);
+      const controlHints = [
+        controlText,
+        controlElement.getAttribute("aria-label") || "",
+        controlElement.getAttribute("title") || "",
+        controlElement.getAttribute("data-tooltip") || "",
+        controlElement.getAttribute("data-tooltip-text") || "",
+        controlElement.getAttribute("data-test-id") || "",
+        controlElement.getAttribute("data-testid") || ""
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      if (!controlHints) {
+        return false;
+      }
+
+      return nativeExpansionControlHintPattern.test(controlHints);
+    });
+  }
+
+  // Function: should auto-replace email body for detected sender.
+  function shouldAutoReplaceEmailBodyWithMirrorContent(snapshot) {
+    if (extensionSettings.autoApplyMirrorForConfiguredSenders !== true || !isConfiguredSenderDetected(snapshot)) {
+      return false;
+    }
+
+    return !hasNativeEmailExpansionControl(getActiveEmailRoot());
+  }
+
+  // Function: should replace email body with mirror content.
+  function shouldReplaceEmailBodyWithMirrorContent(snapshot) {
+    return extensionSettings.replaceEmailBodyWithMirrorContent === true || shouldAutoReplaceEmailBodyWithMirrorContent(snapshot);
+  }
+
+  // Function: apply stored pipeline setting.
+  function applyStoredPipelineSetting(nextValue) {
+    extensionSettings.enableUrlNormalizationRepair = nextValue === true;
+  }
+
+  // Function: apply stored replace-email-body setting.
+  function applyStoredReplaceEmailBodySetting(nextValue) {
+    extensionSettings.replaceEmailBodyWithMirrorContent = nextValue === true;
+  }
+
+  // Function: apply stored auto-replace sender setting.
+  function applyStoredAutoApplyMirrorForConfiguredSendersSetting(nextValue) {
+    if (nextValue === true || nextValue === false) {
+      extensionSettings.autoApplyMirrorForConfiguredSenders = nextValue === true;
+    }
+  }
+
+  // Function: apply stored sender email list.
+  function applyStoredAutoApplyMirrorSenderEmailList(nextValue, options) {
+    const optionBag = options || {};
+    const sanitizedEmailList = sanitizeSenderEmailList(nextValue);
+
+    if (Array.isArray(nextValue) || sanitizedEmailList.length) {
+      extensionSettings.autoApplyMirrorSenderEmailList = sanitizedEmailList;
+    } else if (optionBag.useDefaultList === true) {
+      extensionSettings.autoApplyMirrorSenderEmailList = defaultAutoApplyMirrorSenderEmails.slice();
+    }
+
+    refreshAutoApplyConfiguredSenderDetectionState();
+  }
+
+  // Function: resolve stored configured-sender auto-apply value.
+  function resolveStoredAutoApplyConfiguredSendersValue(storedSettings) {
+    const safeStoredSettings = storedSettings && typeof storedSettings === "object" ? storedSettings : {};
+
+    if (Object.prototype.hasOwnProperty.call(safeStoredSettings, autoApplyMirrorForConfiguredSendersStorageKey)) {
+      return safeStoredSettings[autoApplyMirrorForConfiguredSendersStorageKey];
+    }
+
+    if (Object.prototype.hasOwnProperty.call(safeStoredSettings, legacyAutoApplyMirrorForNamedSenderStorageKey)) {
+      return safeStoredSettings[legacyAutoApplyMirrorForNamedSenderStorageKey];
+    }
+
+    return undefined;
+  }
+
+  // Function: load pipeline settings.
+  async function loadPipelineSettings() {
+    if (debugApi) {
+      debugApi.functionIn("content.loadPipelineSettings");
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (!extensionApi.storage || !extensionApi.storage.local || typeof extensionApi.storage.local.get !== "function") {
+      setExtensionStorageSnapshot("storage-unavailable", null, "storage.local.get is unavailable in this page context.");
+      if (debugApi) {
+        debugApi.storage("content storage unavailable");
+        debugApi.functionOut("content.loadPipelineSettings", { source: "storage-unavailable" });
+      }
+      return getPipelineSettings();
+    }
+
+    // Branch: try the primary operation before handling failures.
+    try {
+      const storedSettings = await extensionApi.storage.local.get([
+        pipelineSettingStorageKey,
+        replaceEmailBodyWithMirrorContentStorageKey,
+        autoApplyMirrorForConfiguredSendersStorageKey,
+        autoApplyMirrorSenderEmailListStorageKey,
+        legacyAutoApplyMirrorForNamedSenderStorageKey
+      ]);
+      applyStoredPipelineSetting(storedSettings[pipelineSettingStorageKey]);
+      applyStoredReplaceEmailBodySetting(storedSettings[replaceEmailBodyWithMirrorContentStorageKey]);
+      applyStoredAutoApplyMirrorForConfiguredSendersSetting(resolveStoredAutoApplyConfiguredSendersValue(storedSettings));
+      applyStoredAutoApplyMirrorSenderEmailList(storedSettings[autoApplyMirrorSenderEmailListStorageKey], { useDefaultList: true });
+      setExtensionStorageSnapshot("storage.local", storedSettings, "");
+      if (debugApi) {
+        debugApi.storage("content settings loaded", {
+          enableUrlNormalizationRepair: extensionSettings.enableUrlNormalizationRepair,
+          replaceEmailBodyWithMirrorContent: extensionSettings.replaceEmailBodyWithMirrorContent,
+          autoApplyMirrorForConfiguredSenders: extensionSettings.autoApplyMirrorForConfiguredSenders,
+          autoApplyMirrorSenderEmailCount: extensionSettings.autoApplyMirrorSenderEmailList.length
+        });
+        debugApi.functionOut("content.loadPipelineSettings", { source: "storage.local" });
+      }
+    // Branch: handle errors from the guarded operation.
+    } catch (error) {
+      setExtensionStorageSnapshot(
+        "storage-error",
+        null,
+        error && error.message ? error.message : "unknown error"
+      );
+      if (debugApi) {
+        debugApi.error("content settings load failed", { message: error && error.message ? error.message : "unknown error" });
+        debugApi.functionOut("content.loadPipelineSettings", { source: "storage-error" });
+      }
+      return getPipelineSettings();
+    }
+
+    return getPipelineSettings();
+  }
+
+  // Function: open settings page.
+  async function openSettingsPage() {
+    // Branch: follow this path only when the current condition passes.
+    if (!extensionApi.runtime) {
+      return;
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (typeof extensionApi.runtime.sendMessage === "function") {
+      // Branch: try the primary operation before handling failures.
+      try {
+        const response = await extensionApi.runtime.sendMessage({
+          type: "merged-link-lab:open-settings-page"
+        });
+
+        // Branch: follow this path only when the current condition passes.
+        if (response && response.ok) {
+          return;
+        }
+      // Branch: handle errors from the guarded operation.
+      } catch {
+        // Fall through to direct open below.
+      }
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (typeof extensionApi.runtime.openOptionsPage === "function") {
+      await extensionApi.runtime.openOptionsPage();
+      return;
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (typeof extensionApi.runtime.getURL === "function") {
+      window.open(extensionApi.runtime.getURL("settings.html"), "_blank", "noopener");
+    }
+  }
+
+  // Function: is page currently visible.
+  function isPageCurrentlyVisible() {
+    return document.visibilityState !== "hidden";
+  }
+
+  // Function: is outlook host.
+  function isOutlookHost() {
+    return outlookHostPattern.test(window.location.hostname || "");
+  }
+
+  // Function: is gmail host.
+  function isGmailHost() {
+    return gmailHostPattern.test(window.location.hostname || "");
+  }
+
+  // Function: is yahoo host.
+  function isYahooHost() {
+    return yahooHostPattern.test(window.location.hostname || "");
+  }
+
+  // Function: is proton host.
+  function isProtonHost() {
+    return protonHostPattern.test(window.location.hostname || "");
+  }
+
+  // Function: is hey host.
+  function isHeyHost() {
+    return heyHostPattern.test(window.location.hostname || "");
+  }
+
+  // Function: is hey topic path.
+  function isHeyTopicPath() {
+    return heyTopicPathPattern.test(window.location.pathname || "");
+  }
+
+  // Function: is fastmail host.
+  function isFastmailHost() {
+    return fastmailHostPattern.test(window.location.hostname || "");
+  }
+
+  // Function: get inbox provider key.
+  function getInboxProviderKey() {
+    if (isGmailHost()) {
+      return "gmail";
+    }
+
+    if (isOutlookHost()) {
+      return "outlook";
+    }
+
+    if (isYahooHost()) {
+      return "yahoo";
+    }
+
+    if (isProtonHost()) {
+      return "proton";
+    }
+
+    if (isHeyHost() && isHeyTopicPath()) {
+      return "hey";
+    }
+
+    if (isFastmailHost()) {
+      return "fastmail";
+    }
+
+    return "";
+  }
+
+  // Function: get primary inbox body selectors for the current provider.
+  function getPrimaryInboxBodySelectors() {
+    const providerKey = getInboxProviderKey();
+
+    if (!providerKey || !primaryInboxBodySelectorsByProvider[providerKey]) {
+      return [];
+    }
+
+    return primaryInboxBodySelectorsByProvider[providerKey].slice();
+  }
+
+  // Function: get detection search roots, including open shadow roots.
+  function getDetectionSearchRoots(root) {
+    const initialRoot = root || document;
+    const discoveredRoots = [];
+    const visitedRoots = new Set();
+    const pendingRoots = [initialRoot];
+
+    while (pendingRoots.length) {
+      const currentRoot = pendingRoots.shift();
+
+      if (!currentRoot || visitedRoots.has(currentRoot)) {
+        continue;
+      }
+
+      visitedRoots.add(currentRoot);
+      discoveredRoots.push(currentRoot);
+
+      if (typeof currentRoot.querySelectorAll !== "function") {
+        continue;
+      }
+
+      currentRoot.querySelectorAll("*").forEach(function inspectPotentialShadowHost(element) {
+        if (element && element.shadowRoot && !visitedRoots.has(element.shadowRoot)) {
+          pendingRoots.push(element.shadowRoot);
+        }
+      });
+    }
+
+    return discoveredRoots;
+  }
+
+  // Function: query selector across document and open shadow roots.
+  function querySelectorAllAcrossDetectionRoots(selector, root) {
+    const matchedElements = [];
+    const seenElements = new Set();
+
+    getDetectionSearchRoots(root).forEach(function inspectSearchRoot(searchRoot) {
+      let rootMatches = [];
+
+      try {
+        rootMatches = Array.from(searchRoot.querySelectorAll(selector));
+      } catch {
+        rootMatches = [];
+      }
+
+      rootMatches.forEach(function registerMatchedElement(element) {
+        if (!element || seenElements.has(element)) {
+          return;
+        }
+
+        seenElements.add(element);
+        matchedElements.push(element);
+      });
+    });
+
+    return matchedElements;
+  }
+
+  // Function: get candidate missing grace window.
+  function getCandidateMissingGraceWindow() {
+    // Branch: follow this path only when the current condition passes.
+    if (isOutlookHost() || querySelectorAllAcrossDetectionRoots(outlookMailBodySelector).length > 0) {
+      return outlookCandidateMissingGraceMs;
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (isProtonHost()) {
+      return protonCandidateMissingGraceMs;
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (inboxHostPattern.test(window.location.hostname || "")) {
+      return inboxCandidateMissingGraceMs;
+    }
+
+    return 0;
+  }
+
+  // Function: get outlook mail body candidates.
+  function getOutlookMailBodyCandidates() {
+    // Loop: keep only items that match the current check.
+    return querySelectorAllAcrossDetectionRoots(outlookMailBodySelector).filter(function keepOutlookMailBodyCandidate(element) {
+      return !!(element && element.isConnected && !element.closest("#merged-link-lab-page-pane"));
+    });
+  }
+
+  // Function: get element hint text.
+  function getElementHintText(element) {
+    // Branch: follow this path only when the current condition passes.
+    if (!element) {
+      return "";
+    }
+
+    const hintAttributes = [
+      "aria-label",
+      "aria-roledescription",
+      "data-testid",
+      "data-test-id",
+      "name",
+      "placeholder",
+      "title",
+      "role",
+      "class",
+      "id"
+    ];
+
+    return hintAttributes
+      // Loop: transform each item in the current collection.
+      .map(function readHintAttribute(attributeName) {
+        return element.getAttribute(attributeName) || "";
+      })
+      .join(" ")
+      .toLowerCase();
+  }
+
+  // Function: get context hint text.
+  function getContextHintText(element, maximumDepth) {
+    const collectedHintParts = [];
+    let currentElement = element;
+    let currentDepth = 0;
+
+    // Loop: repeat while the guard condition stays true.
+    while (currentElement && currentDepth < (maximumDepth || 5)) {
+      collectedHintParts.push(getElementHintText(currentElement));
+      currentElement = currentElement.parentElement;
+      currentDepth += 1;
+    }
+
+    return collectedHintParts.join(" ");
+  }
+
+  // Function: is element visible and large enough.
+  function isElementVisibleAndLargeEnough(element) {
+    // Branch: follow this path only when the current condition passes.
+    if (!element || !element.isConnected) {
+      return false;
+    }
+
+    const elementBounds = element.getBoundingClientRect();
+    return elementBounds.width > 120 && elementBounds.height > 60;
+  }
+
+  // Function: get current location href.
+  function getCurrentLocationHref() {
+    return String(window.location.href || "");
+  }
+
+  // Function: reset latest email detection state.
+  function resetLatestEmailDetectionState() {
+    latestDetectedEmailRoot = null;
+    latestDetectedEmailMode = "";
+    latestInboxCandidateSeenAt = 0;
+    inboxCandidateMissingSince = 0;
+  }
+
+  // Function: get iframe email root content element.
+  function getIframeEmailRootContentElement(iframeElement) {
+    if (!iframeElement || String(iframeElement.tagName || "").toUpperCase() !== "IFRAME") {
+      return null;
+    }
+
+    try {
+      const iframeDocument = iframeElement.contentDocument ||
+        (iframeElement.contentWindow ? iframeElement.contentWindow.document : null);
+
+      if (!iframeDocument) {
+        return null;
+      }
+
+      return iframeDocument.body || iframeDocument.documentElement || null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Function: get email root content element.
+  function getEmailRootContentElement(element) {
+    if (!element) {
+      return null;
+    }
+
+    return getIframeEmailRootContentElement(element) || element;
+  }
+
+  // Function: get email root html markup.
+  function getEmailRootHtmlMarkup(element) {
+    const contentElement = getEmailRootContentElement(element);
+    return String(contentElement && contentElement.innerHTML ? contentElement.innerHTML : "");
+  }
+
+  // Function: measure element text.
+  function measureElementText(element) {
+    const contentElement = getEmailRootContentElement(element);
+    const normalizedText = mergedLinkLabPipeline.cleanInputText(
+      contentElement && (contentElement.innerText || contentElement.textContent)
+        ? (contentElement.innerText || contentElement.textContent)
+        : ""
+    );
+    const lineCount = normalizedText ? normalizedText.split("\n").filter(Boolean).length : 0;
+    const wordCount = normalizedText ? normalizedText.split(/\s+/).filter(Boolean).length : 0;
+
+    return {
+      text: normalizedText,
+      lines: lineCount,
+      words: wordCount
+    };
+  }
+
+  // Function: has compose context.
+  function hasComposeContext(element) {
+    // Branch: follow this path only when the current condition passes.
+    if (!element) {
+      return false;
+    }
+
+    const contentElement = getEmailRootContentElement(element);
+
+    // Branch: follow this path only when the current condition passes.
+    if (element.isContentEditable) {
+      return true;
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (
+      (typeof element.querySelector === "function" && element.querySelector("[contenteditable='true'], textarea, [role='textbox']")) ||
+      (
+        contentElement &&
+        contentElement !== element &&
+        typeof contentElement.querySelector === "function" &&
+        contentElement.querySelector("[contenteditable='true'], textarea, [role='textbox']")
+      )
+    ) {
+      return true;
+    }
+
+    let currentElement = element;
+    let currentDepth = 0;
+
+    // Loop: repeat while the guard condition stays true.
+    while (currentElement && currentDepth < 4) {
+      // Branch: follow this path only when the current condition passes.
+      if (currentElement.isContentEditable) {
+        return true;
+      }
+
+      currentElement = currentElement.parentElement;
+      currentDepth += 1;
+    }
+
+    return composeContextHintPattern.test(getContextHintText(element, 5));
+  }
+
+  // Function: has message structure.
+  function hasMessageStructure(element) {
+    const contentElement = getEmailRootContentElement(element);
+
+    return !!(
+      contentElement &&
+      typeof contentElement.querySelector === "function" &&
+      contentElement.querySelector("a, p, br, blockquote, table, li, img")
+    );
+  }
+
+  // Function: element matches any selector.
+  function elementMatchesAnySelector(element, selectors) {
+    // Branch: follow this path only when the current condition passes.
+    if (!element || !selectors || !selectors.length) {
+      return false;
+    }
+
+    // Loop: stop once any item matches the current check.
+    return selectors.some(function matchesSelector(selector) {
+      // Branch: try the primary operation before handling failures.
+      try {
+        return element.matches(selector);
+      // Branch: handle errors from the guarded operation.
+      } catch {
+        return false;
+      }
+    });
+  }
+
+  // Function: has explicit inbox body marker.
+  function hasExplicitInboxBodyMarker(element, options) {
+    // Branch: follow this path only when the current condition passes.
+    if (!element) {
+      return false;
+    }
+
+    const optionBag = options && typeof options === "object" ? options : {};
+    const shouldMatchSelfOnly = optionBag.matchSelfOnly === true;
+
+    // Loop: stop once any item matches the current check.
+    return explicitInboxBodySelectors.some(function hasMatchingMarker(selector) {
+      // Branch: try the primary operation before handling failures.
+      try {
+        if (element.matches(selector)) {
+          return true;
+        }
+
+        return shouldMatchSelfOnly ? false : !!element.querySelector(selector);
+      // Branch: handle errors from the guarded operation.
+      } catch {
+        return false;
+      }
+    });
+  }
+
+  // Function: is generic inbox container.
+  function isGenericInboxContainer(element) {
+    return elementMatchesAnySelector(element, genericInboxContainerSelectors);
+  }
+
+  // Function: count email header lines.
+  function countEmailHeaderLines(textValue) {
+    const headerScanText = String(textValue || "").split("\n").slice(0, 48).join("\n");
+    const matches = headerScanText.match(/(?:^|\n)\s*(from|to|cc|bcc|subject|date|sent|received|reply-to|attachments?)\s*:/gim);
+    return matches ? matches.length : 0;
+  }
+
+  // Function: measure standalone email signals.
+  function measureStandaloneEmailSignals(element, textMetrics) {
+    const safeTextMetrics = textMetrics || measureElementText(element);
+    const contextualHintText = [
+      getContextHintText(element, 7),
+      document.title || "",
+      window.location.pathname || "",
+      window.location.search || "",
+      document.contentType || ""
+    ].join(" ").toLowerCase();
+    const headerLineCount = countEmailHeaderLines(safeTextMetrics.text);
+    const hasStandaloneHint = standaloneEmailHintPattern.test(contextualHintText);
+    const hasReplyMarker =
+      /(?:^|\n)\s*(on .+ wrote:|-----original message-----|forwarded message|begin forwarded message)/im.test(safeTextMetrics.text);
+    const hasMarketingFooter =
+      /\b(unsubscribe|manage preferences|email preferences|view in browser)\b/i.test(safeTextMetrics.text);
+    const hasMimeHint =
+      /message\/rfc822/i.test(document.contentType || "") ||
+      /\.eml(?:$|[?#])/i.test(window.location.pathname || "");
+    const structuredElementCount = element.querySelectorAll(
+      "blockquote, table, img, a[href], time, address, [itemprop='sender'], [itemprop='recipient'], [class*='subject'], [class*='sender'], [class*='recipient'], [class*='message'], [id*='subject'], [id*='message']"
+    ).length;
+    const score =
+      (headerLineCount * 3) +
+      (hasStandaloneHint ? 2 : 0) +
+      (hasReplyMarker ? 2 : 0) +
+      (hasMarketingFooter ? 2 : 0) +
+      (hasMimeHint ? 4 : 0) +
+      Math.min(structuredElementCount, 4);
+
+    return {
+      headerLineCount: headerLineCount,
+      hasStandaloneHint: hasStandaloneHint,
+      hasReplyMarker: hasReplyMarker,
+      hasMarketingFooter: hasMarketingFooter,
+      hasMimeHint: hasMimeHint,
+      structuredElementCount: structuredElementCount,
+      score: score
+    };
+  }
+
+  // Function: is likely inbox email body.
+  function isLikelyInboxEmailBody(element) {
+    // Branch: follow this path only when the current condition passes.
+    if (!element || !inboxHostPattern.test(window.location.hostname || "")) {
+      return false;
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (!isElementVisibleAndLargeEnough(element)) {
+      return false;
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (hasComposeContext(element)) {
+      return false;
+    }
+
+    const roleValue = String(element.getAttribute("role") || "").toLowerCase();
+    // Branch: follow this path only when the current condition passes.
+    if (/row|gridcell|option|menuitem|tab/.test(roleValue)) {
+      return false;
+    }
+
+    const contextHints = getContextHintText(element, 5);
+    const textMetrics = measureElementText(element);
+    const elementBounds = element.getBoundingClientRect();
+    const isGenericContainer = isGenericInboxContainer(element);
+    const hasKnownBodyMarker = hasExplicitInboxBodyMarker(element, {
+      matchSelfOnly: isGenericContainer
+    });
+
+    // Branch: follow this path only when the current condition passes.
+    if (textMetrics.text.length < 80 || textMetrics.words < 15 || textMetrics.lines < 2) {
+      return false;
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (elementBounds.width < 220 || elementBounds.height < 80) {
+      return false;
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (isGenericContainer && !hasKnownBodyMarker) {
+      return false;
+    }
+
+    return (
+      hasKnownBodyMarker ||
+      (
+        readViewHintPattern.test(contextHints) &&
+        (
+          hasMessageStructure(element) ||
+          /https?:\/\//i.test(textMetrics.text)
+        )
+      )
+    );
+  }
+
+  // Function: is likely standalone email body.
+  function isLikelyStandaloneEmailBody(element, signalData) {
+    // Branch: follow this path only when the current condition passes.
+    if (!element || !element.isConnected) {
+      return false;
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (element.id === "merged-link-lab-page-pane" || element.closest("#merged-link-lab-page-pane")) {
+      return false;
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (!isElementVisibleAndLargeEnough(element)) {
+      return false;
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (hasComposeContext(element)) {
+      return false;
+    }
+
+    const roleValue = String(element.getAttribute("role") || "").toLowerCase();
+    // Branch: follow this path only when the current condition passes.
+    if (/row|gridcell|option|menuitem|tab|navigation|banner|complementary/.test(roleValue)) {
+      return false;
+    }
+
+    const textMetrics = measureElementText(element);
+    const elementBounds = element.getBoundingClientRect();
+    const standaloneSignals = signalData || measureStandaloneEmailSignals(element, textMetrics);
+    const isInboxHost = inboxHostPattern.test(window.location.hostname || "");
+    const isGenericContainer = isGenericInboxContainer(element);
+    const hasKnownBodyMarker = hasExplicitInboxBodyMarker(element, {
+      matchSelfOnly: isGenericContainer
+    });
+    const hasStrongStandaloneSignal =
+      standaloneSignals.headerLineCount >= 1 ||
+      standaloneSignals.hasReplyMarker ||
+      standaloneSignals.hasMimeHint ||
+      (standaloneSignals.hasStandaloneHint && standaloneSignals.hasMarketingFooter);
+
+    // Branch: follow this path only when the current condition passes.
+    if (textMetrics.text.length < 120 || textMetrics.words < 25 || textMetrics.lines < 3) {
+      return false;
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (elementBounds.width < 240 || elementBounds.height < 100) {
+      return false;
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (isInboxHost && isGenericContainer && !hasKnownBodyMarker) {
+      return false;
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (!hasStrongStandaloneSignal) {
+      return false;
+    }
+
+    return standaloneSignals.score >= 6 && (
+      hasMessageStructure(element) ||
+      /https?:\/\//i.test(textMetrics.text) ||
+      standaloneSignals.headerLineCount >= 2 ||
+      standaloneSignals.hasReplyMarker
+    );
+  }
+
+  // Function: register email root candidate.
+  function registerEmailRootCandidate(candidateMap, element, bonus, detectionMode, signalScore) {
+    // Branch: follow this path only when the current condition passes.
+    if (!element || !element.isConnected) {
+      return;
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (element.id === "merged-link-lab-page-pane" || element.closest("#merged-link-lab-page-pane")) {
+      return;
+    }
+
+    const existingCandidate = candidateMap.get(element);
+    // Branch: follow this path only when the current condition passes.
+    if (existingCandidate) {
+      existingCandidate.bonus = Math.max(existingCandidate.bonus, bonus || 0);
+      existingCandidate.signalScore = Math.max(existingCandidate.signalScore, signalScore || 0);
+      // Branch: follow this path only when the current condition passes.
+      if (detectionMode === "inbox-read") {
+        existingCandidate.detectionMode = detectionMode;
+      }
+      return;
+    }
+
+    candidateMap.set(element, {
+      root: element,
+      bonus: bonus || 0,
+      order: candidateMap.size,
+      detectionMode: detectionMode || "inbox-read",
+      signalScore: signalScore || 0
+    });
+  }
+
+  // Function: score inbox root candidate.
+  function scoreInboxRootCandidate(candidate) {
+    const textMetrics = measureElementText(candidate.root);
+    const elementBounds = candidate.root.getBoundingClientRect();
+    const areaScore = Math.min((elementBounds.width * elementBounds.height) / 1500, 280);
+    const lineScore = Math.min(textMetrics.lines * 4, 120);
+    const textScore = Math.min(textMetrics.text.length / 12, 400);
+    const viewportCenterY = window.innerHeight * 0.42;
+    const distanceScore = Math.max(0, 180 - Math.abs(elementBounds.top - viewportCenterY));
+    const signalScore = Math.min((candidate.signalScore || 0) * 20, 180);
+    const detectionModeScore = candidate.detectionMode === "full-page-read" ? 36 : 0;
+
+    return (candidate.bonus * 80) + areaScore + lineScore + textScore + distanceScore + signalScore + detectionModeScore + candidate.order;
+  }
+
+  // Function: collect proton nested inbox body candidates from a generic container.
+  function collectProtonNestedInboxBodyCandidates(containerElement, selectorBonus) {
+    if (!isProtonHost() || !containerElement || typeof containerElement.querySelectorAll !== "function") {
+      return [];
+    }
+
+    const matchedCandidates = new Map();
+
+    explicitInboxBodySelectors.forEach(function inspectExplicitSelector(selector, selectorIndex) {
+      const nestedSelectorBonus = Math.max(
+        1,
+        (selectorBonus || 1) + (explicitInboxBodySelectors.length - selectorIndex)
+      );
+
+      containerElement.querySelectorAll(selector).forEach(function inspectNestedElement(element) {
+        if (
+          !element ||
+          element === containerElement ||
+          !containerElement.contains(element) ||
+          element.closest("#merged-link-lab-page-pane")
+        ) {
+          return;
+        }
+
+        if (!isLikelyInboxEmailBody(element)) {
+          return;
+        }
+
+        registerEmailRootCandidate(matchedCandidates, element, nestedSelectorBonus, "inbox-read", 2);
+      });
+    });
+
+    return Array.from(matchedCandidates.values())
+      .sort(function sortProtonNestedCandidates(leftCandidate, rightCandidate) {
+        return scoreInboxRootCandidate(rightCandidate) - scoreInboxRootCandidate(leftCandidate);
+      });
+  }
+
+  // Function: get inbox root candidates.
+  function getInboxRootCandidates() {
+    const matchedCandidates = new Map();
+    const isInboxHost = inboxHostPattern.test(window.location.hostname || "");
+    const primaryInboxBodySelectors = getPrimaryInboxBodySelectors();
+    const outlookMailBodyCandidates = getOutlookMailBodyCandidates();
+
+    // Loop: iterate through each item in the current collection.
+    outlookMailBodyCandidates.forEach(function registerOutlookBodyCandidate(element, candidateIndex) {
+      registerEmailRootCandidate(
+        matchedCandidates,
+        element,
+        inboxBodySelectors.length + 80 - Math.min(candidateIndex, 50),
+        "outlook-body-read",
+        10
+      );
+    });
+
+    // Loop: iterate through each item in the current collection.
+    primaryInboxBodySelectors.forEach(function inspectPrimarySelector(selector, selectorIndex) {
+      const selectorBonus = inboxBodySelectors.length + primaryInboxBodySelectors.length + 40 - selectorIndex;
+
+      querySelectorAllAcrossDetectionRoots(selector).forEach(function inspectPrimaryCandidateElement(element) {
+        if (!isLikelyInboxEmailBody(element)) {
+          return;
+        }
+
+        registerEmailRootCandidate(matchedCandidates, element, selectorBonus, "inbox-read", 4);
+      });
+    });
+
+    // Loop: iterate through each item in the current collection.
+    inboxBodySelectors.forEach(function inspectSelector(selector, selectorIndex) {
+      const selectorBonus = inboxBodySelectors.length - selectorIndex;
+      const isGenericSelector = genericInboxContainerSelectors.indexOf(selector) !== -1;
+
+      // Loop: iterate through each item in the current collection.
+      querySelectorAllAcrossDetectionRoots(selector).forEach(function inspectCandidateElement(element) {
+        if (isProtonHost() && isGenericSelector) {
+          collectProtonNestedInboxBodyCandidates(element, selectorBonus).forEach(function registerNestedCandidate(candidate) {
+            registerEmailRootCandidate(
+              matchedCandidates,
+              candidate.root,
+              candidate.bonus,
+              candidate.detectionMode,
+              candidate.signalScore
+            );
+          });
+          return;
+        }
+
+        // Branch: follow this path only when the current condition passes.
+        if (!isLikelyInboxEmailBody(element)) {
+          return;
+        }
+
+        registerEmailRootCandidate(matchedCandidates, element, selectorBonus, "inbox-read", 0);
+      });
+    });
+
+    // Branch: follow this path only when the current condition passes.
+    if (!isInboxHost) {
+      // Loop: iterate through each item in the current collection.
+      standaloneEmailBodySelectors.forEach(function inspectStandaloneSelector(selector, selectorIndex) {
+        const selectorBonus = Math.max(1, standaloneEmailBodySelectors.length - selectorIndex);
+
+        // Loop: iterate through each item in the current collection.
+        querySelectorAllAcrossDetectionRoots(selector).forEach(function inspectStandaloneCandidate(element) {
+          const standaloneSignals = measureStandaloneEmailSignals(element);
+          // Branch: follow this path only when the current condition passes.
+          if (!isLikelyStandaloneEmailBody(element, standaloneSignals)) {
+            return;
+          }
+
+          registerEmailRootCandidate(
+            matchedCandidates,
+            element,
+            selectorBonus,
+            "full-page-read",
+            standaloneSignals.score
+          );
+        });
+      });
+
+      // Branch: follow this path only when the current condition passes.
+      if (document.body) {
+        // Loop: iterate through each item in the current collection.
+        Array.from(document.body.children || []).slice(0, 24).forEach(function inspectBodyChild(element, childIndex) {
+          const standaloneSignals = measureStandaloneEmailSignals(element);
+          // Branch: follow this path only when the current condition passes.
+          if (!isLikelyStandaloneEmailBody(element, standaloneSignals)) {
+            return;
+          }
+
+          registerEmailRootCandidate(
+            matchedCandidates,
+            element,
+            Math.max(1, 8 - childIndex),
+            "full-page-read",
+            standaloneSignals.score
+          );
+        });
+      }
+    }
+
+    return Array.from(matchedCandidates.values())
+      // Function: sort candidates by score.
+      .sort(function sortCandidatesByScore(leftCandidate, rightCandidate) {
+        return scoreInboxRootCandidate(rightCandidate) - scoreInboxRootCandidate(leftCandidate);
+      });
+  }
+
+  // Function: choose primary email candidate.
+  function choosePrimaryEmailCandidate(candidates) {
+    return candidates.length ? candidates[0] : null;
+  }
+
+  // Function: choose primary inbox root.
+  function choosePrimaryInboxRoot(candidates) {
+    const primaryCandidate = choosePrimaryEmailCandidate(candidates);
+    return primaryCandidate ? primaryCandidate.root : null;
+  }
+
+  // Function: summarize email root.
+  function summarizeEmailRoot(root, detectionMode) {
+    if (debugApi) {
+      debugApi.functionIn("content.summarizeEmailRoot", {
+        detectionMode: detectionMode || "",
+        rootTagName: root && root.tagName ? root.tagName : ""
+      });
+    }
+
+    const contentElement = getEmailRootContentElement(root);
+    const sourceHtml = getEmailRootHtmlMarkup(root);
+    const rawText = mergedLinkLabPipeline.cleanInputText(
+      contentElement && (contentElement.innerText || contentElement.textContent)
+        ? (contentElement.innerText || contentElement.textContent)
+        : ""
+    );
+    const pipelineSettings = getPipelineSettings();
+    const resolvedDetectionMode = detectionMode || (inboxHostPattern.test(window.location.hostname || "") ? "inbox-read" : "full-page-read");
+    const defaultSectionLabel = resolvedDetectionMode === "full-page-read" ? "Opened full-page email" : "Opened email body";
+    const pipelineResult = mergedLinkLabPipeline.analyzeInput({
+      rawText: rawText,
+      sourceHtml: sourceHtml,
+      options: pipelineSettings
+    });
+    if (debugApi) {
+      debugApi.variable("content email snapshot summary assigned", {
+        rawTextLength: rawText.length,
+        sourceHtmlLength: sourceHtml.length,
+        finalUrlCount: pipelineResult && pipelineResult.finalUrls ? pipelineResult.finalUrls.length : 0,
+        errorCount: pipelineResult && pipelineResult.errors ? pipelineResult.errors.length : 0
+      });
+      debugApi.functionOut("content.summarizeEmailRoot", {
+        detectionMode: resolvedDetectionMode,
+        isTopicDigest: isTopicDigestSnapshot(rawText, sourceHtml, pipelineResult)
+      });
+    }
+
+    return {
+      detectedAt: Date.now(),
+      detectionMode: resolvedDetectionMode,
+      sectionLabel: root.getAttribute("aria-label") || root.getAttribute("title") || defaultSectionLabel,
+      sourceHtml: sourceHtml,
+      rawText: rawText,
+      pipelineSettings: pipelineSettings,
+      pipeline: pipelineResult,
+      isTopicDigest: isTopicDigestSnapshot(rawText, sourceHtml, pipelineResult)
+    };
+  }
+
+  // Function: is topic digest snapshot.
+  function isTopicDigestSnapshot(rawText, sourceHtml, pipelineResult) {
+    const headerSnippet = String(rawText || "").split("\n").slice(0, 18).join("\n");
+    const sourceSummary = mergedLinkLabPipeline.cleanInputText(String(sourceHtml || "").replace(/<[^>]+>/g, " "));
+    const pageTitle = String(document.title || "");
+    const digestEntryCount =
+      pipelineResult && pipelineResult.digestEntries && pipelineResult.digestEntries.length
+        ? pipelineResult.digestEntries.length
+        : 0;
+
+    if (topicDigestLabelPattern.test(pageTitle) || topicDigestLabelPattern.test(headerSnippet)) {
+      return true;
+    }
+
+    return topicDigestLabelPattern.test(sourceSummary) && (topicDigestActionPattern.test(sourceSummary) || digestEntryCount >= 3);
+  }
+
+  // Function: create snapshot signature.
+  function createSnapshotSignature(snapshot) {
+    // Branch: follow this path only when the current condition passes.
+    if (!snapshot) {
+      return "";
+    }
+
+    return [
+      snapshot.detectionMode || "",
+      snapshot.sectionLabel || "",
+      snapshot.sourceHtml || "",
+      snapshot.isTopicDigest ? "topic-digest" : "standard"
+    ].join("::");
+  }
+
+  // Function: create snapshot pane key.
+  function createSnapshotPaneKey(snapshot) {
+    // Branch: follow this path only when the current condition passes.
+    if (!snapshot) {
+      return "";
+    }
+
+    return [
+      snapshot.detectionMode || "",
+      snapshot.sectionLabel || "",
+      String(snapshot.rawText || "").slice(0, 240)
+    ].join("::");
+  }
+
+  // Function: format detection time.
+  function formatDetectionTime(timestamp) {
+    // Branch: follow this path only when the current condition passes.
+    if (!timestamp) {
+      return "Not detected";
+    }
+
+    // Branch: try the primary operation before handling failures.
+    try {
+      return new Date(timestamp).toLocaleTimeString([], {
+        hour: "numeric",
+        minute: "2-digit",
+        second: "2-digit"
+      });
+    // Branch: handle errors from the guarded operation.
+    } catch {
+      return "Detected";
+    }
+  }
+
+  // Function: render empty state.
+  function renderEmptyState(message) {
+    return '<div class="merged-link-lab-page-pane__empty">' + mergedLinkLabPipeline.escapeHtml(message) + "</div>";
+  }
+
+  // Function: format metric count.
+  function formatMetricCount(count, singularLabel, pluralLabel) {
+    const safeCount = Number.isFinite(count) ? count : 0;
+    return safeCount + " " + (safeCount === 1 ? singularLabel : pluralLabel);
+  }
+
+  // Function: format rail badge count.
+  function formatRailBadgeCount(count) {
+    const safeCount = Math.max(0, Math.round(Number(count) || 0));
+    return safeCount > 99 ? "99+" : String(safeCount);
+  }
+
+  // Function: set pane expanded.
+  function setPaneExpanded(isExpanded) {
+    workflowRailElements.isExpanded = !!isExpanded && !!latestSnapshot;
+
+    // Branch: follow this path only when the current condition passes.
+    if (!workflowRailElements.root) {
+      return;
+    }
+
+    workflowRailElements.root.classList.toggle("has-snapshot", !!latestSnapshot);
+    workflowRailElements.root.classList.toggle("is-expanded", workflowRailElements.isExpanded);
+    workflowRailElements.root.setAttribute("aria-hidden", latestSnapshot ? "false" : "true");
+
+    // Branch: follow this path only when the current condition passes.
+    if (workflowRailElements.railToggleButton) {
+      workflowRailElements.railToggleButton.setAttribute("aria-expanded", String(workflowRailElements.isExpanded));
+      workflowRailElements.railToggleButton.setAttribute(
+        "aria-label",
+        workflowRailElements.isExpanded
+          ? "Collapse URL Forensics Workbench workflow"
+          : "Expand URL Forensics Workbench workflow"
+      );
+    }
+  }
+
+  // Function: show pane.
+  function showPane() {
+    const paneRoot = ensurePane();
+    // Branch: follow this path only when the current condition passes.
+    if (!paneRoot || !latestSnapshot) {
+      return;
+    }
+
+    setPaneExpanded(workflowRailElements.isExpanded);
+  }
+
+  // Function: hide pane.
+  function hidePane() {
+    workflowRailElements.isExpanded = false;
+
+    // Branch: follow this path only when the current condition passes.
+    if (!workflowRailElements.root) {
+      return;
+    }
+
+    workflowRailElements.root.classList.remove("has-snapshot", "is-expanded");
+    workflowRailElements.root.setAttribute("aria-hidden", "true");
+
+    // Branch: follow this path only when the current condition passes.
+    if (workflowRailElements.railToggleButton) {
+      workflowRailElements.railToggleButton.setAttribute("aria-expanded", "false");
+    }
+  }
+
+  // Function: copy plain text.
+  async function copyPlainText(value) {
+    // Branch: follow this path only when the current condition passes.
+    if (!navigator.clipboard || typeof navigator.clipboard.writeText !== "function") {
+      return false;
+    }
+
+    // Branch: try the primary operation before handling failures.
+    try {
+      await navigator.clipboard.writeText(String(value || ""));
+      return true;
+    // Branch: handle errors from the guarded operation.
+    } catch {
+      return false;
+    }
+  }
+
+  // Function: copy pane text.
+  async function copyPaneText(element) {
+    return copyPlainText(element ? (element.innerText || element.textContent || "") : "");
+  }
+
+  // Function: render stat.
+  function renderStat(targetElement, value) {
+    // Branch: follow this path only when the current condition passes.
+    if (!targetElement) {
+      return;
+    }
+
+    targetElement.textContent = String(value || 0);
+  }
+
+  // Function: create markup fragment.
+  function createMarkupFragment(targetElement, htmlMarkup) {
+    const targetDocument = targetElement && targetElement.ownerDocument ? targetElement.ownerDocument : document;
+    const safeHtmlMarkup = String(htmlMarkup || "");
+    const fragment = targetDocument.createDocumentFragment();
+
+    // Branch: follow this path only when the current condition passes.
+    if (!safeHtmlMarkup) {
+      return fragment;
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (typeof DOMParser !== "function") {
+      fragment.appendChild(targetDocument.createTextNode(safeHtmlMarkup));
+      return fragment;
+    }
+
+    // Branch: try the primary operation before handling failures.
+    try {
+      const parsedDocument = new DOMParser().parseFromString(safeHtmlMarkup, "text/html");
+      const parsedRoot = parsedDocument.body || parsedDocument.documentElement;
+
+      // Branch: follow this path only when the current condition passes.
+      if (!parsedRoot) {
+        fragment.appendChild(targetDocument.createTextNode(safeHtmlMarkup));
+        return fragment;
+      }
+
+      // Loop: repeat while the guard condition stays true.
+      while (parsedRoot.firstChild) {
+        fragment.appendChild(targetDocument.importNode(parsedRoot.firstChild, true));
+        parsedRoot.removeChild(parsedRoot.firstChild);
+      }
+
+      return fragment;
+    // Branch: handle errors from the guarded operation.
+    } catch {
+      fragment.appendChild(targetDocument.createTextNode(safeHtmlMarkup));
+      return fragment;
+    }
+  }
+
+  // Function: replace element markup.
+  function replaceElementMarkup(targetElement, htmlMarkup) {
+    // Branch: follow this path only when the current condition passes.
+    if (!targetElement) {
+      return;
+    }
+
+    targetElement.replaceChildren(createMarkupFragment(targetElement, htmlMarkup));
+    applySidePanelIconFallbacks(targetElement);
+  }
+
+  // Function: render detected items.
+  function renderDetectedItems(items) {
+    // Branch: follow this path only when the current condition passes.
+    if (!workflowRailElements.detectedPane) {
+      return;
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (!items.length) {
+      replaceElementMarkup(workflowRailElements.detectedPane, renderEmptyState("No URLs were detected in the current email body."));
+      return;
+    }
+
+    replaceElementMarkup(workflowRailElements.detectedPane, items
+      // Loop: transform each item in the current collection.
+      .map(function createDetectedItemMarkup(item) {
+        const tokenNotes = item.notes && item.notes.length
+          ? '<div class="merged-link-lab-page-pane__token-notes">' + mergedLinkLabPipeline.escapeHtml(item.notes.join(" · ")) + "</div>"
+          : "";
+
+        return [
+          '<article class="merged-link-lab-page-pane__token-card">',
+          '  <span class="merged-link-lab-page-pane__token-index">#' + String(item.id).padStart(2, "0") + "</span>",
+          '  <div class="merged-link-lab-page-pane__token-body">',
+          '    <div class="merged-link-lab-page-pane__token-url">' + mergedLinkLabPipeline.escapeHtml(item.original) + "</div>",
+          tokenNotes,
+          "  </div>",
+          "</article>"
+        ].join("");
+      })
+      .join(""));
+  }
+
+  // Function: render resolved items.
+  function renderResolvedItems(items) {
+    // Branch: follow this path only when the current condition passes.
+    if (!workflowRailElements.resolvedPane) {
+      return;
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (!items.length) {
+      workflowRailElements.resolvedPane.textContent = "No normalization or resolve steps have run yet.";
+      return;
+    }
+
+    const resolutionLines = [];
+
+    // Loop: iterate through each item in the current collection.
+    items.forEach(function appendResolutionLines(item) {
+      resolutionLines.push("SOURCE " + item.id + ": " + item.original);
+      resolutionLines.push("NORMALIZED: " + (item.normalized || "(none)"));
+      resolutionLines.push("RESOLVED: " + (item.resolved && item.resolved.length ? item.resolved.join(" | ") : "(none)"));
+      resolutionLines.push("VALID: " + (item.validResolved && item.validResolved.length ? item.validResolved.join(" | ") : "(none)"));
+      resolutionLines.push("NOTES: " + (item.notes && item.notes.length ? item.notes.join(", ") : "(none)"));
+      resolutionLines.push("");
+    });
+
+    workflowRailElements.resolvedPane.textContent = resolutionLines.join("\n").trim();
+  }
+
+  // Function: render final urls.
+  function renderFinalUrls(finalUrlEntries) {
+    // Branch: follow this path only when the current condition passes.
+    if (!workflowRailElements.finalPane) {
+      return;
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (!finalUrlEntries.length) {
+      replaceElementMarkup(workflowRailElements.finalPane, renderEmptyState("Final destination URLs will appear here once the pipeline resolves them."));
+      return;
+    }
+
+    replaceElementMarkup(workflowRailElements.finalPane, finalUrlEntries
+      // Loop: transform each item in the current collection.
+      .map(function createFinalUrlMarkup(finalUrlEntry) {
+        const finalUrlLabel = mergedLinkLabPipeline.buildFinalUrlLinkText(finalUrlEntry);
+
+        return [
+          '<article class="merged-link-lab-page-pane__url-card">',
+          '  <a class="merged-link-lab-page-pane__url-link" href="' + mergedLinkLabPipeline.escapeHtml(finalUrlEntry.url) + '" target="_blank" rel="noopener noreferrer">' + mergedLinkLabPipeline.escapeHtml(finalUrlLabel) + "</a>",
+          '  <div class="merged-link-lab-page-pane__url-meta">',
+          '    <span class="merged-link-lab-page-pane__subtle">' + mergedLinkLabPipeline.escapeHtml(finalUrlEntry.host || "unknown-host") + "</span>",
+          "  </div>",
+          "</article>"
+        ].join("");
+      })
+      .join(""));
+  }
+
+  // Function: render digest entries.
+  function renderDigestEntries(digestEntries) {
+    // Branch: follow this path only when the current condition passes.
+    if (!workflowRailElements.digestPane) {
+      return;
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (!digestEntries.length) {
+      replaceElementMarkup(workflowRailElements.digestPane, renderEmptyState("Digest-ready entries will appear here when titles can be matched to URLs."));
+      return;
+    }
+
+    replaceElementMarkup(workflowRailElements.digestPane, digestEntries
+      // Loop: transform each item in the current collection.
+      .map(function createDigestEntryMarkup(entry) {
+        return [
+          '<article class="merged-link-lab-page-pane__digest-card">',
+          '  <div class="merged-link-lab-page-pane__digest-title">' + mergedLinkLabPipeline.escapeHtml(entry.title) + "</div>",
+          '  <div class="merged-link-lab-page-pane__digest-meta">',
+          '    <a class="merged-link-lab-page-pane__digest-link" href="' + mergedLinkLabPipeline.escapeHtml(entry.url) + '" target="_blank" rel="noopener noreferrer">' + mergedLinkLabPipeline.escapeHtml(entry.host || "unknown-host") + "</a>",
+          '    <span class="merged-link-lab-page-pane__pill">' + mergedLinkLabPipeline.escapeHtml(entry.type || "destination") + "</span>",
+          "  </div>",
+          "</article>"
+        ].join("");
+      })
+      .join(""));
+  }
+
+  // Function: render rewritten html.
+  function renderRewrittenHtml(htmlMarkup) {
+    // Branch: follow this path only when the current condition passes.
+    if (!workflowRailElements.rewrittenPane) {
+      return;
+    }
+
+    replaceElementMarkup(
+      workflowRailElements.rewrittenPane,
+      htmlMarkup || renderEmptyState("The modified email preview will appear here once rewritten output is available.")
+    );
+  }
+
+  // Function: render diagnostics.
+  function renderDiagnostics(diagnosticLines) {
+    // Branch: follow this path only when the current condition passes.
+    if (!workflowRailElements.diagnosticsPane) {
+      return;
+    }
+
+    workflowRailElements.diagnosticsPane.textContent =
+      diagnosticLines && diagnosticLines.length ? diagnosticLines.join("\n") : "No diagnostics available.";
+  }
+
+  // Function: render snapshot pane.
+  function renderSnapshotPane(snapshot) {
+    const paneRoot = ensurePane();
+    // Branch: follow this path only when the current condition passes.
+    if (!paneRoot || !snapshot || !snapshot.pipeline) {
+      return;
+    }
+
+    const pipelineResult = snapshot.pipeline;
+    const detectedItems = pipelineResult.items || [];
+    const finalUrlEntries = mergedLinkLabPipeline.buildFinalUrlEntries(detectedItems);
+    const changedUrls = pipelineResult.changedUrls || [];
+    const digestEntries = pipelineResult.digestEntries || [];
+    const diagnosticLines = pipelineResult.diagnostics && pipelineResult.diagnostics.lines
+      ? pipelineResult.diagnostics.lines
+      : [];
+
+    // Branch: follow this path only when the current condition passes.
+    if (workflowRailElements.statusText) {
+      workflowRailElements.statusText.textContent =
+        "Email body detected. Expand the rail to inspect the complete URL conversion workflow.";
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (workflowRailElements.railStatus) {
+      workflowRailElements.railStatus.textContent = "Email ready";
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (workflowRailElements.railCount) {
+      workflowRailElements.railCount.textContent = formatMetricCount(finalUrlEntries.length, "URL", "URLs");
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (workflowRailElements.pageLink) {
+      workflowRailElements.pageLink.textContent = "Current page";
+      workflowRailElements.pageLink.href = "#";
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (workflowRailElements.detectedAt) {
+      workflowRailElements.detectedAt.textContent = formatDetectionTime(snapshot.detectedAt);
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (workflowRailElements.sectionLabel) {
+      workflowRailElements.sectionLabel.textContent = "Opened email body";
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (workflowRailElements.sourceType) {
+      workflowRailElements.sourceType.textContent = snapshot.sourceHtml ? "HTML email body snapshot" : "Plain text email snapshot";
+    }
+
+    renderStat(workflowRailElements.rawUrlCount, detectedItems.length);
+    renderStat(workflowRailElements.finalUrlCount, finalUrlEntries.length);
+    renderStat(workflowRailElements.changedCount, changedUrls.length);
+    renderStat(workflowRailElements.rewrittenCount, pipelineResult.rewrittenCount || 0);
+    renderStat(workflowRailElements.digestCount, digestEntries.length);
+
+    // Branch: follow this path only when the current condition passes.
+    if (workflowRailElements.inputPane) {
+      workflowRailElements.inputPane.textContent =
+        snapshot.rawText || pipelineResult.rawText || "No input text is available for this message.";
+    }
+
+    renderDetectedItems(detectedItems);
+    renderResolvedItems(detectedItems);
+    renderFinalUrls(finalUrlEntries);
+    renderDigestEntries(digestEntries);
+    renderRewrittenHtml(pipelineResult.rewrittenHtml || "");
+    renderDiagnostics(diagnosticLines);
+  }
+
+  // Function: clear pane.
+  function clearPane() {
+    // Branch: follow this path only when the current condition passes.
+    if (mirrorHoverListenerCleanup) {
+      mirrorHoverListenerCleanup();
+      mirrorHoverListenerCleanup = null;
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (!workflowRailElements.root) {
+      return;
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (workflowRailElements.statusText) {
+      workflowRailElements.statusText.textContent = "Waiting for a detected email body...";
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (workflowRailElements.railStatus) {
+      workflowRailElements.railStatus.textContent = "No email";
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (workflowRailElements.railCount) {
+      workflowRailElements.railCount.textContent = "0 URLs";
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (workflowRailElements.pageLink) {
+      workflowRailElements.pageLink.textContent = "Current page";
+      workflowRailElements.pageLink.href = "#";
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (workflowRailElements.detectedAt) {
+      workflowRailElements.detectedAt.textContent = "Not detected";
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (workflowRailElements.sectionLabel) {
+      workflowRailElements.sectionLabel.textContent = "Waiting for an opened email body";
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (workflowRailElements.sourceType) {
+      workflowRailElements.sourceType.textContent = "No snapshot";
+    }
+
+    renderStat(workflowRailElements.rawUrlCount, 0);
+    renderStat(workflowRailElements.finalUrlCount, 0);
+    renderStat(workflowRailElements.changedCount, 0);
+    renderStat(workflowRailElements.rewrittenCount, 0);
+    renderStat(workflowRailElements.digestCount, 0);
+
+    // Branch: follow this path only when the current condition passes.
+    if (workflowRailElements.inputPane) {
+      workflowRailElements.inputPane.textContent = "No opened inbox email body is active on this page yet.";
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (workflowRailElements.resolvedPane) {
+      workflowRailElements.resolvedPane.textContent =
+        "Normalization and resolve details will appear here when a message is detected.";
+    }
+
+    renderDetectedItems([]);
+    renderFinalUrls([]);
+    renderDigestEntries([]);
+    renderRewrittenHtml("");
+    renderDiagnostics([]);
+  }
+
+  // Function: ensure pane.
+  function ensurePane() {
+    // Branch: follow this path only when the current condition passes.
+    if (workflowRailElements.root && workflowRailElements.root.isConnected) {
+      return workflowRailElements.root;
+    }
+
+    const paneRoot = document.createElement("aside");
+    paneRoot.id = "merged-link-lab-page-pane";
+    paneRoot.setAttribute("aria-hidden", "true");
+    replaceElementMarkup(paneRoot, [
+      '<button type="button" class="merged-link-lab-page-pane__rail" data-role="railToggleButton" aria-expanded="false">',
+      '  <span class="merged-link-lab-page-pane__rail-dot"></span>',
+      '  <span class="merged-link-lab-page-pane__rail-eyebrow">Pipeline</span>',
+      '  <span class="merged-link-lab-page-pane__rail-title">URL Forensics Workbench</span>',
+      '  <span class="merged-link-lab-page-pane__rail-status" data-role="railStatus">No email</span>',
+      '  <span class="merged-link-lab-page-pane__rail-count" data-role="railCount">0 URLs</span>',
+      "</button>",
+      '<div class="merged-link-lab-page-pane__shell">',
+      '  <header class="merged-link-lab-page-pane__hero">',
+      '    <div class="merged-link-lab-page-pane__hero-copy">',
+      '      <p class="merged-link-lab-page-pane__eyebrow">Complete Pipeline Workflow</p>',
+      '      <h2>URL Forensics Workbench</h2>',
+      '      <p class="merged-link-lab-page-pane__status" data-role="statusText">Waiting for a detected email body...</p>',
+      "    </div>",
+      '    <div class="merged-link-lab-page-pane__hero-actions">',
+      '      <button type="button" data-role="collapseButton"><span class="merged-link-lab-page-pane__icon merged-link-lab-page-pane__button-icon" data-icon="close_fullscreen" aria-hidden="true">close_fullscreen</span><span>Collapse</span></button>',
+      '      <button type="button" data-role="applyChangesButton"><span class="merged-link-lab-page-pane__icon merged-link-lab-page-pane__button-icon" data-icon="find_replace" aria-hidden="true">find_replace</span><span>Replace In Email</span></button>',
+      '      <button type="button" data-role="copyConvertedButton"><span class="merged-link-lab-page-pane__icon merged-link-lab-page-pane__button-icon" data-icon="content_copy" aria-hidden="true">content_copy</span><span>Copy Modified Email</span></button>',
+      "    </div>",
+      "  </header>",
+      '  <section class="merged-link-lab-page-pane__meta-grid">',
+      '    <article class="merged-link-lab-page-pane__meta-card">',
+      '      <span class="merged-link-lab-page-pane__meta-label">Page</span>',
+      '      <a data-role="pageLink" href="#" target="_blank" rel="noopener noreferrer">Current page</a>',
+      "    </article>",
+      '    <article class="merged-link-lab-page-pane__meta-card">',
+      '      <span class="merged-link-lab-page-pane__meta-label">Detected</span>',
+      '      <strong data-role="detectedAt">Not detected</strong>',
+      "    </article>",
+      '    <article class="merged-link-lab-page-pane__meta-card">',
+      '      <span class="merged-link-lab-page-pane__meta-label">Section</span>',
+      '      <strong data-role="sectionLabel">Waiting for an opened email body</strong>',
+      "    </article>",
+      "  </section>",
+      '  <section class="merged-link-lab-page-pane__stats-grid">',
+      '    <article class="merged-link-lab-page-pane__stat-card">',
+      '      <span class="merged-link-lab-page-pane__stat-label">Detected</span>',
+      '      <strong data-role="rawUrlCount">0</strong>',
+      '      <p>Raw URL tokens</p>',
+      "    </article>",
+      '    <article class="merged-link-lab-page-pane__stat-card">',
+      '      <span class="merged-link-lab-page-pane__stat-label">Final</span>',
+      '      <strong data-role="finalUrlCount">0</strong>',
+      '      <p>Destination URLs</p>',
+      "    </article>",
+      '    <article class="merged-link-lab-page-pane__stat-card">',
+      '      <span class="merged-link-lab-page-pane__stat-label">Changed</span>',
+      '      <strong data-role="changedCount">0</strong>',
+      '      <p>Replacements queued</p>',
+      "    </article>",
+      '    <article class="merged-link-lab-page-pane__stat-card">',
+      '      <span class="merged-link-lab-page-pane__stat-label">Rewritten</span>',
+      '      <strong data-role="rewrittenCount">0</strong>',
+      '      <p>Updated nodes</p>',
+      "    </article>",
+      '    <article class="merged-link-lab-page-pane__stat-card">',
+      '      <span class="merged-link-lab-page-pane__stat-label">Digest</span>',
+      '      <strong data-role="digestCount">0</strong>',
+      '      <p>Digest-ready entries</p>',
+      "    </article>",
+      "  </section>",
+      '  <main class="merged-link-lab-page-pane__workflow">',
+      '    <section class="merged-link-lab-page-pane__section">',
+      '      <div class="merged-link-lab-page-pane__section-head">',
+      '        <div>',
+      '          <p class="merged-link-lab-page-pane__section-step">Stage 0</p>',
+      '          <h3>Email Snapshot</h3>',
+      '          <p class="merged-link-lab-page-pane__section-copy">The original opened email body captured from the active reading pane.</p>',
+      "        </div>",
+      '        <div class="merged-link-lab-page-pane__section-actions">',
+      '          <span class="merged-link-lab-page-pane__pill merged-link-lab-page-pane__pill--soft" data-role="sourceType">No snapshot</span>',
+      '          <button type="button" data-copy-target="inputPane"><span class="merged-link-lab-page-pane__icon merged-link-lab-page-pane__button-icon" data-icon="content_copy" aria-hidden="true">content_copy</span><span>Copy</span></button>',
+      "        </div>",
+      "      </div>",
+      '      <div class="merged-link-lab-page-pane__code-block" data-role="inputPane">No opened inbox email body is active on this page yet.</div>',
+      "    </section>",
+      '    <div class="merged-link-lab-page-pane__workflow-grid">',
+      '      <section class="merged-link-lab-page-pane__section">',
+      '        <div class="merged-link-lab-page-pane__section-head">',
+      '          <div>',
+      '            <p class="merged-link-lab-page-pane__section-step">Stage 1</p>',
+      '            <h3>Detected URLs</h3>',
+      '            <p class="merged-link-lab-page-pane__section-copy">Raw URL tokens lifted directly from the detected email body.</p>',
+      "          </div>",
+      "        </div>",
+      '        <div class="merged-link-lab-page-pane__card-list" data-role="detectedPane"></div>',
+      "      </section>",
+      '      <section class="merged-link-lab-page-pane__section">',
+      '        <div class="merged-link-lab-page-pane__section-head">',
+      '          <div>',
+      '            <p class="merged-link-lab-page-pane__section-step">Stage 2</p>',
+      '            <h3>Normalize + Resolve</h3>',
+      '            <p class="merged-link-lab-page-pane__section-copy">Token cleanup, decode passes, and destination resolution details.</p>',
+      "          </div>",
+      '          <div class="merged-link-lab-page-pane__section-actions">',
+      '            <button type="button" data-copy-target="resolvedPane"><span class="merged-link-lab-page-pane__icon merged-link-lab-page-pane__button-icon" data-icon="content_copy" aria-hidden="true">content_copy</span><span>Copy</span></button>',
+      "          </div>",
+      "        </div>",
+      '        <div class="merged-link-lab-page-pane__code-block" data-role="resolvedPane">Normalization and resolve details will appear here when a message is detected.</div>',
+      "      </section>",
+      "    </div>",
+      '    <div class="merged-link-lab-page-pane__workflow-grid">',
+      '      <section class="merged-link-lab-page-pane__section">',
+      '        <div class="merged-link-lab-page-pane__section-head">',
+      '          <div>',
+      '            <p class="merged-link-lab-page-pane__section-step">Stage 3</p>',
+      '            <h3>Final URL List</h3>',
+      '            <p class="merged-link-lab-page-pane__section-copy">The cleaned destination URLs that survive the pipeline.</p>',
+      "          </div>",
+      '          <div class="merged-link-lab-page-pane__section-actions">',
+      '            <button type="button" data-role="copyFinalButton"><span class="merged-link-lab-page-pane__icon merged-link-lab-page-pane__button-icon" data-icon="content_copy" aria-hidden="true">content_copy</span><span>Copy</span></button>',
+      "          </div>",
+      "        </div>",
+      '        <div class="merged-link-lab-page-pane__card-list" data-role="finalPane"></div>',
+      "      </section>",
+      '      <section class="merged-link-lab-page-pane__section">',
+      '        <div class="merged-link-lab-page-pane__section-head">',
+      '          <div>',
+      '            <p class="merged-link-lab-page-pane__section-step">Stage 4</p>',
+      '            <h3>Digest Output</h3>',
+      '            <p class="merged-link-lab-page-pane__section-copy">Title-to-link digest entries generated from the message context.</p>',
+      "          </div>",
+      '          <div class="merged-link-lab-page-pane__section-actions">',
+      '            <button type="button" data-role="copyDigestButton"><span class="merged-link-lab-page-pane__icon merged-link-lab-page-pane__button-icon" data-icon="content_copy" aria-hidden="true">content_copy</span><span>Copy</span></button>',
+      "          </div>",
+      "        </div>",
+      '        <div class="merged-link-lab-page-pane__card-list" data-role="digestPane"></div>',
+      "      </section>",
+      "    </div>",
+      '    <section class="merged-link-lab-page-pane__section">',
+      '      <div class="merged-link-lab-page-pane__section-head">',
+      '        <div>',
+      '          <p class="merged-link-lab-page-pane__section-step">Stage 5</p>',
+      '          <h3>Modified Email</h3>',
+      '          <p class="merged-link-lab-page-pane__section-copy">A fully rewritten email preview using the resolved destination URLs.</p>',
+      "        </div>",
+      '        <div class="merged-link-lab-page-pane__section-actions">',
+      '          <button type="button" data-copy-target="rewrittenPane"><span class="merged-link-lab-page-pane__icon merged-link-lab-page-pane__button-icon" data-icon="content_copy" aria-hidden="true">content_copy</span><span>Copy</span></button>',
+      "        </div>",
+      "      </div>",
+      '      <div class="merged-link-lab-page-pane__html-block" data-role="rewrittenPane"></div>',
+      "    </section>",
+      '    <section class="merged-link-lab-page-pane__section">',
+      '      <div class="merged-link-lab-page-pane__section-head">',
+      '        <div>',
+      '          <p class="merged-link-lab-page-pane__section-step">Stage 6</p>',
+      '          <h3>Sidepanel Diagnostics</h3>',
+      '          <p class="merged-link-lab-page-pane__section-copy">Pipeline counts, error traces, and quick verification context.</p>',
+      "        </div>",
+      '        <div class="merged-link-lab-page-pane__section-actions">',
+      '          <button type="button" data-copy-target="diagnosticsPane"><span class="merged-link-lab-page-pane__icon merged-link-lab-page-pane__button-icon" data-icon="content_copy" aria-hidden="true">content_copy</span><span>Copy</span></button>',
+      "        </div>",
+      "      </div>",
+      '      <div class="merged-link-lab-page-pane__code-block" data-role="diagnosticsPane">No diagnostics available.</div>',
+      "    </section>",
+      "  </main>",
+      "</div>"
+    ].join(""));
+
+    const mountTarget = document.body || document.documentElement;
+    // Branch: follow this path only when the current condition passes.
+    if (!mountTarget) {
+      return null;
+    }
+
+    mountTarget.appendChild(paneRoot);
+
+    workflowRailElements.root = paneRoot;
+    workflowRailElements.railToggleButton = paneRoot.querySelector('[data-role="railToggleButton"]');
+    workflowRailElements.railStatus = paneRoot.querySelector('[data-role="railStatus"]');
+    workflowRailElements.railCount = paneRoot.querySelector('[data-role="railCount"]');
+    workflowRailElements.statusText = paneRoot.querySelector('[data-role="statusText"]');
+    workflowRailElements.pageLink = paneRoot.querySelector('[data-role="pageLink"]');
+    workflowRailElements.detectedAt = paneRoot.querySelector('[data-role="detectedAt"]');
+    workflowRailElements.sectionLabel = paneRoot.querySelector('[data-role="sectionLabel"]');
+    workflowRailElements.sourceType = paneRoot.querySelector('[data-role="sourceType"]');
+    workflowRailElements.rawUrlCount = paneRoot.querySelector('[data-role="rawUrlCount"]');
+    workflowRailElements.finalUrlCount = paneRoot.querySelector('[data-role="finalUrlCount"]');
+    workflowRailElements.changedCount = paneRoot.querySelector('[data-role="changedCount"]');
+    workflowRailElements.rewrittenCount = paneRoot.querySelector('[data-role="rewrittenCount"]');
+    workflowRailElements.digestCount = paneRoot.querySelector('[data-role="digestCount"]');
+    workflowRailElements.inputPane = paneRoot.querySelector('[data-role="inputPane"]');
+    workflowRailElements.detectedPane = paneRoot.querySelector('[data-role="detectedPane"]');
+    workflowRailElements.resolvedPane = paneRoot.querySelector('[data-role="resolvedPane"]');
+    workflowRailElements.finalPane = paneRoot.querySelector('[data-role="finalPane"]');
+    workflowRailElements.digestPane = paneRoot.querySelector('[data-role="digestPane"]');
+    workflowRailElements.rewrittenPane = paneRoot.querySelector('[data-role="rewrittenPane"]');
+    workflowRailElements.diagnosticsPane = paneRoot.querySelector('[data-role="diagnosticsPane"]');
+    workflowRailElements.applyChangesButton = paneRoot.querySelector('[data-role="applyChangesButton"]');
+    workflowRailElements.copyConvertedButton = paneRoot.querySelector('[data-role="copyConvertedButton"]');
+    workflowRailElements.copyFinalButton = paneRoot.querySelector('[data-role="copyFinalButton"]');
+    workflowRailElements.copyDigestButton = paneRoot.querySelector('[data-role="copyDigestButton"]');
+    workflowRailElements.collapseButton = paneRoot.querySelector('[data-role="collapseButton"]');
+
+    // Function: toggle workflow rail.
+    workflowRailElements.railToggleButton.addEventListener("click", function toggleWorkflowRail() {
+      // Branch: follow this path only when the current condition passes.
+      if (!latestSnapshot) {
+        return;
+      }
+
+      setPaneExpanded(!workflowRailElements.isExpanded);
+    });
+
+    // Function: collapse workflow rail.
+    workflowRailElements.collapseButton.addEventListener("click", function collapseWorkflowRail() {
+      setPaneExpanded(false);
+    });
+
+    // Function: copy converted pane.
+    workflowRailElements.copyConvertedButton.addEventListener("click", function copyConvertedPane() {
+      copyPaneText(workflowRailElements.rewrittenPane);
+    });
+
+    // Function: copy final pane.
+    workflowRailElements.copyFinalButton.addEventListener("click", function copyFinalPane() {
+      copyPaneText(workflowRailElements.finalPane);
+    });
+
+    // Function: copy digest pane.
+    workflowRailElements.copyDigestButton.addEventListener("click", function copyDigestPane() {
+      copyPaneText(workflowRailElements.digestPane);
+    });
+
+    // Function: apply converted output to email.
+    workflowRailElements.applyChangesButton.addEventListener("click", function applyConvertedOutputToEmail() {
+      applyRewriteToEmailBody();
+    });
+
+    // Loop: iterate through each item in the current collection.
+    paneRoot.querySelectorAll("[data-copy-target]").forEach(function bindCopyTarget(copyButton) {
+      // Function: copy target pane.
+      copyButton.addEventListener("click", function copyTargetPane() {
+        const targetRole = copyButton.getAttribute("data-copy-target");
+        // Branch: follow this path only when the current condition passes.
+        if (!targetRole) {
+          return;
+        }
+
+        const targetElement = paneRoot.querySelector('[data-role="' + targetRole + '"]');
+        copyPaneText(targetElement);
+      });
+    });
+
+    clearPane();
+    return paneRoot;
+  }
+
+  // Function: apply rewrite to email body.
+  async function applyRewriteToEmailBody() {
+    // Branch: follow this path only when the current condition passes.
+    if (!latestSnapshot) {
+      syncEmailSnapshot();
+    }
+
+    const fallbackEmailCandidate = choosePrimaryEmailCandidate(getInboxRootCandidates());
+    const activeEmailRoot = latestDetectedEmailRoot && latestDetectedEmailRoot.isConnected
+      ? latestDetectedEmailRoot
+      : (fallbackEmailCandidate ? fallbackEmailCandidate.root : null);
+
+    // Branch: follow this path only when the current condition passes.
+    if ((!latestDetectedEmailRoot || !latestDetectedEmailRoot.isConnected) && fallbackEmailCandidate) {
+      latestDetectedEmailRoot = fallbackEmailCandidate.root;
+      latestDetectedEmailMode = fallbackEmailCandidate.detectionMode || latestDetectedEmailMode;
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (!activeEmailRoot || !latestSnapshot || !latestSnapshot.pipeline) {
+      return { ok: false, applied: false };
+    }
+
+    const rewrittenHtml = latestSnapshot.pipeline.rewrittenHtml || "";
+    // Branch: follow this path only when the current condition passes.
+    if (!rewrittenHtml) {
+      return { ok: false, applied: false, snapshot: latestSnapshot };
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (getEmailRootHtmlMarkup(activeEmailRoot) === rewrittenHtml) {
+      const refreshedSnapshot = summarizeEmailRoot(activeEmailRoot, latestDetectedEmailMode);
+      await publishSnapshot(refreshedSnapshot);
+      return { ok: true, applied: false, snapshot: refreshedSnapshot };
+    }
+
+    replaceElementMarkup(getEmailRootContentElement(activeEmailRoot), rewrittenHtml);
+    latestDetectedEmailRoot = activeEmailRoot;
+    observeEmailRoot(activeEmailRoot);
+
+    const refreshedSnapshot = summarizeEmailRoot(activeEmailRoot, latestDetectedEmailMode);
+    await publishSnapshot(refreshedSnapshot);
+    scheduleSnapshotSync();
+
+    return { ok: true, applied: true, snapshot: refreshedSnapshot };
+  }
+
+  // Function: toggle pane visibility.
+  function togglePaneVisibility() {
+    // Branch: follow this path only when the current condition passes.
+    if (!latestSnapshot) {
+      hidePane();
+      return {
+        ok: false,
+        hasSnapshot: false,
+        visible: false,
+        expanded: false
+      };
+    }
+
+    setPaneExpanded(!workflowRailElements.isExpanded);
+    return {
+      ok: true,
+      hasSnapshot: true,
+      visible: true,
+      expanded: workflowRailElements.isExpanded
+    };
+  }
+
+  // Function: publish snapshot.
+  async function publishSnapshot(snapshot) {
+    latestSnapshot = snapshot;
+    lastPublishedSnapshotSignature = createSnapshotSignature(snapshot);
+
+    const nextPaneKey = createSnapshotPaneKey(snapshot);
+    // Branch: follow this path only when the current condition passes.
+    if (workflowRailElements.currentPaneKey !== nextPaneKey) {
+      workflowRailElements.isExpanded = false;
+    }
+
+    workflowRailElements.currentPaneKey = nextPaneKey;
+    renderSnapshotPane(snapshot);
+    showPane();
+
+    // Branch: try the primary operation before handling failures.
+    try {
+      await extensionApi.runtime.sendMessage({
+        type: "merged-link-lab:email-snapshot",
+        snapshot: snapshot
+      });
+    // Branch: handle errors from the guarded operation.
+    } catch {
+      return;
+    }
+  }
+
+  // Function: publish clear.
+  async function publishClear() {
+    latestSnapshot = null;
+    resetLatestEmailDetectionState();
+    lastPublishedSnapshotSignature = "";
+    workflowRailElements.currentPaneKey = "";
+    workflowRailElements.isExpanded = false;
+    clearPane();
+    hidePane();
+
+    // Branch: try the primary operation before handling failures.
+    try {
+      await extensionApi.runtime.sendMessage({
+        type: "merged-link-lab:email-cleared"
+      });
+    // Branch: handle errors from the guarded operation.
+    } catch {
+      return;
+    }
+  }
+
+  // Function: format timestamp.
+  function formatTimestamp(timestamp) {
+    // Branch: follow this path only when the current condition passes.
+    if (!timestamp) {
+      return "Not detected";
+    }
+
+    // Branch: try the primary operation before handling failures.
+    try {
+      return new Date(timestamp).toLocaleString();
+    // Branch: handle errors from the guarded operation.
+    } catch {
+      return "Detected";
+    }
+  }
+
+  // Function: render summary count.
+  function renderSummaryCount(targetElement, label, count) {
+    // Branch: follow this path only when the current condition passes.
+    if (!targetElement) {
+      return;
+    }
+
+    targetElement.textContent = label + ": " + String(count || 0);
+  }
+
+  // Function: escape html attribute.
+  function escapeHtmlAttribute(value) {
+    return String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
+  // Function: set active tab.
+  function setActiveTab(tabKey) {
+    const nextTabKey = /^(converted|lab|diagnostics)$/.test(String(tabKey || "")) ? tabKey : "lab";
+    workflowRailElements.activeTabKey = nextTabKey;
+
+    // Branch: follow this path only when the current condition passes.
+    if (!workflowRailElements.root) {
+      return;
+    }
+
+    // Loop: iterate through each item in the current collection.
+    workflowRailElements.tabButtons.forEach(function updateTabButton(tabButton) {
+      const buttonTabKey = tabButton.getAttribute("data-tab-button");
+      const isActive = buttonTabKey === nextTabKey;
+      tabButton.classList.toggle("is-active", isActive);
+      tabButton.setAttribute("aria-selected", String(isActive));
+    });
+
+    // Loop: iterate through each item in the current collection.
+    workflowRailElements.tabPanels.forEach(function updateTabPanel(tabPanel) {
+      const panelTabKey = tabPanel.getAttribute("data-tab-panel");
+      const isActive = panelTabKey === nextTabKey;
+      tabPanel.classList.toggle("is-active", isActive);
+      tabPanel.classList.toggle("is-hidden", !isActive);
+      tabPanel.setAttribute("aria-hidden", String(!isActive));
+    });
+
+    // Branch: follow this path only when the current condition passes.
+    if (workflowRailElements.hoverLinkInfo) {
+      const shouldShowHoverInfo = nextTabKey === "converted";
+      workflowRailElements.hoverLinkInfo.hidden = !shouldShowHoverInfo;
+      workflowRailElements.hoverLinkInfo.setAttribute("aria-hidden", String(!shouldShowHoverInfo));
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (workflowRailElements.isExpanded) {
+      syncPageViewportReservation();
+    }
+  }
+
+  // Function: get active email root.
+  function getActiveEmailRoot() {
+    // Branch: follow this path only when the current condition passes.
+    if (latestDetectedEmailRoot && latestDetectedEmailRoot.isConnected) {
+      return latestDetectedEmailRoot;
+    }
+
+    return choosePrimaryInboxRoot(getInboxRootCandidates());
+  }
+
+  // Function: maybe replace email body with mirror content.
+  async function maybeReplaceEmailBodyWithMirrorContent(snapshot) {
+    const activeEmailRoot = getActiveEmailRoot();
+    const rewrittenHtml = snapshot && snapshot.pipeline ? String(snapshot.pipeline.rewrittenHtml || "") : "";
+
+    if (!shouldReplaceEmailBodyWithMirrorContent(snapshot) || !activeEmailRoot || !rewrittenHtml) {
+      return { ok: false, applied: false, snapshot: snapshot || null };
+    }
+
+    if (getEmailRootHtmlMarkup(activeEmailRoot) === rewrittenHtml) {
+      return { ok: true, applied: false, snapshot: snapshot };
+    }
+
+    return applyRewriteToEmailBody();
+  }
+
+  // Function: get displayed email body width.
+  function getDisplayedEmailBodyWidth() {
+    const activeEmailRoot = getActiveEmailRoot();
+    // Branch: follow this path only when the current condition passes.
+    if (!activeEmailRoot) {
+      return 0;
+    }
+
+    const emailBounds = activeEmailRoot.getBoundingClientRect();
+    const widthCandidates = [emailBounds.width];
+
+    // Branch: follow this path only when the current condition passes.
+    if (Number.isFinite(activeEmailRoot.scrollWidth) && activeEmailRoot.scrollWidth > 0) {
+      widthCandidates.push(activeEmailRoot.scrollWidth);
+    }
+
+    // Loop: iterate through each item in the current collection.
+    Array.from(activeEmailRoot.children || []).slice(0, 24).forEach(function collectChildWidth(childElement) {
+      // Branch: follow this path only when the current condition passes.
+      if (!childElement || typeof childElement.getBoundingClientRect !== "function") {
+        return;
+      }
+
+      const childBounds = childElement.getBoundingClientRect();
+      // Branch: follow this path only when the current condition passes.
+      if (Number.isFinite(childBounds.width) && childBounds.width > 0) {
+        widthCandidates.push(childBounds.width);
+      }
+    });
+
+    // Loop: keep only items that match the current check.
+    const measurableWidths = widthCandidates.filter(function filterWidth(widthValue) {
+      return Number.isFinite(widthValue) && widthValue > 0;
+    });
+
+    return measurableWidths.length ? Math.max.apply(null, measurableWidths) : 0;
+  }
+
+  // Function: get expanded pane width.
+  function getExpandedPaneWidth(viewportWidth) {
+    const safeViewportWidth = Math.max(0, Number(viewportWidth) || 0);
+    const isCompactViewport = safeViewportWidth <= 900;
+    const displayedBodyWidth = getDisplayedEmailBodyWidth();
+    const isWorkflowTab = workflowRailElements.activeTabKey === "lab";
+    const isMirrorTab = workflowRailElements.activeTabKey === "converted";
+    const layoutOverhead = isWorkflowTab
+      ? (safeViewportWidth <= 1100 ? 300 : 340)
+      : (isMirrorTab ? (safeViewportWidth <= 1100 ? 180 : 240) : 80);
+    const preferredWidth = displayedBodyWidth
+      ? Math.round(displayedBodyWidth + layoutOverhead)
+      : Math.round(safeViewportWidth * (isCompactViewport ? 0.46 : 0.42));
+    const minimumWidth = isWorkflowTab
+      ? (isCompactViewport ? 520 : 760)
+      : (isMirrorTab ? (isCompactViewport ? 480 : 720) : (isCompactViewport ? 360 : 520));
+    const maximumWidth = Math.max(minimumWidth, safeViewportWidth - (isCompactViewport ? 16 : 24));
+    const viewportInset = isCompactViewport ? 16 : 24;
+
+    return Math.max(
+      56,
+      Math.min(
+        Math.max(56, safeViewportWidth - viewportInset),
+        Math.max(minimumWidth, Math.min(maximumWidth, preferredWidth))
+      )
+    );
+  }
+
+  // Function: get visible pane reserved width.
+  function getVisiblePaneReservedWidth() {
+    return 0;
+  }
+
+  // Function: restore reserved layout targets.
+  function restoreReservedLayoutTargets() {
+    // Loop: repeat while the guard condition stays true.
+    while (reservedLayoutEntries.length) {
+      const entry = reservedLayoutEntries.pop();
+      // Branch: follow this path only when the current condition passes.
+      if (!entry || !entry.element) {
+        continue;
+      }
+
+      entry.element.style.boxSizing = entry.inlineStyles.boxSizing;
+      entry.element.style.paddingRight = entry.inlineStyles.paddingRight;
+      entry.element.style.maxWidth = entry.inlineStyles.maxWidth;
+      entry.element.style.width = entry.inlineStyles.width;
+      entry.element.style.marginRight = entry.inlineStyles.marginRight;
+      entry.element.style.transform = entry.inlineStyles.transform;
+      entry.element.style.transformOrigin = entry.inlineStyles.transformOrigin;
+      entry.element.style.minWidth = entry.inlineStyles.minWidth;
+      entry.element.style.transition = entry.inlineStyles.transition;
+    }
+  }
+
+  // Function: remember reserved layout target.
+  function rememberReservedLayoutTarget(element) {
+    // Branch: follow this path only when the current condition passes.
+    if (!element || reservedLayoutEntries.some(function hasMatchingElement(entry) {
+      return entry.element === element;
+    })) {
+      return false;
+    }
+
+    reservedLayoutEntries.push({
+      element: element,
+      inlineStyles: {
+        boxSizing: element.style.boxSizing,
+        paddingRight: element.style.paddingRight,
+        maxWidth: element.style.maxWidth,
+        width: element.style.width,
+        marginRight: element.style.marginRight,
+        transform: element.style.transform,
+        transformOrigin: element.style.transformOrigin,
+        minWidth: element.style.minWidth,
+        transition: element.style.transition
+      }
+    });
+
+    return true;
+  }
+
+  // Function: build reservation transition.
+  function buildReservationTransition(existingTransition) {
+    const reservationTransition = "max-width 180ms ease, width 180ms ease, margin-right 180ms ease, padding-right 180ms ease";
+    return existingTransition ? existingTransition + ", " + reservationTransition : reservationTransition;
+  }
+
+  // Function: apply reservation to target.
+  function applyReservationToTarget(targetElement, reserveValue) {
+    // Branch: follow this path only when the current condition passes.
+    if (!targetElement || !rememberReservedLayoutTarget(targetElement)) {
+      return false;
+    }
+
+    const requestedReserveWidth = parseFloat(String(reserveValue || "").replace(/px$/i, ""));
+    const targetBounds = typeof targetElement.getBoundingClientRect === "function"
+      ? targetElement.getBoundingClientRect()
+      : { width: 0 };
+    const viewportWidth = Math.max(
+      window.innerWidth || 0,
+      document.documentElement ? document.documentElement.clientWidth || 0 : 0
+    );
+    const minimumRemainingWidth = viewportWidth <= 900 ? 280 : 420;
+    const maximumReserveWidth = Math.max(0, (Number(targetBounds.width) || 0) - minimumRemainingWidth);
+    const effectiveReserveWidth = Number.isFinite(requestedReserveWidth)
+      ? Math.max(0, Math.min(requestedReserveWidth, maximumReserveWidth))
+      : 0;
+
+    if (effectiveReserveWidth < 48) {
+      return false;
+    }
+
+    const effectiveReserveValue = effectiveReserveWidth + "px";
+
+    targetElement.style.boxSizing = "border-box";
+    targetElement.style.maxWidth = "calc(100% - " + effectiveReserveValue + ")";
+    targetElement.style.width = "calc(100% - " + effectiveReserveValue + ")";
+    targetElement.style.marginRight = effectiveReserveValue;
+    targetElement.style.minWidth = "0";
+    targetElement.style.transition = buildReservationTransition(targetElement.style.transition);
+    return true;
+  }
+
+  // Function: find viewport reservation container.
+  function findViewportReservationContainer(root) {
+    // Branch: follow this path only when the current condition passes.
+    if (!root || !root.isConnected) {
+      return null;
+    }
+
+    const viewportWidth = Math.max(window.innerWidth || 0, document.documentElement ? document.documentElement.clientWidth || 0 : 0);
+    const viewportHeight = Math.max(window.innerHeight || 0, document.documentElement ? document.documentElement.clientHeight || 0 : 0);
+    let currentElement = root;
+    let bestContainer = null;
+    let depth = 0;
+
+    // Loop: repeat while the guard condition stays true.
+    while (currentElement && currentElement !== document.body && currentElement !== document.documentElement && depth < 14) {
+      // Branch: follow this path only when the current condition passes.
+      if (currentElement.id === "merged-link-lab-page-pane" || currentElement.closest("#merged-link-lab-page-pane")) {
+        break;
+      }
+
+      const rect = currentElement.getBoundingClientRect();
+      const computedStyle = window.getComputedStyle(currentElement);
+      const visibleDisplay = computedStyle.display !== "inline" && computedStyle.display !== "contents";
+      const wideEnough = rect.width >= Math.max(360, viewportWidth * 0.58);
+      const tallEnough = rect.height >= Math.max(220, viewportHeight * 0.42);
+      const likelyAppShell =
+        currentElement.matches("main, [role='main'], [data-app-section], #app, #app-root, #root, #content") ||
+        /\b(app|mail|outlook|gmail|yahoo|proton|fastmail|workspace|shell|layout|main)\b/i.test(
+          [currentElement.id, currentElement.className].filter(Boolean).join(" ")
+        );
+
+      // Branch: follow this path only when the current condition passes.
+      if (visibleDisplay && wideEnough && tallEnough) {
+        bestContainer = currentElement;
+        // Branch: follow this path only when the current condition passes.
+        if (likelyAppShell && rect.width >= viewportWidth * 0.72) {
+          bestContainer = currentElement;
+        }
+      }
+
+      currentElement = currentElement.parentElement;
+      depth += 1;
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (bestContainer) {
+      return bestContainer;
+    }
+
+    const structuredContainer = root.closest("main, [role='main'], [data-app-section], #app, #app-root, #root, #content");
+    // Branch: follow this path only when the current condition passes.
+    if (structuredContainer && !structuredContainer.closest("#merged-link-lab-page-pane")) {
+      return structuredContainer;
+    }
+
+    return root.parentElement || root;
+  }
+
+  // Function: apply reservation to app viewport.
+  function applyReservationToAppViewport(reservedWidth) {
+    restoreReservedLayoutTargets();
+
+    // Branch: follow this path only when the current condition passes.
+    if (!reservedWidth) {
+      return false;
+    }
+
+    const activeEmailRoot = getActiveEmailRoot();
+    // Branch: follow this path only when the current condition passes.
+    if (!activeEmailRoot) {
+      return false;
+    }
+
+    const reserveValue = reservedWidth + "px";
+    const containerElement = findViewportReservationContainer(activeEmailRoot);
+
+    // Branch: follow this path only when the current condition passes.
+    if (containerElement) {
+      return applyReservationToTarget(containerElement, reserveValue);
+    }
+
+    return false;
+  }
+
+  // Function: sync page viewport reservation.
+  function syncPageViewportReservation() {
+    const reservedWidth = getVisiblePaneReservedWidth();
+    const reservedValue = reservedWidth + "px";
+    const rootElement = document.documentElement;
+    const bodyElement = document.body;
+    const viewportWidth = Math.max(
+      window.innerWidth || 0,
+      document.documentElement ? document.documentElement.clientWidth || 0 : 0
+    );
+    const layoutReservationApplied = applyReservationToAppViewport(reservedWidth);
+
+    // Branch: follow this path only when the current condition passes.
+    if (rootElement) {
+      rootElement.classList.toggle("merged-link-lab-page-pane-reserved", reservedWidth > 0 && !layoutReservationApplied);
+      rootElement.style.setProperty(
+        "--merged-link-lab-page-pane-reserved-space",
+        layoutReservationApplied ? "0px" : reservedValue
+      );
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (bodyElement) {
+      bodyElement.classList.toggle("merged-link-lab-page-pane-reserved", reservedWidth > 0 && !layoutReservationApplied);
+      bodyElement.style.setProperty(
+        "--merged-link-lab-page-pane-reserved-space",
+        layoutReservationApplied ? "0px" : reservedValue
+      );
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (workflowRailElements.root) {
+      workflowRailElements.root.style.setProperty(
+        "--merged-link-lab-page-pane-expanded-width",
+        getExpandedPaneWidth(viewportWidth) + "px"
+      );
+    }
+  }
+
+  // Function: set pane expanded.
+  function setPaneExpanded(isExpanded) {
+    workflowRailElements.isExpanded = !!isExpanded && !!latestSnapshot;
+
+    // Branch: follow this path only when the current condition passes.
+    if (!workflowRailElements.root) {
+      syncPageViewportReservation();
+      return;
+    }
+
+    workflowRailElements.root.classList.toggle("has-snapshot", !!latestSnapshot);
+    workflowRailElements.root.classList.toggle("is-expanded", workflowRailElements.isExpanded);
+    workflowRailElements.root.setAttribute("aria-hidden", latestSnapshot ? "false" : "true");
+
+    // Branch: follow this path only when the current condition passes.
+    if (workflowRailElements.railToggleButton) {
+      workflowRailElements.railToggleButton.setAttribute("aria-expanded", String(workflowRailElements.isExpanded));
+      workflowRailElements.railToggleButton.setAttribute(
+        "aria-label",
+        workflowRailElements.isExpanded
+      ? "Collapse URL Forensics Workbench"
+      : "Open URL Forensics Workbench"
+      );
+    }
+
+    syncPageViewportReservation();
+  }
+
+  // Function: show pane.
+  function showPane() {
+    const paneRoot = ensurePane();
+    // Branch: follow this path only when the current condition passes.
+    if (!paneRoot || !latestSnapshot) {
+      return;
+    }
+
+    setPaneExpanded(workflowRailElements.isExpanded);
+  }
+
+  // Function: hide pane.
+  function hidePane() {
+    workflowRailElements.isExpanded = false;
+
+    // Branch: follow this path only when the current condition passes.
+    if (!workflowRailElements.root) {
+      syncPageViewportReservation();
+      return;
+    }
+
+    workflowRailElements.root.classList.remove("has-snapshot", "is-expanded");
+    workflowRailElements.root.setAttribute("aria-hidden", "true");
+
+    // Branch: follow this path only when the current condition passes.
+    if (workflowRailElements.railToggleButton) {
+      workflowRailElements.railToggleButton.setAttribute("aria-expanded", "false");
+    }
+
+    syncPageViewportReservation();
+  }
+
+  // Function: copy pane rich or plain.
+  async function copyPaneRichOrPlain(element) {
+    // Branch: follow this path only when the current condition passes.
+    if (
+      element &&
+      navigator.clipboard &&
+      typeof navigator.clipboard.write === "function" &&
+      typeof ClipboardItem !== "undefined"
+    ) {
+      // Branch: try the primary operation before handling failures.
+      try {
+        const clipboardItem = new ClipboardItem({
+          "text/html": new Blob([element.innerHTML || ""], { type: "text/html" }),
+          "text/plain": new Blob([element.innerText || element.textContent || ""], { type: "text/plain" })
+        });
+
+        await navigator.clipboard.write([clipboardItem]);
+        return true;
+      // Branch: handle errors from the guarded operation.
+      } catch {}
+    }
+
+    return copyPaneText(element);
+  }
+
+  // Function: count section lines.
+  function countSectionLines(sections) {
+    // Loop: accumulate the current collection into one result.
+    return (sections || []).reduce(function addSectionLines(totalCount, section) {
+      return totalCount + ((section && section.lines) ? section.lines.length : 0);
+    }, 0);
+  }
+
+  // Function: build mirror frame document.
+  function buildMirrorFrameDocument(htmlMarkup, options) {
+    const optionBag = options || {};
+    const shouldDisableSameDocumentLinks = optionBag.disableSameDocumentLinks === true;
+    const mirrorBaseUrl = String(optionBag.baseUrl || window.location.href || "");
+    const mirrorMarkup = htmlMarkup
+      ? (shouldDisableSameDocumentLinks ? disableMirrorSameDocumentLinksInMarkup(htmlMarkup, mirrorBaseUrl) : htmlMarkup)
+      : '<div class="merged-link-lab-mirror-empty">Open an inbox email to mirror its formatted body here.</div>';
+
+    return [
+      "<!doctype html>",
+      "<html>",
+      "<head>",
+      '  <meta charset="utf-8">',
+      '  <base href="' + escapeHtmlAttribute(mirrorBaseUrl) + '" target="_blank">',
+      "  <style>",
+      "    html, body { margin: 0; padding: 0; background: #ffffff; color: #1f1f1f; }",
+      "    body { padding: 18px; }",
+      "    img, table, iframe { max-width: 100%; }",
+      "    img { height: auto; }",
+      "    a { color: #0f766e; }",
+      shouldDisableSameDocumentLinks
+        ? "    a[data-merged-link-lab-disabled-link='true'] { color: #4a4a4a; text-decoration: none; cursor: default; }"
+        : "",
+      "    .merged-link-lab-mirror-empty {",
+      "      padding: 18px;",
+      "      border: 1px dashed #cfcfcf;",
+      "      border-radius: 10px;",
+      "      background: #f6f6f6;",
+      "      font: 13px/1.5 Arial, sans-serif;",
+      "      color: #4a4a4a;",
+      "    }",
+      "  </style>",
+      "</head>",
+      "<body>",
+      mirrorMarkup,
+      "</body>",
+      "</html>"
+    ].join("");
+  }
+
+  // Function: remove hash from url value.
+  function removeHashFromUrlValue(urlValue) {
+    return String(urlValue || "").replace(/#.*$/, "");
+  }
+
+  // Function: is same document mirror link.
+  function isSameDocumentMirrorLink(hrefValue, baseUrl) {
+    const trimmedHrefValue = String(hrefValue || "").trim();
+    const trimmedBaseUrl = String(baseUrl || "").trim();
+
+    if (!trimmedHrefValue || !trimmedBaseUrl) {
+      return false;
+    }
+
+    if (trimmedHrefValue.charAt(0) === "#") {
+      return true;
+    }
+
+    try {
+      const resolvedLinkUrl = new URL(trimmedHrefValue, trimmedBaseUrl);
+      const resolvedBaseUrl = new URL(trimmedBaseUrl);
+
+      return removeHashFromUrlValue(resolvedLinkUrl.toString()) === removeHashFromUrlValue(resolvedBaseUrl.toString());
+    } catch {
+      return false;
+    }
+  }
+
+  // Function: disable same document mirror links in markup.
+  function disableMirrorSameDocumentLinksInMarkup(htmlMarkup, baseUrl) {
+    const safeHtmlMarkup = String(htmlMarkup || "");
+
+    if (!safeHtmlMarkup || typeof DOMParser !== "function") {
+      return safeHtmlMarkup;
+    }
+
+    try {
+      const parsedDocument = new DOMParser().parseFromString(safeHtmlMarkup, "text/html");
+      const mirrorRoot = parsedDocument.body || parsedDocument.documentElement;
+
+      if (!mirrorRoot || typeof mirrorRoot.querySelectorAll !== "function") {
+        return safeHtmlMarkup;
+      }
+
+      Array.from(mirrorRoot.querySelectorAll("a[href]")).forEach(function disableMirrorAnchor(anchorElement) {
+        const hrefValue = anchorElement.getAttribute("href");
+
+        if (!isSameDocumentMirrorLink(hrefValue, baseUrl)) {
+          return;
+        }
+
+        anchorElement.setAttribute("data-merged-link-lab-disabled-link", "true");
+        anchorElement.setAttribute("aria-disabled", "true");
+        anchorElement.setAttribute("tabindex", "-1");
+        anchorElement.removeAttribute("href");
+        anchorElement.removeAttribute("target");
+        anchorElement.removeAttribute("rel");
+      });
+
+      return parsedDocument.body && typeof parsedDocument.body.innerHTML === "string"
+        ? parsedDocument.body.innerHTML
+        : safeHtmlMarkup;
+    } catch {
+      return safeHtmlMarkup;
+    }
+  }
+
+  // Function: render converted pane.
+  function renderConvertedPane(htmlMarkup, options) {
+    // Branch: follow this path only when the current condition passes.
+    if (!workflowRailElements.convertedPane) {
+      return;
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (workflowRailElements.convertedPane.tagName === "IFRAME") {
+      workflowRailElements.convertedPane.srcdoc = buildMirrorFrameDocument(htmlMarkup, options);
+      return;
+    }
+
+    replaceElementMarkup(
+      workflowRailElements.convertedPane,
+      htmlMarkup || renderEmptyState("The formatted email mirror will appear here when a snapshot is available.")
+    );
+  }
+
+  // Function: set mirror link hover info text.
+  function setMirrorLinkHoverInfoText(textValue, options) {
+    const optionBag = options && typeof options === "object" ? options : {};
+    const safeTextValue = String(textValue || "").trim();
+
+    // Branch: follow this path only when the current condition passes.
+    if (!workflowRailElements.hoverLinkInfoValue) {
+      return;
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (
+      optionBag.persistDetectedValue !== false &&
+      safeTextValue &&
+      safeTextValue !== defaultMirrorLinkHoverMessage &&
+      safeTextValue !== unavailableMirrorLinkHoverMessage
+    ) {
+      latestDetectedMirrorHoverInfoText = safeTextValue;
+    }
+
+    let outputTextValue = safeTextValue;
+    const shouldPreserveDetectedValue = optionBag.preserveDetectedValue !== false;
+
+    // Branch: follow this path only when the current condition passes.
+    if (
+      shouldPreserveDetectedValue &&
+      latestDetectedMirrorHoverInfoText &&
+      (!outputTextValue || outputTextValue === defaultMirrorLinkHoverMessage)
+    ) {
+      outputTextValue = latestDetectedMirrorHoverInfoText;
+    }
+
+    workflowRailElements.hoverLinkInfoValue.textContent =
+      outputTextValue || latestDetectedMirrorHoverInfoText || defaultMirrorLinkHoverMessage;
+  }
+
+  // Function: get nearest anchor element from event target.
+  function getNearestAnchorFromEventTarget(eventTarget) {
+    const startElement = eventTarget && eventTarget.nodeType === 1
+      ? eventTarget
+      : (eventTarget && eventTarget.parentElement ? eventTarget.parentElement : null);
+
+    // Branch: follow this path only when the current condition passes.
+    if (!startElement || typeof startElement.closest !== "function") {
+      return null;
+    }
+
+    return startElement.closest("a[href]");
+  }
+
+  // Function: decode mirror hover segment.
+  function decodeMirrorHoverSegment(segmentValue) {
+    const safeSegmentValue = String(segmentValue || "");
+
+    // Branch: follow this path only when the current condition passes.
+    if (!safeSegmentValue) {
+      return "";
+    }
+
+    // Branch: try the primary operation before handling failures.
+    try {
+      return decodeURIComponent(safeSegmentValue);
+    // Branch: handle errors from the guarded operation.
+    } catch {
+      return safeSegmentValue;
+    }
+  }
+
+  // Function: get mirror hover detection type.
+  function getMirrorHoverDetectionType(anchorElement, urlValue) {
+    const attributeType = String(
+      anchorElement.getAttribute("data-link-type") ||
+      anchorElement.getAttribute("data-merged-link-lab") ||
+      ""
+    ).trim();
+
+    // Branch: follow this path only when the current condition passes.
+    if (attributeType) {
+      return attributeType;
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (
+      mergedLinkLabPipeline &&
+      typeof mergedLinkLabPipeline.classifyUrlValue === "function"
+    ) {
+      const classifiedType = String(mergedLinkLabPipeline.classifyUrlValue(urlValue || "") || "").trim();
+      // Branch: follow this path only when the current condition passes.
+      if (classifiedType) {
+        return classifiedType;
+      }
+    }
+
+    return "unknown";
+  }
+
+  // Function: parse mirror hover url components.
+  function parseMirrorHoverUrlComponents(urlValue, baseUrl) {
+    const safeUrlValue = String(urlValue || "").trim();
+    const safeBaseUrl = String(baseUrl || "").trim();
+    const emptyValue = "(none)";
+    const componentValues = {
+      protocol: "unknown",
+      domain: "unknown-host",
+      subfolder: emptyValue,
+      slug: emptyValue,
+      parameters: emptyValue,
+      anchor: emptyValue
+    };
+
+    // Branch: follow this path only when the current condition passes.
+    if (!safeUrlValue) {
+      return componentValues;
+    }
+
+    let parsedUrl = null;
+    // Branch: try the primary operation before handling failures.
+    try {
+      parsedUrl = safeBaseUrl ? new URL(safeUrlValue, safeBaseUrl) : new URL(safeUrlValue);
+    // Branch: handle errors from the guarded operation.
+    } catch {
+      const protocolMatch = safeUrlValue.match(/^([a-z0-9+.-]+):/i);
+      // Branch: follow this path only when the current condition passes.
+      if (protocolMatch && protocolMatch[1]) {
+        componentValues.protocol = String(protocolMatch[1]).toLowerCase();
+      }
+      return componentValues;
+    }
+
+    const protocolValue = String(parsedUrl.protocol || "").replace(/:$/, "").trim();
+    componentValues.protocol = protocolValue || componentValues.protocol;
+    componentValues.domain = parsedUrl.host || parsedUrl.hostname || componentValues.domain;
+
+    const pathValue = String(parsedUrl.pathname || "");
+    const hasTrailingSlash = pathValue.length > 1 && /\/$/.test(pathValue);
+    const pathSegments = pathValue
+      .split("/")
+      .filter(Boolean)
+      .map(function mapPathSegment(segment) {
+        return decodeMirrorHoverSegment(segment);
+      });
+
+    // Branch: follow this path only when the current condition passes.
+    if (pathSegments.length) {
+      // Branch: follow this path only when the current condition passes.
+      if (hasTrailingSlash) {
+        componentValues.subfolder = "/" + pathSegments.join("/");
+      } else if (pathSegments.length > 1) {
+        componentValues.subfolder = "/" + pathSegments.slice(0, pathSegments.length - 1).join("/");
+        componentValues.slug = pathSegments[pathSegments.length - 1] || emptyValue;
+      } else {
+        componentValues.slug = pathSegments[0] || emptyValue;
+      }
+    }
+
+    const parametersValue = String(parsedUrl.search || "").replace(/^\?/, "");
+    const anchorValue = String(parsedUrl.hash || "").replace(/^#/, "");
+
+    componentValues.parameters = decodeMirrorHoverSegment(parametersValue) || emptyValue;
+    componentValues.anchor = decodeMirrorHoverSegment(anchorValue) || emptyValue;
+
+    return componentValues;
+  }
+
+  // Function: format mirror hover href details.
+  function formatMirrorHoverHrefDetails(anchorElement, mirrorDocument) {
+    const rawHrefValue = String(anchorElement.getAttribute("href") || "").trim();
+    let resolvedHrefValue = String(anchorElement.href || "").trim();
+    const baseUrl = String(mirrorDocument.baseURI || window.location.href || "").trim();
+
+    // Branch: follow this path only when the current condition passes.
+    if (!resolvedHrefValue && rawHrefValue) {
+      // Branch: try the primary operation before handling failures.
+      try {
+        resolvedHrefValue = new URL(rawHrefValue, baseUrl).toString();
+      // Branch: handle errors from the guarded operation.
+      } catch {
+        resolvedHrefValue = rawHrefValue;
+      }
+    }
+
+    const formattedUrlValue = resolvedHrefValue || rawHrefValue || "";
+    const urlComponents = parseMirrorHoverUrlComponents(formattedUrlValue, baseUrl);
+    const detailLines = [
+      "Detection Type: " + getMirrorHoverDetectionType(anchorElement, formattedUrlValue),
+      "Protocol: " + urlComponents.protocol,
+      "Domain: " + urlComponents.domain,
+      "Subfolder: " + urlComponents.subfolder,
+      "Slug: " + urlComponents.slug,
+      "Parameters: " + urlComponents.parameters,
+      "Anchor: " + urlComponents.anchor
+    ];
+
+    return detailLines.join("\n");
+  }
+
+  // Function: bind mirror hover inspector.
+  function bindMirrorHoverInspector() {
+    // Branch: follow this path only when the current condition passes.
+    if (mirrorHoverListenerCleanup) {
+      mirrorHoverListenerCleanup();
+      mirrorHoverListenerCleanup = null;
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (!workflowRailElements.convertedPane || workflowRailElements.convertedPane.tagName !== "IFRAME") {
+      setMirrorLinkHoverInfoText(defaultMirrorLinkHoverMessage);
+      return;
+    }
+
+    let mirrorDocument = null;
+    // Branch: try the primary operation before handling failures.
+    try {
+      mirrorDocument = workflowRailElements.convertedPane.contentDocument || null;
+    // Branch: handle errors from the guarded operation.
+    } catch {
+      setMirrorLinkHoverInfoText(unavailableMirrorLinkHoverMessage);
+      return;
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (!mirrorDocument) {
+      setMirrorLinkHoverInfoText(defaultMirrorLinkHoverMessage);
+      return;
+    }
+
+    // Remove native browser link tooltips inside the mirror so details appear only in the URL pane.
+    Array.from(mirrorDocument.querySelectorAll("a[title]")).forEach(function clearAnchorTitle(anchorElement) {
+      anchorElement.removeAttribute("title");
+    });
+
+    // Function: handle mirror hover.
+    const handleMirrorHover = function handleMirrorHover(event) {
+      const hoveredAnchor = getNearestAnchorFromEventTarget(event.target);
+      // Branch: follow this path only when the current condition passes.
+      if (!hoveredAnchor) {
+        return;
+      }
+
+      setMirrorLinkHoverInfoText(formatMirrorHoverHrefDetails(hoveredAnchor, mirrorDocument));
+    };
+
+    mirrorDocument.addEventListener("mouseover", handleMirrorHover, true);
+    mirrorDocument.addEventListener("focusin", handleMirrorHover, true);
+
+    mirrorHoverListenerCleanup = function cleanupMirrorHoverListeners() {
+      mirrorDocument.removeEventListener("mouseover", handleMirrorHover, true);
+      mirrorDocument.removeEventListener("focusin", handleMirrorHover, true);
+    };
+
+    setMirrorLinkHoverInfoText(defaultMirrorLinkHoverMessage);
+  }
+
+  // Function: get mirror pane markup.
+  function getMirrorPaneMarkup(snapshot) {
+    // Branch: follow this path only when the current condition passes.
+    if (!snapshot) {
+      return "";
+    }
+
+    const pipelineResult = snapshot.pipeline || null;
+    // Branch: follow this path only when the current condition passes.
+    if (pipelineResult && pipelineResult.rewrittenHtml) {
+      return pipelineResult.rewrittenHtml;
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (snapshot.sourceHtml) {
+      return snapshot.sourceHtml;
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (snapshot.rawText) {
+      return "<pre>" + mergedLinkLabPipeline.escapeHtml(snapshot.rawText) + "</pre>";
+    }
+
+    return "";
+  }
+
+  // Function: format timing value.
+  function formatTimingValue(value) {
+    return Number.isFinite(value) && value >= 0 ? value.toFixed(1) + " ms" : "unavailable";
+  }
+
+  // Function: format byte size.
+  function formatByteSize(bytes) {
+    // Branch: follow this path only when the current condition passes.
+    if (!Number.isFinite(bytes) || bytes < 0) {
+      return "unavailable";
+    }
+
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    let value = bytes;
+    let unitIndex = 0;
+
+    // Loop: repeat while the guard condition stays true.
+    while (value >= 1024 && unitIndex < units.length - 1) {
+      value /= 1024;
+      unitIndex += 1;
+    }
+
+    return value.toFixed(value >= 10 || unitIndex === 0 ? 0 : 1) + " " + units[unitIndex];
+  }
+
+  // Function: build diagnostics sections.
+  function buildDiagnosticsSections(snapshot) {
+    const pipelineResult = snapshot && snapshot.pipeline ? snapshot.pipeline : null;
+    const pipelineSettings = snapshot && snapshot.pipelineSettings
+      ? snapshot.pipelineSettings
+      : (pipelineResult && pipelineResult.options ? pipelineResult.options : getPipelineSettings());
+    const pipelineDiagnostics = pipelineResult && pipelineResult.diagnostics && pipelineResult.diagnostics.lines
+      ? pipelineResult.diagnostics.lines
+      : [];
+    const pipelineErrors = pipelineResult && pipelineResult.errors ? pipelineResult.errors : [];
+    const navigationEntry =
+      typeof performance !== "undefined" && typeof performance.getEntriesByType === "function"
+        ? performance.getEntriesByType("navigation")[0] || null
+        : null;
+    return [
+      {
+        title: "Extension Details",
+        lines: [
+          "Name: " + (extensionManifest.name || "URL Forensics Workbench"),
+          "Version: " + (extensionManifest.version || "0.0.0"),
+          "URL Normalization + Repair: " + (pipelineSettings.enableUrlNormalizationRepair ? "enabled" : "disabled"),
+          "Replace Email Body With Mirror: " + (extensionSettings.replaceEmailBodyWithMirrorContent ? "enabled" : "disabled"),
+          "Auto-Apply Mirror For Configured Senders: " + (extensionSettings.autoApplyMirrorForConfiguredSenders ? "enabled" : "disabled"),
+          "Configured Auto-Apply Sender Count: " + String(extensionSettings.autoApplyMirrorSenderEmailList.length),
+          "Inbox Snapshot Ready: " + (snapshot ? "yes" : "no")
+        ]
+      },
+      {
+        title: "Runtime Status",
+        lines: [
+          "Ready State: " + (document.readyState || "unknown"),
+          "Navigation Type: " + (navigationEntry && navigationEntry.type ? navigationEntry.type : "unavailable"),
+          "DOM Interactive: " + formatTimingValue(navigationEntry ? navigationEntry.domInteractive : NaN),
+          "DOMContentLoaded End: " + formatTimingValue(navigationEntry ? navigationEntry.domContentLoadedEventEnd : NaN),
+          "Load Event End: " + formatTimingValue(navigationEntry ? navigationEntry.loadEventEnd : NaN),
+          "Time Since Navigation Start: " + formatTimingValue(typeof performance !== "undefined" ? performance.now() : NaN)
+        ]
+      },
+      {
+        title: "Pipeline Diagnostics",
+        lines: snapshot
+          ? [
+              "Detected At: " + formatTimestamp(snapshot.detectedAt),
+              "Detection Mode: " + (snapshot.detectionMode || "unknown"),
+              "Section Label: " + (snapshot.sectionLabel || "Opened email body"),
+              "Source Type: " + (snapshot.sourceHtml ? "HTML email body snapshot" : "Plain text email snapshot"),
+              "Raw URL Tokens: " + String(pipelineResult && pipelineResult.items ? pipelineResult.items.length : 0),
+              "Final URL Count: " + String(pipelineResult && pipelineResult.finalUrls ? pipelineResult.finalUrls.length : 0),
+              "Changed URL Count: " + String(pipelineResult && pipelineResult.changedUrls ? pipelineResult.changedUrls.length : 0),
+              "Rewritten Count: " + String(pipelineResult && pipelineResult.rewrittenCount ? pipelineResult.rewrittenCount : 0),
+              "Digest Entry Count: " + String(pipelineResult && pipelineResult.digestEntries ? pipelineResult.digestEntries.length : 0),
+              "Pipeline Errors: " + (pipelineErrors.length ? pipelineErrors.join(" | ") : "none"),
+              ""
+            ].concat(
+              pipelineDiagnostics.length
+                ? pipelineDiagnostics
+                : ["No pipeline diagnostics are available for the current snapshot."]
+            )
+          : [
+              "Waiting for a detected email body.",
+              "Open an inbox message so the panel can populate the converted output and Link Lab tabs."
+            ]
+      }
+    ];
+  }
+
+  // Function: render diagnostics sections.
+  function renderDiagnosticsSections(sections) {
+    // Branch: follow this path only when the current condition passes.
+    if (!workflowRailElements.diagnosticsPane) {
+      return;
+    }
+
+    replaceElementMarkup(workflowRailElements.diagnosticsPane, (sections || [])
+      // Loop: transform each item in the current collection.
+      .map(function createDiagnosticsSectionMarkup(section) {
+        return [
+          '<section class="merged-link-lab-page-pane__diagnostic-card">',
+          '  <div class="merged-link-lab-page-pane__diagnostic-title">' + mergedLinkLabPipeline.escapeHtml(section.title || "Diagnostics") + "</div>",
+          '  <pre class="merged-link-lab-page-pane__diagnostic-block">' + mergedLinkLabPipeline.escapeHtml((section.lines || []).join("\n")) + "</pre>",
+          "</section>"
+        ].join("");
+      })
+      .join(""));
+  }
+
+  // Function: sync lab frame with snapshot.
+  function syncLabFrameWithSnapshot(snapshot) {
+    // Branch: follow this path only when the current condition passes.
+    if (
+      !workflowRailElements.labFrame ||
+      !workflowRailElements.labFrameLoaded ||
+      !workflowRailElements.labFrame.contentWindow
+    ) {
+      return;
+    }
+
+    workflowRailElements.labFrame.contentWindow.postMessage(
+      snapshot
+        ? {
+            type: "merged-link-lab:set-snapshot",
+            snapshot: snapshot
+          }
+        : {
+            type: "merged-link-lab:clear-snapshot"
+          },
+      "*"
+    );
+  }
+
+  // Function: force refresh current snapshot.
+  function forceRefreshCurrentSnapshot() {
+    syncLabFrameWithSnapshot(null);
+    syncEmailSnapshot({ forcePublish: true });
+  }
+
+  // Function: render snapshot pane.
+  function renderSnapshotPane(snapshot) {
+    const paneRoot = ensurePane();
+    // Branch: follow this path only when the current condition passes.
+    if (!paneRoot || !snapshot || !snapshot.pipeline) {
+      return;
+    }
+
+    const pipelineResult = snapshot.pipeline;
+    const finalUrls = pipelineResult.finalUrls || [];
+
+    // Branch: follow this path only when the current condition passes.
+    if (workflowRailElements.railStatus) {
+      workflowRailElements.railStatus.textContent = "Email ready";
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (workflowRailElements.railCount) {
+      workflowRailElements.railCount.textContent = formatMetricCount(finalUrls.length, "URL", "URLs");
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (workflowRailElements.railBadge) {
+      workflowRailElements.railBadge.textContent = formatRailBadgeCount(finalUrls.length);
+    }
+
+    renderConvertedPane(getMirrorPaneMarkup(snapshot), {
+      disableSameDocumentLinks: snapshot.isTopicDigest === true,
+      baseUrl: window.location.href || ""
+    });
+    renderDiagnosticsSections(buildDiagnosticsSections(snapshot));
+    syncLabFrameWithSnapshot(snapshot);
+  }
+
+  // Function: clear pane.
+  function clearPane() {
+    // Branch: follow this path only when the current condition passes.
+    if (!workflowRailElements.root) {
+      return;
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (workflowRailElements.railStatus) {
+      workflowRailElements.railStatus.textContent = "No email";
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (workflowRailElements.railCount) {
+      workflowRailElements.railCount.textContent = "0 URLs";
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (workflowRailElements.railBadge) {
+      workflowRailElements.railBadge.textContent = "0";
+    }
+
+    latestDetectedMirrorHoverInfoText = "";
+    setMirrorLinkHoverInfoText(defaultMirrorLinkHoverMessage, {
+      preserveDetectedValue: false,
+      persistDetectedValue: false
+    });
+    renderConvertedPane("");
+    renderDiagnosticsSections(buildDiagnosticsSections(null));
+    syncLabFrameWithSnapshot(null);
+  }
+
+  // Function: ensure pane.
+  function ensurePane() {
+    // Branch: follow this path only when the current condition passes.
+    if (workflowRailElements.root && workflowRailElements.root.isConnected) {
+      return workflowRailElements.root;
+    }
+
+    const paneRoot = document.createElement("aside");
+    paneRoot.id = "merged-link-lab-page-pane";
+    paneRoot.setAttribute("aria-hidden", "true");
+    replaceElementMarkup(paneRoot, [
+      '<button type="button" class="merged-link-lab-page-pane__rail" data-role="railToggleButton" aria-expanded="false">',
+      '  <span class="merged-link-lab-page-pane__rail-badge" data-role="railBadge">0</span>',
+      '  <span class="merged-link-lab-page-pane__rail-dot" aria-hidden="true"></span>',
+      '  <span class="merged-link-lab-page-pane__rail-bubble-title" aria-hidden="true">Lab</span>',
+      '  <span class="merged-link-lab-page-pane__rail-title">URL Forensics Workbench</span>',
+      '  <span class="merged-link-lab-page-pane__rail-status" data-role="railStatus">No email</span>',
+      '  <span class="merged-link-lab-page-pane__rail-count" data-role="railCount">0 URLs</span>',
+      "</button>",
+      '<div class="merged-link-lab-page-pane__shell">',
+      '  <div class="merged-link-lab-page-pane__panel-head">',
+      '    <div class="merged-link-lab-page-pane__panel-copy">',
+      '      <strong class="merged-link-lab-page-pane__panel-title"><span class="merged-link-lab-page-pane__icon merged-link-lab-page-pane__title-icon" data-icon="travel_explore" aria-hidden="true">travel_explore</span><span>URL Forensics Workbench</span></strong>',
+      '      <span class="merged-link-lab-page-pane__panel-subtitle">Detected email body workspace</span>',
+      "    </div>",
+      '    <div class="merged-link-lab-page-pane__panel-actions">',
+      '      <button type="button" data-role="settingsButton"><span class="merged-link-lab-page-pane__icon merged-link-lab-page-pane__button-icon" data-icon="settings" aria-hidden="true">settings</span><span>Settings</span></button>',
+      '      <button type="button" data-role="refreshButton"><span class="merged-link-lab-page-pane__icon merged-link-lab-page-pane__button-icon" data-icon="refresh" aria-hidden="true">refresh</span><span>Refresh</span></button>',
+      '      <button type="button" data-role="collapseButton"><span class="merged-link-lab-page-pane__icon merged-link-lab-page-pane__button-icon" data-icon="close_fullscreen" aria-hidden="true">close_fullscreen</span><span>Minimize</span></button>',
+      "    </div>",
+      "  </div>",
+      '  <div class="merged-link-lab-page-pane__tab-bar" role="tablist" aria-label="URL Forensics Workbench tabs">',
+      '    <button type="button" class="merged-link-lab-page-pane__tab-button" data-tab-button="converted" role="tab" aria-selected="true"><span class="merged-link-lab-page-pane__icon merged-link-lab-page-pane__button-icon" data-icon="mail" aria-hidden="true">mail</span><span>Email Mirror</span></button>',
+      '    <button type="button" class="merged-link-lab-page-pane__tab-button" data-tab-button="lab" role="tab" aria-selected="false"><span class="merged-link-lab-page-pane__icon merged-link-lab-page-pane__button-icon" data-icon="account_tree" aria-hidden="true">account_tree</span><span>Workflow</span></button>',
+      '    <button type="button" class="merged-link-lab-page-pane__tab-button" data-tab-button="diagnostics" role="tab" aria-selected="false"><span class="merged-link-lab-page-pane__icon merged-link-lab-page-pane__button-icon" data-icon="analytics" aria-hidden="true">analytics</span><span>Sidepanel Diagnostics</span></button>',
+      "  </div>",
+      '  <div class="merged-link-lab-page-pane__hover-link-box" data-role="hoverLinkInfo" aria-live="polite">',
+      '    <p class="merged-link-lab-page-pane__hover-link-label"><span class="merged-link-lab-page-pane__icon merged-link-lab-page-pane__button-icon" data-icon="link" aria-hidden="true">link</span><span>Hovered Link</span></p>',
+      '    <pre class="merged-link-lab-page-pane__hover-link-value" data-role="hoverLinkInfoValue">Hover over a link to reveal URL components</pre>',
+      "  </div>",
+      '  <div class="merged-link-lab-page-pane__tab-panel-stack">',
+      '    <section class="merged-link-lab-page-pane__tab-panel is-active" data-tab-panel="converted" aria-hidden="false">',
+      '      <div class="merged-link-lab-page-pane__preview-shell">',
+      '        <iframe class="merged-link-lab-page-pane__mirror-frame" data-role="convertedPane" title="Formatted email mirror" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"></iframe>',
+      "      </div>",
+      "    </section>",
+      '    <section class="merged-link-lab-page-pane__tab-panel is-hidden" data-tab-panel="lab" aria-hidden="true">',
+      '      <div class="merged-link-lab-page-pane__frame-shell">',
+      '        <iframe class="merged-link-lab-page-pane__lab-frame" data-role="labFrame" title="URL Forensics Workbench workspace"></iframe>',
+      "      </div>",
+      "    </section>",
+      '    <section class="merged-link-lab-page-pane__tab-panel is-hidden" data-tab-panel="diagnostics" aria-hidden="true">',
+      '      <div class="merged-link-lab-page-pane__diagnostics-pane" data-role="diagnosticsPane"></div>',
+      "    </section>",
+      "  </div>",
+      "</div>"
+    ].join(""));
+
+    const mountTarget = document.body || document.documentElement;
+    // Branch: follow this path only when the current condition passes.
+    if (!mountTarget) {
+      return null;
+    }
+
+    mountTarget.appendChild(paneRoot);
+
+    workflowRailElements.root = paneRoot;
+    workflowRailElements.railToggleButton = paneRoot.querySelector('[data-role="railToggleButton"]');
+    workflowRailElements.railBadge = paneRoot.querySelector('[data-role="railBadge"]');
+    workflowRailElements.railStatus = paneRoot.querySelector('[data-role="railStatus"]');
+    workflowRailElements.railCount = paneRoot.querySelector('[data-role="railCount"]');
+    workflowRailElements.settingsButton = paneRoot.querySelector('[data-role="settingsButton"]');
+    workflowRailElements.refreshButton = paneRoot.querySelector('[data-role="refreshButton"]');
+    workflowRailElements.tabButtons = Array.from(paneRoot.querySelectorAll("[data-tab-button]"));
+    workflowRailElements.tabPanels = Array.from(paneRoot.querySelectorAll("[data-tab-panel]"));
+    workflowRailElements.hoverLinkInfo = paneRoot.querySelector('[data-role="hoverLinkInfo"]');
+    workflowRailElements.hoverLinkInfoValue = paneRoot.querySelector('[data-role="hoverLinkInfoValue"]');
+    workflowRailElements.convertedPane = paneRoot.querySelector('[data-role="convertedPane"]');
+    workflowRailElements.labFrame = paneRoot.querySelector('[data-role="labFrame"]');
+    workflowRailElements.diagnosticsPane = paneRoot.querySelector('[data-role="diagnosticsPane"]');
+    workflowRailElements.collapseButton = paneRoot.querySelector('[data-role="collapseButton"]');
+
+    // Branch: follow this path only when the current condition passes.
+    if (workflowRailElements.convertedPane && workflowRailElements.convertedPane.tagName === "IFRAME") {
+      // Function: bind mirror hover inspector on mirror load.
+      workflowRailElements.convertedPane.addEventListener("load", function handleMirrorFrameLoad() {
+        bindMirrorHoverInspector();
+      });
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (workflowRailElements.labFrame) {
+      workflowRailElements.labFrame.src = extensionApi.runtime.getURL("core-components/extension-workbench.html");
+      // Function: handle lab frame load.
+      workflowRailElements.labFrame.addEventListener("load", function handleLabFrameLoad() {
+        workflowRailElements.labFrameLoaded = true;
+        syncLabFrameWithSnapshot(latestSnapshot);
+      });
+    }
+
+    // Function: toggle workflow rail.
+    workflowRailElements.railToggleButton.addEventListener("click", function toggleWorkflowRail() {
+      // Branch: follow this path only when the current condition passes.
+      if (!latestSnapshot) {
+        return;
+      }
+
+      setPaneExpanded(!workflowRailElements.isExpanded);
+    });
+
+    // Function: collapse workflow rail.
+    workflowRailElements.collapseButton.addEventListener("click", function collapseWorkflowRail() {
+      setPaneExpanded(false);
+    });
+
+    // Branch: follow this path only when the current condition passes.
+    if (workflowRailElements.settingsButton) {
+      // Function: open workflow settings.
+      workflowRailElements.settingsButton.addEventListener("click", function openWorkflowSettings() {
+        openSettingsPage();
+      });
+    }
+
+    // Function: refresh workflow rail.
+    workflowRailElements.refreshButton.addEventListener("click", function refreshWorkflowRail() {
+      forceRefreshCurrentSnapshot();
+    });
+
+    // Loop: iterate through each item in the current collection.
+    workflowRailElements.tabButtons.forEach(function bindTabButton(tabButton) {
+      // Function: handle tab click.
+      tabButton.addEventListener("click", function handleTabClick() {
+        setActiveTab(tabButton.getAttribute("data-tab-button"));
+      });
+    });
+
+    setActiveTab(workflowRailElements.activeTabKey);
+    clearPane();
+    return paneRoot;
+  }
+
+  // Function: toggle pane visibility.
+  function togglePaneVisibility() {
+    // Branch: follow this path only when the current condition passes.
+    if (!latestSnapshot) {
+      hidePane();
+      return {
+        ok: false,
+        hasSnapshot: false,
+        visible: false,
+        expanded: false
+      };
+    }
+
+    setPaneExpanded(!workflowRailElements.isExpanded);
+    return {
+      ok: true,
+      hasSnapshot: true,
+      visible: true,
+      expanded: workflowRailElements.isExpanded
+    };
+  }
+
+  // Function: publish snapshot.
+  async function publishSnapshot(snapshot) {
+    latestSnapshot = snapshot;
+    lastPublishedSnapshotSignature = createSnapshotSignature(snapshot);
+
+    const nextPaneKey = createSnapshotPaneKey(snapshot);
+    // Branch: follow this path only when the current condition passes.
+    if (workflowRailElements.currentPaneKey !== nextPaneKey) {
+      workflowRailElements.isExpanded = false;
+    }
+
+    workflowRailElements.currentPaneKey = nextPaneKey;
+    renderSnapshotPane(snapshot);
+    showPane();
+
+    // Branch: try the primary operation before handling failures.
+    try {
+      await extensionApi.runtime.sendMessage({
+        type: "merged-link-lab:email-snapshot",
+        snapshot: snapshot
+      });
+    // Branch: handle errors from the guarded operation.
+    } catch {
+      // Continue so in-page replacement can still run even if messaging fails.
+    }
+
+    await maybeReplaceEmailBodyWithMirrorContent(snapshot);
+  }
+
+  // Function: publish clear.
+  async function publishClear() {
+    latestSnapshot = null;
+    resetLatestEmailDetectionState();
+    lastPublishedSnapshotSignature = "";
+    workflowRailElements.currentPaneKey = "";
+    workflowRailElements.isExpanded = false;
+    clearPane();
+    hidePane();
+
+    // Branch: try the primary operation before handling failures.
+    try {
+      await extensionApi.runtime.sendMessage({
+        type: "merged-link-lab:email-cleared"
+      });
+    // Branch: handle errors from the guarded operation.
+    } catch {
+      return;
+    }
+  }
+
+  // Function: observe email root.
+  function observeEmailRoot(root) {
+    // Branch: follow this path only when the current condition passes.
+    if (!root || observedEmailRoots.has(root)) {
+      return;
+    }
+
+    observedEmailRoots.add(root);
+
+    // Function: schedule after root mutation.
+    const rootObserver = new MutationObserver(function scheduleAfterRootMutation() {
+      window.clearTimeout(scheduledSnapshotTimer);
+      scheduledSnapshotTimer = window.setTimeout(syncEmailSnapshot, 150);
+    });
+
+    rootObserver.observe(root, {
+      childList: true,
+      characterData: true,
+      subtree: true
+    });
+
+    if (String(root.tagName || "").toUpperCase() === "IFRAME") {
+      const attachIframeContentObserver = function attachIframeContentObserver() {
+        const iframeContentRoot = getIframeEmailRootContentElement(root);
+
+        if (!iframeContentRoot) {
+          return;
+        }
+
+        const iframeObserver = new MutationObserver(function scheduleAfterIframeMutation() {
+          window.clearTimeout(scheduledSnapshotTimer);
+          scheduledSnapshotTimer = window.setTimeout(syncEmailSnapshot, 150);
+        });
+
+        iframeObserver.observe(iframeContentRoot, {
+          childList: true,
+          characterData: true,
+          subtree: true
+        });
+      };
+
+      root.addEventListener("load", function scheduleAfterIframeLoad() {
+        attachIframeContentObserver();
+        scheduleSnapshotSync();
+      }, true);
+
+      attachIframeContentObserver();
+    }
+  }
+
+  // Function: sync email snapshot.
+  function syncEmailSnapshot(options) {
+    if (debugApi) {
+      debugApi.functionIn("content.syncEmailSnapshot", {
+        forcePublish: !!(options && options.forcePublish)
+      });
+    }
+
+    const optionBag = options || {};
+    let shouldForcePublish = !!optionBag.forcePublish;
+    const syncStartedAt = Date.now();
+
+    // Branch: follow this path only when the current condition passes.
+    if (!isPageCurrentlyVisible()) {
+      if (debugApi) {
+        debugApi.conditional("content snapshot sync skipped: page not visible");
+        debugApi.functionOut("content.syncEmailSnapshot", { synced: false });
+      }
+      return;
+    }
+
+    const currentLocationHref = getCurrentLocationHref();
+    const hasLocationChanged = currentLocationHref !== lastObservedLocationHref;
+    // Branch: follow this path only when the current condition passes.
+    if (hasLocationChanged) {
+      lastObservedLocationHref = currentLocationHref;
+      resetLatestEmailDetectionState();
+      shouldForcePublish = true;
+      if (debugApi) {
+        debugApi.conditional("content observed location changed", {
+          forcePublish: shouldForcePublish
+        });
+      }
+    }
+
+    const inboxRootCandidates = getInboxRootCandidates();
+    if (debugApi) {
+      debugApi.variable("content inbox candidate count assigned", {
+        candidateCount: inboxRootCandidates.length
+      });
+    }
+    // Loop: iterate through each item in the current collection.
+    inboxRootCandidates.forEach(function observeCandidate(candidate) {
+      if (debugApi && candidate) {
+        debugApi.loop("content observing inbox candidate", {
+          detectionMode: candidate.detectionMode || "",
+          score: candidate.score || 0
+        });
+      }
+      observeEmailRoot(candidate.root);
+    });
+
+    const primaryInboxCandidate = choosePrimaryEmailCandidate(inboxRootCandidates);
+    // Branch: follow this path only when the current condition passes.
+    if (!primaryInboxCandidate || !primaryInboxCandidate.root) {
+      if (debugApi) {
+        debugApi.conditional("content no primary inbox candidate found", {
+          hadLatestSnapshot: !!latestSnapshot
+        });
+      }
+      // Branch: follow this path only when the current condition passes.
+      if (latestSnapshot) {
+        // Branch: follow this path only when the current condition passes.
+        if (hasLocationChanged) {
+          publishClear();
+          return;
+        }
+
+        const missingGraceWindow = getCandidateMissingGraceWindow();
+        // Branch: follow this path only when the current condition passes.
+        if (!inboxCandidateMissingSince) {
+          inboxCandidateMissingSince = syncStartedAt;
+        }
+        const missingDuration = syncStartedAt - inboxCandidateMissingSince;
+        const hasRecentCandidate =
+          latestInboxCandidateSeenAt > 0 && (syncStartedAt - latestInboxCandidateSeenAt) <= missingGraceWindow;
+        const hasRecentSnapshot =
+          latestSnapshot.detectedAt && (syncStartedAt - Number(latestSnapshot.detectedAt || 0)) <= missingGraceWindow;
+
+        // Branch: follow this path only when the current condition passes.
+        if (missingGraceWindow > 0 && (missingDuration <= missingGraceWindow || hasRecentCandidate || hasRecentSnapshot)) {
+          scheduleSnapshotSync();
+          return;
+        }
+
+        const fallbackRoot = latestDetectedEmailRoot;
+        // Branch: follow this path only when the current condition passes.
+        if (fallbackRoot && fallbackRoot.isConnected && !fallbackRoot.closest("#merged-link-lab-page-pane")) {
+          const fallbackText = mergedLinkLabPipeline.cleanInputText(fallbackRoot.innerText || fallbackRoot.textContent || "");
+          const fallbackHasStructuredContent =
+            typeof fallbackRoot.querySelector === "function" &&
+            !!fallbackRoot.querySelector("a[href], p, div, span, table, li, br");
+          // Branch: follow this path only when the current condition passes.
+          if (fallbackText.length >= 8 || fallbackHasStructuredContent) {
+            const fallbackSnapshot = summarizeEmailRoot(fallbackRoot, latestDetectedEmailMode);
+            const fallbackSnapshotSignature = createSnapshotSignature(fallbackSnapshot);
+
+            // Branch: follow this path only when the current condition passes.
+            if (fallbackSnapshotSignature !== lastPublishedSnapshotSignature || shouldForcePublish) {
+              publishSnapshot(fallbackSnapshot);
+            }
+
+            scheduleSnapshotSync();
+            return;
+          }
+        }
+
+        publishClear();
+      }
+      if (debugApi) {
+        debugApi.functionOut("content.syncEmailSnapshot", { synced: false, reason: "no-primary-candidate" });
+      }
+      return;
+    }
+
+    inboxCandidateMissingSince = 0;
+    latestInboxCandidateSeenAt = syncStartedAt;
+    latestDetectedEmailRoot = primaryInboxCandidate.root;
+    latestDetectedEmailMode = primaryInboxCandidate.detectionMode || "";
+
+    const nextSnapshot = summarizeEmailRoot(primaryInboxCandidate.root, latestDetectedEmailMode);
+    const nextSnapshotSignature = createSnapshotSignature(nextSnapshot);
+
+    // Branch: follow this path only when the current condition passes.
+    if (nextSnapshotSignature === lastPublishedSnapshotSignature && !shouldForcePublish) {
+      if (debugApi) {
+        debugApi.conditional("content snapshot unchanged; publish skipped");
+        debugApi.functionOut("content.syncEmailSnapshot", { synced: false, reason: "unchanged" });
+      }
+      return;
+    }
+
+    publishSnapshot(nextSnapshot);
+    if (debugApi) {
+      debugApi.runtime("content snapshot published", {
+        detectionMode: nextSnapshot.detectionMode || "",
+        finalUrlCount: nextSnapshot.pipeline && nextSnapshot.pipeline.finalUrls ? nextSnapshot.pipeline.finalUrls.length : 0
+      });
+      debugApi.functionOut("content.syncEmailSnapshot", { synced: true });
+    }
+  }
+
+  // Function: schedule snapshot sync.
+  function scheduleSnapshotSync() {
+    window.clearTimeout(scheduledSnapshotTimer);
+    scheduledSnapshotTimer = window.setTimeout(syncEmailSnapshot, 150);
+  }
+
+  // Function: install history navigation sync.
+  function installHistoryNavigationSync() {
+    // Branch: follow this path only when the current condition passes.
+    if (!window.history) {
+      return;
+    }
+
+    ["pushState", "replaceState"].forEach(function wrapHistoryMethod(methodName) {
+      const originalMethod = window.history[methodName];
+      // Branch: follow this path only when the current condition passes.
+      if (typeof originalMethod !== "function") {
+        return;
+      }
+
+      window.history[methodName] = function wrappedHistoryMethod() {
+        const result = originalMethod.apply(this, arguments);
+        scheduleSnapshotSync();
+        return result;
+      };
+    });
+  }
+
+  // Function: handle pipeline storage change.
+  function handlePipelineStorageChange(changes, areaName) {
+    if (debugApi) {
+      debugApi.functionIn("content.handlePipelineStorageChange", {
+        areaName: areaName || "",
+        changedKeyCount: changes ? Object.keys(changes).length : 0
+      });
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (areaName !== "local" || !changes) {
+      if (debugApi) {
+        debugApi.conditional("content storage change ignored", { areaName: areaName || "" });
+        debugApi.functionOut("content.handlePipelineStorageChange", { updated: false });
+      }
+      return;
+    }
+
+    let didUpdateSettings = false;
+
+    if (changes[pipelineSettingStorageKey]) {
+      applyStoredPipelineSetting(changes[pipelineSettingStorageKey].newValue);
+      didUpdateSettings = true;
+    }
+
+    if (changes[replaceEmailBodyWithMirrorContentStorageKey]) {
+      applyStoredReplaceEmailBodySetting(changes[replaceEmailBodyWithMirrorContentStorageKey].newValue);
+      didUpdateSettings = true;
+    }
+
+    if (changes[autoApplyMirrorForConfiguredSendersStorageKey]) {
+      applyStoredAutoApplyMirrorForConfiguredSendersSetting(changes[autoApplyMirrorForConfiguredSendersStorageKey].newValue);
+      didUpdateSettings = true;
+    } else if (changes[legacyAutoApplyMirrorForNamedSenderStorageKey]) {
+      applyStoredAutoApplyMirrorForConfiguredSendersSetting(changes[legacyAutoApplyMirrorForNamedSenderStorageKey].newValue);
+      didUpdateSettings = true;
+    }
+
+    if (changes[autoApplyMirrorSenderEmailListStorageKey]) {
+      applyStoredAutoApplyMirrorSenderEmailList(changes[autoApplyMirrorSenderEmailListStorageKey].newValue, { useDefaultList: true });
+      didUpdateSettings = true;
+    }
+
+    if (didUpdateSettings) {
+      setExtensionStorageSnapshot(
+        "storage.onChanged",
+        {
+          [pipelineSettingStorageKey]: extensionSettings.enableUrlNormalizationRepair,
+          [replaceEmailBodyWithMirrorContentStorageKey]: extensionSettings.replaceEmailBodyWithMirrorContent,
+          [autoApplyMirrorForConfiguredSendersStorageKey]: extensionSettings.autoApplyMirrorForConfiguredSenders,
+          [autoApplyMirrorSenderEmailListStorageKey]: extensionSettings.autoApplyMirrorSenderEmailList.slice()
+        },
+        ""
+      );
+      syncEmailSnapshot({ forcePublish: true });
+      if (debugApi) {
+        debugApi.storage("content settings changed; snapshot sync forced", {
+          changedKeyCount: Object.keys(changes).length
+        });
+        debugApi.functionOut("content.handlePipelineStorageChange", { updated: true });
+      }
+    } else if (debugApi) {
+      debugApi.functionOut("content.handlePipelineStorageChange", { updated: false });
+    }
+  }
+
+  // Branch: follow this path only when the current condition passes.
+  if (extensionApi.storage && extensionApi.storage.onChanged) {
+    extensionApi.storage.onChanged.addListener(handlePipelineStorageChange);
+  }
+
+  // Function: handle runtime message.
+  extensionApi.runtime.onMessage.addListener(function handleRuntimeMessage(message) {
+    if (debugApi) {
+      debugApi.messaging("content runtime message received", {
+        type: message && message.type ? message.type : "unknown"
+      });
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (!message) {
+      return undefined;
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (message.type === "merged-link-lab:get-email-snapshot") {
+      // Branch: follow this path only when the current condition passes.
+      if (!latestSnapshot) {
+        syncEmailSnapshot();
+      }
+
+      return Promise.resolve({
+        snapshot: latestSnapshot
+      });
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (message.type === "merged-link-lab:toggle-page-pane") {
+      // Branch: follow this path only when the current condition passes.
+      if (!latestSnapshot) {
+        syncEmailSnapshot();
+      }
+
+      return Promise.resolve(togglePaneVisibility());
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (message.type === "merged-link-lab:apply-rewritten-email") {
+      return Promise.resolve(applyRewriteToEmailBody());
+    }
+
+    return undefined;
+  });
+
+  document.addEventListener("visibilitychange", scheduleSnapshotSync, true);
+  window.addEventListener("focus", scheduleSnapshotSync, true);
+  window.addEventListener("load", scheduleSnapshotSync, true);
+  window.addEventListener("pageshow", scheduleSnapshotSync, true);
+  window.addEventListener("popstate", scheduleSnapshotSync, true);
+  window.addEventListener("hashchange", scheduleSnapshotSync, true);
+  window.addEventListener("resize", syncPageViewportReservation, true);
+
+  const documentObserver = new MutationObserver(scheduleSnapshotSync);
+  documentObserver.observe(document.documentElement || document, {
+    childList: true,
+    subtree: true
+  });
+
+  installHistoryNavigationSync();
+  loadPipelineSettings().finally(scheduleSnapshotSync);
+})();

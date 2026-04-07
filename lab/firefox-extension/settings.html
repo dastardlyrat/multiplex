@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>URL Forensics Workbench Settings</title>
+<link rel="stylesheet" href="./icons.css">
+<link rel="stylesheet" href="./settings.css">
+</head>
+<body>
+<main class="settings-shell">
+  <section class="settings-card">
+    <p class="eyebrow">URL Forensics Workbench</p>
+    <nav class="page-nav" aria-label="Extension pages">
+      <button class="page-link" type="button" data-page-href="./diagnostics.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">analytics</span>Diagnostics</button>
+      <button class="page-link" type="button" data-page-href="./debugging.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">bug_report</span>Debugging</button>
+      <button class="page-link" type="button" data-page-href="./storage.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">storage</span>Storage</button>
+      <button class="page-link" type="button" data-page-href="./help.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">help</span>Help</button>
+      <button class="page-link" type="button" data-page-href="./about.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">info</span>About</button>
+    </nav>
+    <h1 class="icon-heading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">settings</span>Extension Settings</h1>
+    <p class="lede">
+      Control URL normalization, in-page mirror replacement, and sender-based auto-apply behavior.
+    </p>
+
+    <div class="settings-list">
+      <label class="setting-row" for="enableUrlNormalizationRepair">
+        <span class="setting-copy">
+          <strong>URL normalization and repair</strong>
+          <span class="setting-note">
+            When on, detected URLs are normalized, repaired, and used in mirror content. Default: off.
+          </span>
+          <span class="setting-note setting-note--warning">
+            Warning: URL repair can make a dead or broken dangerous link become active again.
+          </span>
+        </span>
+        <span class="switch">
+          <input id="enableUrlNormalizationRepair" type="checkbox">
+          <span class="switch-track" aria-hidden="true"></span>
+        </span>
+      </label>
+
+      <label class="setting-row" for="replaceEmailBodyWithMirrorContent">
+        <span class="setting-copy">
+          <strong>Replace opened email body with mirror content</strong>
+          <span class="setting-note">
+            When on, the opened email body is replaced in-page with the current mirror content as soon as the snapshot is ready. Default: off.
+          </span>
+        </span>
+        <span class="switch">
+          <input id="replaceEmailBodyWithMirrorContent" type="checkbox">
+          <span class="switch-track" aria-hidden="true"></span>
+        </span>
+      </label>
+
+      <label class="setting-row" for="autoApplyMirrorForConfiguredSenders">
+        <span class="setting-copy">
+          <strong>Auto-apply mirror for configured sender addresses</strong>
+          <span class="setting-note">
+            When on, the extension automatically replaces the opened email body with mirror content for messages from the configured sender address list. Default: off.
+          </span>
+          <span id="autoApplySenderListSummary" class="setting-note">
+            Configured list: loading…
+          </span>
+        </span>
+        <span class="switch">
+          <input id="autoApplyMirrorForConfiguredSenders" type="checkbox">
+          <span class="switch-track" aria-hidden="true"></span>
+        </span>
+      </label>
+    </div>
+
+    <section class="sender-list-card" aria-label="Configured sender addresses">
+      <div class="section-head">
+        <div>
+          <h2 class="icon-subheading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">alternate_email</span>Configured Sender Addresses</h2>
+          <p class="setting-note sender-list-copy">
+            Add or remove the sender email addresses that trigger automatic mirror replacement when the generic auto-apply setting is enabled.
+          </p>
+        </div>
+      </div>
+
+      <form id="senderAddressForm" class="address-form">
+        <label class="address-field" for="senderAddressInput">
+          <span class="field-label">Add sender email address</span>
+          <input id="senderAddressInput" type="email" inputmode="email" autocomplete="off" placeholder="name@example.com">
+        </label>
+        <button id="addSenderAddressButton" class="primary-button" type="submit"><span class="material-symbols-outlined button-icon" aria-hidden="true">add</span>Add Address</button>
+      </form>
+
+      <p class="setting-note sender-list-note">
+        Matching is based on sender email addresses, not display names. Mixed case is normalized automatically, and duplicate addresses are ignored.
+      </p>
+
+      <div class="list-head">
+        <h3>Configured Addresses</h3>
+        <span id="senderAddressCount" class="diagnostic-badge">Loading…</span>
+      </div>
+
+      <ul id="senderAddressList" class="address-list" aria-live="polite">
+        <li class="address-list__empty">Loading sender addresses…</li>
+      </ul>
+
+      <p id="senderAddressStatus" class="status-message" aria-live="polite">Loading sender address list…</p>
+    </section>
+
+    <p id="statusMessage" class="status-message" aria-live="polite">Loading settings...</p>
+  </section>
+</main>
+
+<script src="./debug.js"></script>
+<script src="./page-navigation.js"></script>
+<script src="./settings.js"></script>
+</body>
+</html>

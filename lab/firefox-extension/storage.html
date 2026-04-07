@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>URL Forensics Workbench Storage</title>
+<link rel="stylesheet" href="./icons.css">
+<link rel="stylesheet" href="./storage.css">
+</head>
+<body>
+<main class="storage-shell">
+  <section class="storage-card">
+    <p class="eyebrow">URL Forensics Workbench</p>
+    <nav class="page-nav" aria-label="Extension pages">
+      <button class="page-link" type="button" data-page-href="./settings.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">settings</span>Settings</button>
+      <button class="page-link" type="button" data-page-href="./diagnostics.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">analytics</span>Diagnostics</button>
+      <button class="page-link" type="button" data-page-href="./debugging.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">bug_report</span>Debugging</button>
+      <button class="page-link" type="button" data-page-href="./help.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">help</span>Help</button>
+      <button class="page-link" type="button" data-page-href="./about.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">info</span>About</button>
+    </nav>
+    <div class="hero-row">
+      <div>
+        <h1 class="icon-heading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">storage</span>Storage</h1>
+        <p class="lede">
+          Inspect stored extension choices, defaults, and debug-choice persistence. Debug trace output is not stored.
+        </p>
+      </div>
+      <span id="extensionVersion" class="storage-badge">v0.0.0</span>
+    </div>
+
+    <div class="page-actions">
+      <button id="refreshStorageButton" class="primary-button" type="button"><span class="material-symbols-outlined button-icon" aria-hidden="true">refresh</span>Refresh Storage</button>
+    </div>
+
+    <section class="storage-section" aria-label="Extension storage diagnostics">
+      <div class="section-head">
+        <h2 class="icon-subheading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">rule</span>Stored Choices</h2>
+        <span id="storageBadge" class="storage-badge">Checking storage</span>
+      </div>
+      <dl id="storageDiagnosticsList" class="storage-list">
+        <div class="storage-row">
+          <dt>Status</dt>
+          <dd>Loading storage diagnostics...</dd>
+        </div>
+      </dl>
+    </section>
+
+    <p id="statusMessage" class="status-message" aria-live="polite">Loading storage...</p>
+  </section>
+</main>
+
+<script src="./debug.js"></script>
+<script src="./page-navigation.js"></script>
+<script src="./storage.js"></script>
+</body>
+</html>

@@ -1,0 +1,252 @@
+.content-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  overflow: hidden;
+}
+
+.merged-workspace {
+  display: flex;
+  flex-wrap: nowrap;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  width: auto;
+  overflow: hidden;
+  gap: 8px;
+  align-items: stretch;
+  padding: 0;
+}
+
+.app-header h3 {
+  margin: 0 16px 0 0;
+  font-size: 16px;
+}
+
+.app-header {
+  flex-wrap: wrap;
+}
+
+.column {
+  min-width: 0;
+  height: 100%;
+  transition: flex-basis 0.2s ease, width 0.2s ease;
+}
+
+.column.is-expanded {
+  flex: 1 1 auto;
+  width: auto;
+}
+
+.column.is-active {
+  box-shadow:
+    inset 0 0 0 1px rgba(30, 93, 168, 0.42),
+    0 0 0 2px rgba(30, 93, 168, 0.08);
+}
+
+.column.is-active .pane-title {
+  background: linear-gradient(180deg, var(--accent-secondary) 0%, #0c655f 100%);
+}
+
+.column.is-collapsed-horizontal {
+  flex: 0 0 52px;
+  width: 52px;
+  align-self: stretch;
+  overflow: hidden;
+}
+
+.column.is-collapsed-horizontal .pane-title {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  justify-content: flex-start;
+  align-items: center;
+  height: 100%;
+  min-height: 100%;
+  padding: 8px 6px;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.column.is-collapsed-horizontal .pane-title .pane-action {
+  writing-mode: horizontal-tb;
+  transform: rotate(90deg);
+  transform-origin: center;
+  font-size: 9px;
+  padding: 2px 4px;
+}
+
+.column.is-collapsed-horizontal .pane-edit,
+.column.is-collapsed-horizontal .pane-output,
+.column.is-collapsed-horizontal .pane-console,
+.column.is-collapsed-horizontal .pane-summary {
+  display: none;
+}
+
+.sidebar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sidebar-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 0;
+  width: 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--surface);
+  border: 0 solid var(--border);
+  box-shadow: 0 12px 28px rgba(30, 93, 168, 0.12);
+  opacity: 0;
+  transition: flex-basis 0.22s ease, width 0.22s ease, opacity 0.22s ease, border-width 0.22s ease;
+}
+
+.sidebar-panel.is-open {
+  flex-basis: min(420px, 34vw);
+  width: min(420px, 34vw);
+  border-width: 1px;
+  opacity: 1;
+}
+
+#editor,
+#rewrittenPane,
+#finalPane,
+#digestPane {
+  white-space: pre-wrap;
+}
+
+#editor {
+  white-space: normal;
+  font-family: "Segoe UI", "Aptos", sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  background: #ffffff;
+}
+
+#editor p,
+#editor div,
+#editor ul,
+#editor ol,
+#editor blockquote,
+#editor table,
+#editor pre {
+  margin-top: 0;
+  margin-bottom: 0.85em;
+}
+
+#editor img,
+#editor table {
+  max-width: 100%;
+}
+
+#editor img {
+  height: auto;
+}
+
+#editor table {
+  border-collapse: collapse;
+}
+
+#editor td,
+#editor th {
+  border: 1px solid var(--border);
+  padding: 4px 6px;
+}
+
+#editor blockquote {
+  padding-left: 12px;
+  border-left: 3px solid rgba(15, 118, 110, 0.45);
+  color: var(--ink-soft);
+}
+
+#editor pre {
+  white-space: pre-wrap;
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--surface-soft);
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+}
+
+#editor a {
+  color: var(--accent-secondary);
+}
+
+#finalPane a,
+#digestPane a,
+#rewrittenPane a,
+#diagnosticsPane a,
+#resolvedPane a,
+#detectedPane a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+#finalPane a:hover,
+#digestPane a:hover,
+#rewrittenPane a:hover,
+#diagnosticsPane a:hover,
+#resolvedPane a:hover,
+#detectedPane a:hover {
+  text-decoration: underline;
+}
+
+.inline-meta {
+  color: var(--ink-soft);
+  font-size: 11px;
+}
+
+#debugPane {
+  max-height: 28vh;
+  border-top: 1px solid var(--border);
+  background: var(--surface-muted);
+}
+
+body.embedded-extension-lab .app-shell {
+  background: transparent;
+}
+
+body.embedded-extension-lab .app-header,
+body.embedded-extension-lab .sidebar-panel,
+body.embedded-extension-lab #debugPane {
+  display: none !important;
+}
+
+body.embedded-extension-lab .content-shell {
+  gap: 0;
+  padding: 0;
+}
+
+body.embedded-extension-lab .merged-workspace {
+  gap: 0;
+}
+
+@media (max-width: 1100px) {
+  .content-shell {
+    flex-direction: column;
+    gap: 6px;
+    padding: 6px;
+  }
+
+  .merged-workspace {
+    gap: 6px;
+  }
+
+  .sidebar-panel {
+    width: 100%;
+  }
+
+  .sidebar-panel.is-open {
+    flex-basis: min(40vh, 320px);
+    width: 100%;
+  }
+
+  .column.is-collapsed-horizontal {
+    flex-basis: 44px;
+    width: 44px;
+  }
+}

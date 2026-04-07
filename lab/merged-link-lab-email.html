@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>URL Forensics Workbench</title>
+<link rel="stylesheet" href="./core-components/components.css">
+<link rel="stylesheet" href="./app.css">
+</head>
+<body>
+<div class="app-shell">
+  <header class="app-header">
+    <h3>URL Forensics Workbench</h3>
+    <button id="runBtn" class="pane-action" type="button">Run Pipeline</button>
+    <button id="useRewrittenBtn" class="pane-action" type="button">Show Converted Panel</button>
+    <button id="copyFinalBtn" class="pane-action" type="button">Copy Final URLs</button>
+    <button id="copyDigestBtn" class="pane-action" type="button">Copy Digest HTML</button>
+    <button id="toggleDebugBtn" class="pane-action" type="button">Toggle Debug</button>
+  </header>
+
+  <div class="content-shell">
+    <main class="workspace merged-workspace">
+      <section class="column" data-default-expanded="true">
+        <div class="pane-title">
+          <span>Input Editor</span>
+          <button class="pane-action" type="button" data-copy="editor">Copy</button>
+        </div>
+        <div id="editor" class="pane-edit" contenteditable="true"></div>
+        <div id="inputSummary" class="pane-summary"></div>
+      </section>
+
+      <section class="column">
+        <div class="pane-title">
+          <span>Detected URLs</span>
+          <button class="pane-action" type="button" data-copy="detectedPane">Copy</button>
+        </div>
+        <div id="detectedPane" class="pane-console"></div>
+        <div id="detectSummary" class="pane-summary"></div>
+      </section>
+
+      <section class="column">
+        <div class="pane-title">
+          <span>Normalization and Resolve</span>
+          <button class="pane-action" type="button" data-copy="resolvedPane">Copy</button>
+        </div>
+        <div id="resolvedPane" class="pane-console"></div>
+        <div id="resolveSummary" class="pane-summary"></div>
+      </section>
+
+      <section class="column">
+        <div class="pane-title">
+          <span>Final URL List</span>
+          <button class="pane-action" type="button" data-copy="finalPane">Copy</button>
+        </div>
+        <div id="finalPane" class="pane-output" contenteditable="true"></div>
+        <div id="finalSummary" class="pane-summary"></div>
+      </section>
+
+      <section class="column">
+        <div class="pane-title">
+          <span>Digest Output</span>
+          <button class="pane-action" type="button" data-copy="digestPane">Copy</button>
+        </div>
+        <div id="digestPane" class="pane-output" contenteditable="true"></div>
+        <div id="digestSummary" class="pane-summary"></div>
+      </section>
+
+      <section class="column">
+        <div class="pane-title">
+          <span>Diagnostics</span>
+          <button class="pane-action" type="button" data-copy="diagnosticsPane">Copy</button>
+        </div>
+        <div id="diagnosticsPane" class="pane-console"></div>
+        <div id="diagnosticsSummary" class="pane-summary"></div>
+      </section>
+    </main>
+
+    <aside id="rewrittenSidebar" class="sidebar-panel" aria-hidden="true" data-default-open="true">
+      <div class="pane-title">
+        <span>Converted Panel</span>
+        <div class="sidebar-actions">
+          <button id="closeRewrittenBtn" class="pane-action" type="button">Hide</button>
+          <button class="pane-action" type="button" data-copy="rewrittenPane">Copy</button>
+        </div>
+      </div>
+      <div id="rewrittenPane" class="pane-output" contenteditable="true"></div>
+      <div id="rewrittenSummary" class="pane-summary"></div>
+    </aside>
+  </div>
+
+  <div id="debugPane" class="pane-console is-hidden"></div>
+</div>
+
+<script src="./core-components/components.js"></script>
+<script src="./pipeline.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>

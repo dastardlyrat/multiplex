@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>URL Forensics Workbench Debugging</title>
+<link rel="stylesheet" href="./icons.css">
+<link rel="stylesheet" href="./debugging.css">
+</head>
+<body>
+<main class="debugging-shell">
+  <section class="debugging-card">
+    <p class="eyebrow">URL Forensics Workbench</p>
+    <nav class="page-nav" aria-label="Extension pages">
+      <button class="page-link" type="button" data-page-href="./settings.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">settings</span>Settings</button>
+      <button class="page-link" type="button" data-page-href="./diagnostics.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">analytics</span>Diagnostics</button>
+      <button class="page-link" type="button" data-page-href="./storage.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">storage</span>Storage</button>
+      <button class="page-link" type="button" data-page-href="./help.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">help</span>Help</button>
+      <button class="page-link" type="button" data-page-href="./about.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">info</span>About</button>
+    </nav>
+    <div class="hero-row">
+      <div>
+        <h1 class="icon-heading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">bug_report</span>Program Debugging</h1>
+        <p class="lede">
+          Control live program debug output. Level, category, and display choices persist; trace output stays in memory only.
+        </p>
+      </div>
+      <span id="extensionVersion" class="debug-badge">v0.0.0</span>
+    </div>
+
+    <div class="page-actions">
+      <div class="action-row" aria-label="Debug output actions">
+        <button id="refreshDebugButton" class="primary-button" type="button"><span class="material-symbols-outlined button-icon" aria-hidden="true">refresh</span>Refresh</button>
+        <button id="emitDebugTestButton" class="ghost-button" type="button"><span class="material-symbols-outlined button-icon" aria-hidden="true">play_arrow</span>Test Event</button>
+        <button id="clearDebugButton" class="ghost-button" type="button"><span class="material-symbols-outlined button-icon" aria-hidden="true">delete</span>Clear Output</button>
+        <button id="exportDebugButton" class="ghost-button" type="button" disabled><span class="material-symbols-outlined button-icon" aria-hidden="true">download</span>Export JSON</button>
+      </div>
+    </div>
+
+    <section class="debug-section" aria-label="Debug controls">
+      <div class="section-head">
+        <h2 class="icon-subheading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">tune</span>Output Choices</h2>
+        <span id="debugBadge" class="debug-badge">Off</span>
+      </div>
+
+      <label class="field-row" for="autoRefreshDebugOutput">
+        <span class="setting-copy">
+          <strong>Live refresh</strong>
+          <span class="setting-note">Refresh the in-memory trace every second while this page is open.</span>
+        </span>
+        <span class="switch">
+          <input id="autoRefreshDebugOutput" type="checkbox" role="switch" aria-checked="true" checked>
+          <span class="switch-track" aria-hidden="true"></span>
+        </span>
+      </label>
+
+      <label class="field-row" for="debugLevelSelect">
+        <span class="setting-copy">
+          <strong>Debug output level</strong>
+          <span class="setting-note">Higher levels include more detailed program events. Raw email body/source text is redacted.</span>
+        </span>
+        <select id="debugLevelSelect" class="debug-select">
+          <option value="off">Off</option>
+          <option value="error">Errors</option>
+          <option value="info">Runtime</option>
+          <option value="verbose">Verbose</option>
+          <option value="trace">Trace</option>
+        </select>
+      </label>
+
+      <fieldset class="debug-category-fieldset">
+        <legend>Debug categories</legend>
+        <label class="debug-category-toggle">
+          <span class="debug-category-label">Errors</span>
+          <span class="switch">
+            <input type="checkbox" data-debug-category="error" role="switch" aria-checked="true" checked disabled>
+            <span class="switch-track" aria-hidden="true"></span>
+          </span>
+        </label>
+        <label class="debug-category-toggle">
+          <span class="debug-category-label">Runtime</span>
+          <span class="switch">
+            <input type="checkbox" data-debug-category="runtime" role="switch" aria-checked="true" checked>
+            <span class="switch-track" aria-hidden="true"></span>
+          </span>
+        </label>
+        <label class="debug-category-toggle">
+          <span class="debug-category-label">Storage</span>
+          <span class="switch">
+            <input type="checkbox" data-debug-category="storage" role="switch" aria-checked="true" checked>
+            <span class="switch-track" aria-hidden="true"></span>
+          </span>
+        </label>
+        <label class="debug-category-toggle">
+          <span class="debug-category-label">Messaging</span>
+          <span class="switch">
+            <input type="checkbox" data-debug-category="messaging" role="switch" aria-checked="true" checked>
+            <span class="switch-track" aria-hidden="true"></span>
+          </span>
+        </label>
+        <label class="debug-category-toggle">
+          <span class="debug-category-label">UI</span>
+          <span class="switch">
+            <input type="checkbox" data-debug-category="ui" role="switch" aria-checked="true" checked>
+            <span class="switch-track" aria-hidden="true"></span>
+          </span>
+        </label>
+        <label class="debug-category-toggle">
+          <span class="debug-category-label">Pipeline</span>
+          <span class="switch">
+            <input type="checkbox" data-debug-category="pipeline" role="switch" aria-checked="true" checked>
+            <span class="switch-track" aria-hidden="true"></span>
+          </span>
+        </label>
+        <label class="debug-category-toggle">
+          <span class="debug-category-label">Function In/Out</span>
+          <span class="switch">
+            <input type="checkbox" data-debug-category="function" role="switch" aria-checked="false">
+            <span class="switch-track" aria-hidden="true"></span>
+          </span>
+        </label>
+        <label class="debug-category-toggle">
+          <span class="debug-category-label">Conditional</span>
+          <span class="switch">
+            <input type="checkbox" data-debug-category="conditional" role="switch" aria-checked="false">
+            <span class="switch-track" aria-hidden="true"></span>
+          </span>
+        </label>
+        <label class="debug-category-toggle">
+          <span class="debug-category-label">Looping</span>
+          <span class="switch">
+            <input type="checkbox" data-debug-category="loop" role="switch" aria-checked="false">
+            <span class="switch-track" aria-hidden="true"></span>
+          </span>
+        </label>
+        <label class="debug-category-toggle">
+          <span class="debug-category-label">Variable Assignment</span>
+          <span class="switch">
+            <input type="checkbox" data-debug-category="variable" role="switch" aria-checked="false">
+            <span class="switch-track" aria-hidden="true"></span>
+          </span>
+        </label>
+      </fieldset>
+
+      <label class="field-row" for="renderLimitSelect">
+        <span class="setting-copy">
+          <strong>Render limit</strong>
+          <span class="setting-note">Only the latest visible rows are rendered. Export still includes up to 100,000 in-memory events.</span>
+        </span>
+        <select id="renderLimitSelect" class="debug-select">
+          <option value="250">250 rows</option>
+          <option value="500">500 rows</option>
+          <option value="750" selected>750 rows</option>
+          <option value="1000">1000 rows</option>
+          <option value="2000">2000 rows</option>
+          <option value="5000">5,000 rows</option>
+          <option value="10000">10,000 rows</option>
+        </select>
+      </label>
+    </section>
+
+    <section class="debug-section debug-output-section" aria-label="Debug trace output">
+      <div class="section-head">
+        <h2 class="icon-subheading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">segment</span>Trace Output</h2>
+        <span id="traceSummary" class="debug-badge">0 events</span>
+      </div>
+
+      <div id="debugTrace" class="debug-trace" role="log" aria-live="polite" tabindex="0">
+        <div class="debug-empty">Loading debug state...</div>
+      </div>
+    </section>
+
+    <p id="statusMessage" class="status-message" aria-live="polite">Loading debugging...</p>
+  </section>
+</main>
+
+<script src="./debug.js"></script>
+<script src="./page-navigation.js"></script>
+<script src="./debugging.js"></script>
+</body>
+</html>

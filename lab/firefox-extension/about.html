@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>About URL Forensics Workbench</title>
+<link rel="stylesheet" href="./icons.css">
+<link rel="stylesheet" href="./help.css">
+</head>
+<body>
+<main class="help-shell">
+  <header class="help-hero">
+    <p class="eyebrow">URL Forensics Workbench</p>
+    <nav class="page-nav" aria-label="Extension pages">
+      <button class="page-link" type="button" data-page-href="./settings.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">settings</span>Settings</button>
+      <button class="page-link" type="button" data-page-href="./diagnostics.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">analytics</span>Diagnostics</button>
+      <button class="page-link" type="button" data-page-href="./debugging.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">bug_report</span>Debugging</button>
+      <button class="page-link" type="button" data-page-href="./storage.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">storage</span>Storage</button>
+      <button class="page-link" type="button" data-page-href="./help.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">help</span>Help</button>
+    </nav>
+    <div class="hero-row">
+      <div>
+        <h1 class="icon-heading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">info</span>About</h1>
+        <p class="lede">
+          URL Forensics Workbench is a local URL forensics workbench for reviewing links found in supported webmail message bodies.
+        </p>
+      </div>
+    </div>
+    <div class="chip-row" aria-label="About topics">
+      <span class="chip">Local helper</span>
+      <span class="chip">URL forensics</span>
+      <span class="chip">Supported webmail</span>
+      <span class="chip">No debug trace persistence</span>
+    </div>
+  </header>
+
+  <section class="help-card">
+    <h2 class="icon-subheading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">travel_explore</span>Purpose</h2>
+    <p>
+      The extension detects the currently opened email body, extracts URLs, and presents a workbench for reviewing detected, normalized, resolved, final, digest, mirror, and diagnostic output.
+    </p>
+  </section>
+
+  <section class="help-card">
+    <h2 class="icon-subheading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">lock</span>Privacy Model</h2>
+    <p>Security transparancy actualized by information ethics.</p>
+    <div class="info-grid">
+      <article class="info-item">
+        <h3>Local operation</h3>
+        <p>The helper works in the browser extension context and supported webmail pages. It does not require a remote service for the extension UI pages.</p>
+      </article>
+      <article class="info-item">
+        <h3>Stored choices</h3>
+        <p>Settings, sender-address choices, and debug output choices can be stored in extension storage so the UI remembers them.</p>
+      </article>
+      <article class="info-item">
+        <h3>Debug traces</h3>
+        <p>Program debug trace output remains in memory only. It can be exported manually from the Debugging page, but it is not persisted automatically.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="help-card">
+    <h2 class="icon-subheading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">hub</span>Page Map</h2>
+    <div class="info-grid">
+      <article class="info-item">
+        <h3>Settings</h3>
+        <p>Change URL normalization, mirror replacement, and sender-address auto-apply behavior.</p>
+      </article>
+      <article class="info-item">
+        <h3>Diagnostics</h3>
+        <p>Inspect active-tab detection state for the currently selected supported webmail tab.</p>
+      </article>
+      <article class="info-item">
+        <h3>Debugging</h3>
+        <p>Control program debug levels and categories, view the live in-memory trace, clear output, or export JSON.</p>
+      </article>
+      <article class="info-item">
+        <h3>Storage</h3>
+        <p>Inspect stored choices and whether each storage-backed option is default, stored default, or stored custom.</p>
+      </article>
+      <article class="info-item">
+        <h3>Help</h3>
+        <p>Read quick-start steps, troubleshooting notes, supported hosts, and feature behavior notes.</p>
+      </article>
+    </div>
+  </section>
+</main>
+<script src="./page-navigation.js"></script>
+</body>
+</html>

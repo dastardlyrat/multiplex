@@ -1,0 +1,108 @@
+@font-face {
+  font-family: "Material Symbols Outlined";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("./resources/fonts/material-symbols-outlined.woff2") format("woff2");
+}
+
+.material-symbols-outlined {
+  font-family: "Material Symbols Outlined";
+  font-weight: normal;
+  font-style: normal;
+  font-size: 20px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  width: 1em;
+  min-width: 1em;
+  overflow: hidden;
+  text-align: center;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: "liga";
+  font-feature-settings: "liga";
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+  -webkit-font-smoothing: antialiased;
+}
+
+.primary-button,
+.ghost-button,
+.ghost-link,
+.page-link,
+.pane-action,
+.merged-link-lab-page-pane__tab-button,
+#merged-link-lab-page-pane button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.page-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0 26px;
+  padding: 16px;
+  border: 2px solid var(--line, #c8d9ee);
+  border-radius: 18px;
+  background: rgba(247, 251, 255, 0.92);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.78),
+    0 8px 18px rgba(30, 93, 168, 0.08);
+}
+
+.page-link {
+  border: 1px solid var(--line, #c8d9ee);
+  appearance: none;
+  cursor: pointer;
+  min-height: 36px;
+  padding: 9px 12px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
+  color: var(--accent, #1e5da8);
+  box-shadow: 0 6px 12px rgba(30, 93, 168, 0.08);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
+  transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease, border-color 120ms ease;
+}
+
+.page-link:hover {
+  transform: translateY(-1px);
+}
+
+.icon-heading,
+.icon-subheading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-start;
+}
+
+.heading-icon {
+  color: var(--accent, #1e5da8);
+  font-size: 1em;
+}
+
+.button-icon,
+.link-icon,
+.pane-icon {
+  font-size: 18px;
+  flex: 0 0 auto;
+}
+
+.pane-icon {
+  font-size: 16px;
+}
+
+.pane-title .heading-icon,
+.pane-title .pane-icon {
+  color: currentColor;
+}

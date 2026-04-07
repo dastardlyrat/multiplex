@@ -1,0 +1,381 @@
+:root {
+  color-scheme: light;
+  --bg: #eaf3ff;
+  --card: #ffffff;
+  --card-strong: #f7fbff;
+  --ink: #16324b;
+  --muted: #5a7390;
+  --line: #c8d9ee;
+  --accent: #1e5da8;
+  --accent-secondary: #0f766e;
+  --accent-soft: rgba(30, 93, 168, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(57, 121, 201, 0.18), transparent 32%),
+    linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
+  color: var(--ink);
+  font-family: "Segoe UI", "Aptos", sans-serif;
+}
+
+.help-shell {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 40px 20px 56px;
+  display: grid;
+  gap: 18px;
+}
+
+.help-hero,
+.help-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  box-shadow: 0 16px 44px rgba(30, 93, 168, 0.1);
+}
+
+.help-hero {
+  padding: 28px;
+}
+
+.help-card {
+  padding: 24px;
+}
+
+.eyebrow {
+  margin: 0 0 10px;
+  color: var(--accent-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.hero-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+}
+
+h1 {
+  font-size: 38px;
+  line-height: 1.04;
+}
+
+h2 {
+  margin-bottom: 16px;
+  font-size: 22px;
+}
+
+h3 {
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+.lede,
+.info-item p,
+.issue-item p,
+.step-list,
+.host-list,
+.card-copy,
+.status-message {
+  color: var(--muted);
+}
+
+.lede {
+  margin: 12px 0 0;
+  max-width: 720px;
+  font-size: 16px;
+  line-height: 1.65;
+}
+
+.card-copy {
+  margin: 10px 0 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.card-copy--compact {
+  margin-top: 12px;
+}
+
+.ghost-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: linear-gradient(180deg, #ffffff 0%, var(--card-strong) 100%);
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 6px 12px rgba(30, 93, 168, 0.08);
+}
+
+.page-links {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.chip-row {
+  margin-top: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.stub-note {
+  margin-top: 18px;
+  padding: 14px 16px;
+  border: 1px dashed rgba(30, 93, 168, 0.34);
+  border-radius: 14px;
+  background: rgba(30, 93, 168, 0.08);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.address-form {
+  margin-top: 18px;
+  display: flex;
+  align-items: end;
+  gap: 12px;
+}
+
+.address-field {
+  flex: 1 1 auto;
+  display: grid;
+  gap: 8px;
+}
+
+.field-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.address-field input {
+  width: 100%;
+  min-height: 46px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card-strong);
+  color: var(--ink);
+  font: inherit;
+}
+
+.address-field input:focus-visible {
+  outline: 2px solid rgba(30, 93, 168, 0.36);
+  outline-offset: 2px;
+}
+
+button {
+  border: 0;
+  border-radius: 10px;
+  padding: 8px 10px;
+  min-height: 34px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 8px 16px rgba(30, 93, 168, 0.18);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.list-head {
+  margin-top: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.address-list {
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+
+.address-list__item,
+.address-list__empty {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--card-strong);
+}
+
+.address-list__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.address-list__empty {
+  padding: 14px 16px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.address-list__email {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.address-list__delete {
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid rgba(22, 50, 75, 0.12);
+  background: rgba(30, 93, 168, 0.06);
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.status-message {
+  margin: 12px 0 0;
+  min-height: 1.5em;
+  font-size: 14px;
+}
+
+.status-message.is-saved {
+  color: var(--accent-secondary);
+}
+
+.status-message.is-error {
+  color: #b42318;
+}
+
+.step-list {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 10px;
+  line-height: 1.6;
+}
+
+.info-grid,
+.issue-list {
+  display: grid;
+  gap: 14px;
+}
+
+.info-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.info-item,
+.issue-item {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--card-strong);
+}
+
+.info-item p,
+.issue-item p {
+  margin: 8px 0 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.host-list {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 8px;
+  line-height: 1.6;
+}
+
+code {
+  padding: 1px 5px;
+  border-radius: 6px;
+  background: rgba(31, 41, 51, 0.06);
+  color: var(--ink);
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 0.95em;
+}
+
+@media (max-width: 760px) {
+  .help-shell {
+    padding: 24px 14px 40px;
+  }
+
+  .help-hero,
+  .help-card {
+    padding: 20px;
+  }
+
+  .hero-row {
+    flex-direction: column;
+  }
+
+  .page-links {
+    justify-content: flex-start;
+  }
+
+  .section-head {
+    flex-direction: column;
+  }
+
+  h1 {
+    font-size: 30px;
+  }
+
+  .info-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .address-form,
+  .address-list__item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

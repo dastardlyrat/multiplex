@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>URL Forensics Workbench</title>
+<link rel="stylesheet" href="./icons.css">
+<link rel="stylesheet" href="./popup.css">
+</head>
+<body>
+<main class="popup-shell">
+  <header class="popup-hero">
+    <p class="eyebrow">URL Forensics Workbench</p>
+    <nav class="page-nav" aria-label="Extension pages">
+      <button class="page-link" type="button" data-page-href="./settings.html" data-page-target="_blank"><span class="material-symbols-outlined link-icon" aria-hidden="true">settings</span>Settings</button>
+      <button class="page-link" type="button" data-page-href="./diagnostics.html" data-page-target="_blank"><span class="material-symbols-outlined link-icon" aria-hidden="true">analytics</span>Diagnostics</button>
+      <button class="page-link" type="button" data-page-href="./debugging.html" data-page-target="_blank"><span class="material-symbols-outlined link-icon" aria-hidden="true">bug_report</span>Debugging</button>
+      <button class="page-link" type="button" data-page-href="./storage.html" data-page-target="_blank"><span class="material-symbols-outlined link-icon" aria-hidden="true">storage</span>Storage</button>
+      <button class="page-link" type="button" data-page-href="./help.html" data-page-target="_blank"><span class="material-symbols-outlined link-icon" aria-hidden="true">help</span>Help</button>
+      <button class="page-link" type="button" data-page-href="./about.html" data-page-target="_blank"><span class="material-symbols-outlined link-icon" aria-hidden="true">info</span>About</button>
+    </nav>
+    <div class="hero-row">
+      <div>
+        <h1 class="icon-heading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">tune</span>Controls</h1>
+        <p class="hero-copy">Open the helper or use Settings as the page hub.</p>
+      </div>
+      <span id="extensionVersion" class="version-chip">v0.0.0</span>
+    </div>
+    <div class="hero-actions">
+      <button id="openPagePaneButton" class="primary-button" type="button"><span class="material-symbols-outlined button-icon" aria-hidden="true">open_in_new</span>Open Helper</button>
+      <button id="openHelpPageButton" class="ghost-button" type="button"><span class="material-symbols-outlined button-icon" aria-hidden="true">help</span>Help</button>
+    </div>
+  </header>
+
+  <section class="popup-card">
+    <div class="section-head">
+      <h2 class="icon-subheading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">settings</span>Settings</h2>
+      <div class="section-tools">
+        <span class="section-note">Defaults off</span>
+        <button id="openSettingsPageButton" class="ghost-button" type="button"><span class="material-symbols-outlined button-icon" aria-hidden="true">settings</span>Settings</button>
+      </div>
+    </div>
+
+    <label class="switch-row" for="enableUrlNormalizationRepair">
+      <span class="setting-copy">
+        <strong>Normalize and repair URLs</strong>
+        <span>Normalizes detected URLs before mirror output. Default: off.</span>
+        <span class="setting-warning">Warning: can reactivate broken dangerous links.</span>
+      </span>
+      <span class="switch">
+        <input id="enableUrlNormalizationRepair" type="checkbox">
+        <span class="switch-track" aria-hidden="true"></span>
+      </span>
+    </label>
+
+    <label class="switch-row" for="replaceEmailBodyWithMirrorContent">
+      <span class="setting-copy">
+        <strong>Replace email with mirror</strong>
+        <span>Replaces the open email body in-page with mirror content. Default: off.</span>
+      </span>
+      <span class="switch">
+        <input id="replaceEmailBodyWithMirrorContent" type="checkbox">
+        <span class="switch-track" aria-hidden="true"></span>
+      </span>
+    </label>
+  </section>
+
+  <p id="statusMessage" class="status-message" aria-live="polite">Loading…</p>
+</main>
+
+<script src="./debug.js"></script>
+<script src="./page-navigation.js"></script>
+<script src="./popup.js"></script>
+</body>
+</html>

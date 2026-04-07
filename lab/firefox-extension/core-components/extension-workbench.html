@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>URL Forensics Workbench</title>
+<link rel="stylesheet" href="../icons.css">
+<link rel="stylesheet" href="./components.css">
+<link rel="stylesheet" href="../app.css">
+</head>
+<body>
+<div class="app-shell">
+  <header class="app-header">
+    <h3 class="icon-subheading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">travel_explore</span>URL Forensics Workbench</h3>
+    <button id="openSettingsBtn" class="pane-action" type="button"><span class="material-symbols-outlined pane-icon" aria-hidden="true">settings</span>Settings</button>
+    <button id="runBtn" class="pane-action" type="button"><span class="material-symbols-outlined pane-icon" aria-hidden="true">play_arrow</span>Run Pipeline</button>
+    <button id="useRewrittenBtn" class="pane-action" type="button"><span class="material-symbols-outlined pane-icon" aria-hidden="true">preview</span>Show Converted Panel</button>
+    <button id="copyFinalBtn" class="pane-action" type="button"><span class="material-symbols-outlined pane-icon" aria-hidden="true">content_copy</span>Copy Final URLs</button>
+    <button id="copyDigestBtn" class="pane-action" type="button"><span class="material-symbols-outlined pane-icon" aria-hidden="true">content_copy</span>Copy Digest HTML</button>
+    <button id="toggleDebugBtn" class="pane-action" type="button"><span class="material-symbols-outlined pane-icon" aria-hidden="true">bug_report</span>Toggle Debug</button>
+  </header>
+
+  <div class="content-shell">
+    <main class="workspace merged-workspace">
+      <section class="column" data-default-expanded="true">
+        <div class="pane-title">
+          <span class="icon-subheading"><span class="material-symbols-outlined pane-icon" aria-hidden="true">edit_note</span>Input Editor</span>
+          <button class="pane-action" type="button" data-copy="editor"><span class="material-symbols-outlined pane-icon" aria-hidden="true">content_copy</span>Copy</button>
+        </div>
+        <div id="editor" class="pane-edit" contenteditable="true"></div>
+        <div id="inputSummary" class="pane-summary"></div>
+      </section>
+
+      <section class="column">
+        <div class="pane-title">
+          <span class="icon-subheading"><span class="material-symbols-outlined pane-icon" aria-hidden="true">link</span>Detected URLs</span>
+          <button class="pane-action" type="button" data-copy="detectedPane"><span class="material-symbols-outlined pane-icon" aria-hidden="true">content_copy</span>Copy</button>
+        </div>
+        <div id="detectedPane" class="pane-console"></div>
+        <div id="detectSummary" class="pane-summary"></div>
+      </section>
+
+      <section class="column">
+        <div class="pane-title">
+          <span class="icon-subheading"><span class="material-symbols-outlined pane-icon" aria-hidden="true">rule</span>Normalization and Resolve</span>
+          <button class="pane-action" type="button" data-copy="resolvedPane"><span class="material-symbols-outlined pane-icon" aria-hidden="true">content_copy</span>Copy</button>
+        </div>
+        <div id="resolvedPane" class="pane-console"></div>
+        <div id="resolveSummary" class="pane-summary"></div>
+      </section>
+
+      <section class="column">
+        <div class="pane-title">
+          <span class="icon-subheading"><span class="material-symbols-outlined pane-icon" aria-hidden="true">format_list_bulleted</span>Final URL List</span>
+          <button class="pane-action" type="button" data-copy="finalPane"><span class="material-symbols-outlined pane-icon" aria-hidden="true">content_copy</span>Copy</button>
+        </div>
+        <div id="finalPane" class="pane-output" contenteditable="true"></div>
+        <div id="finalSummary" class="pane-summary"></div>
+      </section>
+
+      <section class="column">
+        <div class="pane-title">
+          <span class="icon-subheading"><span class="material-symbols-outlined pane-icon" aria-hidden="true">summarize</span>Digest Output</span>
+          <button class="pane-action" type="button" data-copy="digestPane"><span class="material-symbols-outlined pane-icon" aria-hidden="true">content_copy</span>Copy</button>
+        </div>
+        <div id="digestPane" class="pane-output" contenteditable="true"></div>
+        <div id="digestSummary" class="pane-summary"></div>
+      </section>
+
+      <section class="column">
+        <div class="pane-title">
+          <span class="icon-subheading"><span class="material-symbols-outlined pane-icon" aria-hidden="true">analytics</span>Diagnostics</span>
+          <button class="pane-action" type="button" data-copy="diagnosticsPane"><span class="material-symbols-outlined pane-icon" aria-hidden="true">content_copy</span>Copy</button>
+        </div>
+        <div id="diagnosticsPane" class="pane-console"></div>
+        <div id="diagnosticsSummary" class="pane-summary"></div>
+      </section>
+    </main>
+
+    <aside id="rewrittenSidebar" class="sidebar-panel" aria-hidden="true" data-default-open="true">
+      <div class="pane-title">
+        <span class="icon-subheading"><span class="material-symbols-outlined pane-icon" aria-hidden="true">preview</span>Converted Panel</span>
+        <div class="sidebar-actions">
+          <button id="closeRewrittenBtn" class="pane-action" type="button"><span class="material-symbols-outlined pane-icon" aria-hidden="true">visibility_off</span>Hide</button>
+          <button class="pane-action" type="button" data-copy="rewrittenPane"><span class="material-symbols-outlined pane-icon" aria-hidden="true">content_copy</span>Copy</button>
+        </div>
+      </div>
+      <div id="rewrittenPane" class="pane-output" contenteditable="true"></div>
+      <div id="rewrittenSummary" class="pane-summary"></div>
+    </aside>
+  </div>
+
+  <div id="debugPane" class="pane-console is-hidden"></div>
+</div>
+
+<script src="./components.js"></script>
+<script src="../debug.js"></script>
+<script src="../pipeline.js"></script>
+<script src="../app.js"></script>
+</body>
+</html>

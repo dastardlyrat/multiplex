@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>URL Forensics Workbench Diagnostics</title>
+<link rel="stylesheet" href="./icons.css">
+<link rel="stylesheet" href="./diagnostics.css">
+</head>
+<body>
+<main class="diagnostics-shell">
+  <section class="diagnostics-card">
+    <p class="eyebrow">URL Forensics Workbench</p>
+    <nav class="page-nav" aria-label="Extension pages">
+      <button class="page-link" type="button" data-page-href="./settings.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">settings</span>Settings</button>
+      <button class="page-link" type="button" data-page-href="./debugging.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">bug_report</span>Debugging</button>
+      <button class="page-link" type="button" data-page-href="./storage.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">storage</span>Storage</button>
+      <button class="page-link" type="button" data-page-href="./help.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">help</span>Help</button>
+      <button class="page-link" type="button" data-page-href="./about.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">info</span>About</button>
+    </nav>
+    <div class="hero-row">
+      <div>
+        <h1 class="icon-heading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">analytics</span>Diagnostics</h1>
+        <p class="lede">
+          Inspect extension health, runtime state, storage usage, memory availability, and side-panel diagnostics.
+        </p>
+      </div>
+      <span id="extensionVersion" class="diagnostic-badge">v0.0.0</span>
+    </div>
+
+    <div class="page-actions">
+      <button id="refreshDiagnosticsButton" class="primary-button" type="button"><span class="material-symbols-outlined button-icon" aria-hidden="true">refresh</span>Refresh Diagnostics</button>
+    </div>
+
+    <section class="diagnostic-section" aria-label="General diagnostics">
+      <div class="section-head">
+        <h2 class="icon-subheading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">monitoring</span>General Diagnostics</h2>
+        <span id="generalDiagnosticsBadge" class="diagnostic-badge">Checking runtime</span>
+      </div>
+      <dl id="generalDiagnosticsList" class="diagnostic-list">
+        <div class="diagnostic-row">
+          <dt>Status</dt>
+          <dd>Loading general diagnostics...</dd>
+        </div>
+      </dl>
+    </section>
+
+    <p id="statusMessage" class="status-message" aria-live="polite">Loading diagnostics...</p>
+  </section>
+</main>
+
+<script src="./debug.js"></script>
+<script src="./page-navigation.js"></script>
+<script src="./diagnostics.js"></script>
+</body>
+</html>

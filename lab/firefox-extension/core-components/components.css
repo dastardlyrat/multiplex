@@ -1,0 +1,136 @@
+:root {
+  --surface: #ffffff;
+  --surface-soft: #f7fbff;
+  --surface-muted: #eef4fb;
+  --border: #c8d9ee;
+  --ink: #16324b;
+  --ink-soft: #5a7390;
+  --accent: #1e5da8;
+  --accent-secondary: #0f766e;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  font-family: "Segoe UI", "Aptos", sans-serif;
+  color: var(--ink);
+}
+
+.app-shell {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, var(--surface-muted) 0%, #f8fbff 100%);
+}
+
+.app-header,
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, #ffffff 0%, var(--surface-soft) 100%);
+}
+
+.workspace {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 8px;
+  padding: 8px;
+  overflow: auto;
+}
+
+.column {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 10px 24px rgba(30, 93, 168, 0.08);
+}
+
+.pane-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #ffffff;
+  background: linear-gradient(180deg, var(--accent) 0%, #174b86 100%);
+  padding: 8px 10px;
+}
+
+.pane-action {
+  cursor: pointer;
+  min-height: 28px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid rgba(200, 217, 238, 0.95);
+  border-radius: 10px;
+  background: linear-gradient(180deg, #ffffff 0%, var(--surface-soft) 100%);
+  color: var(--accent);
+  padding: 5px 10px;
+  box-shadow: 0 6px 12px rgba(30, 93, 168, 0.08);
+}
+
+.pane-action:hover {
+  background: var(--surface-muted);
+}
+
+.pane-edit,
+.pane-output,
+.pane-console {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  white-space: pre-wrap;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+}
+
+.pane-edit[contenteditable="true"],
+.pane-output[contenteditable="true"] {
+  outline: none;
+}
+
+.pane-console {
+  background: var(--surface-soft);
+  white-space: pre;
+  font-size: 11px;
+}
+
+.pane-summary {
+  flex: 0 0 auto;
+  padding: 6px 8px;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 11px;
+  background: var(--surface-muted);
+  color: var(--ink-soft);
+}
+
+.is-hidden {
+  display: none;
+}
+
+.token-valid {
+  color: #2e7d32;
+  font-weight: 700;
+}
+
+.token-warning {
+  color: #ef6c00;
+  font-weight: 700;
+}
+
+.token-fail {
+  color: #c62828;
+  font-weight: 700;
+}

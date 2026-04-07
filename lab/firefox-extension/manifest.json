@@ -1,0 +1,105 @@
+{
+  "manifest_version": 3,
+  "name": "URL Forensics Workbench",
+  "version": "0.9.1",
+  "description": "Turn detected email bodies into a URL forensics side panel.",
+  "permissions": [
+    "clipboardWrite",
+    "storage",
+    "tabs"
+  ],
+  "action": {
+    "default_title": "Open URL Forensics Workbench controls and settings hub",
+    "default_popup": "popup.html"
+  },
+  "options_ui": {
+    "page": "settings.html",
+    "open_in_tab": true
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; style-src 'self'; font-src 'self'; object-src 'self';"
+  },
+  "background": {
+    "scripts": [
+      "debug.js",
+      "background.js"
+    ]
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://mail.google.com/*",
+        "https://*.mail.google.com/*",
+        "https://outlook.office.com/*",
+        "https://*.outlook.office.com/*",
+        "https://outlook.live.com/*",
+        "https://*.outlook.live.com/*",
+        "https://outlook.office365.com/*",
+        "https://*.outlook.office365.com/*",
+        "https://mail.yahoo.com/*",
+        "https://*.mail.yahoo.com/*",
+        "https://mail.proton.me/*",
+        "https://*.mail.proton.me/*",
+        "https://app.hey.com/*",
+        "https://*.app.hey.com/*",
+        "https://app.fastmail.com/*",
+        "https://*.app.fastmail.com/*"
+      ],
+      "css": [
+        "page-pane.css"
+      ],
+      "js": [
+        "debug.js",
+        "pipeline.js",
+        "content-script.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "core-components/extension-workbench.html",
+        "icons.css",
+        "app.css",
+        "app.js",
+        "debug.js",
+        "pipeline.js",
+        "core-components/components.css",
+        "core-components/components.js",
+        "resources/fonts/material-symbols-outlined.woff2",
+        "resources/fonts/material-symbols-rounded.woff2",
+        "resources/fonts/material-symbols-sharp.woff2"
+      ],
+      "matches": [
+        "https://mail.google.com/*",
+        "https://*.mail.google.com/*",
+        "https://outlook.office.com/*",
+        "https://*.outlook.office.com/*",
+        "https://outlook.live.com/*",
+        "https://*.outlook.live.com/*",
+        "https://outlook.office365.com/*",
+        "https://*.outlook.office365.com/*",
+        "https://mail.yahoo.com/*",
+        "https://*.mail.yahoo.com/*",
+        "https://mail.proton.me/*",
+        "https://*.mail.proton.me/*",
+        "https://app.hey.com/*",
+        "https://*.app.hey.com/*",
+        "https://app.fastmail.com/*",
+        "https://*.app.fastmail.com/*"
+      ]
+    }
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "url-forensics-workbench@urlforensics.local",
+      "data_collection_permissions": {
+        "required": [
+          "none"
+        ]
+      },
+      "strict_min_version": "142.0"
+    }
+  }
+}

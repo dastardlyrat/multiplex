@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>URL Forensics Workbench Help</title>
+<link rel="stylesheet" href="./icons.css">
+<link rel="stylesheet" href="./help.css">
+</head>
+<body>
+<main class="help-shell">
+  <header class="help-hero">
+    <p class="eyebrow">URL Forensics Workbench</p>
+    <nav class="page-nav" aria-label="Extension pages">
+      <button class="page-link" type="button" data-page-href="./settings.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">settings</span>Settings</button>
+      <button class="page-link" type="button" data-page-href="./diagnostics.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">analytics</span>Diagnostics</button>
+      <button class="page-link" type="button" data-page-href="./debugging.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">bug_report</span>Debugging</button>
+      <button class="page-link" type="button" data-page-href="./storage.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">storage</span>Storage</button>
+      <button class="page-link" type="button" data-page-href="./about.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">info</span>About</button>
+    </nav>
+    <div class="hero-row">
+      <div>
+        <h1 class="icon-heading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">help</span>Help and Troubleshooting</h1>
+        <p class="lede">
+          Use this page for quick usage guidance and troubleshooting for the workbench and its mail-client integrations.
+        </p>
+      </div>
+    </div>
+    <div class="chip-row" aria-label="Supported hosts">
+      <span class="chip">Gmail</span>
+      <span class="chip">Outlook</span>
+      <span class="chip">Yahoo Mail</span>
+      <span class="chip">Proton Mail</span>
+      <span class="chip">HEY</span>
+      <span class="chip">Fastmail</span>
+    </div>
+    <div class="stub-note" role="note">
+      Auto-apply now uses a configurable sender-address list. Use the full settings page to manage sender addresses and to enable or disable generic auto-apply behavior.
+    </div>
+  </header>
+
+  <section class="help-card">
+    <h2 class="icon-subheading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">rocket_launch</span>Quick Start</h2>
+    <ol class="step-list">
+      <li>Open a supported inbox page and select an email so the full message body is visible.</li>
+      <li>Open the toolbar popup and choose <strong>Open In-Page Helper</strong>.</li>
+      <li>Use the helper tabs to review the email mirror, workflow output, and diagnostics.</li>
+      <li>Use the copy actions when you want final URLs, digest output, rewritten content, or diagnostics on the clipboard.</li>
+    </ol>
+  </section>
+
+  <section class="help-card">
+    <h2 class="icon-subheading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">settings</span>Settings</h2>
+    <div class="info-grid">
+      <article class="info-item">
+        <h3>URL normalization and repair</h3>
+        <p>Default: off. When enabled, detected URLs are normalized and repaired before mirror content and final outputs are generated.</p>
+      </article>
+      <article class="info-item">
+        <h3>Replace opened email body with mirror content</h3>
+        <p>Default: off. When enabled, the opened email body is replaced in-page with the current mirror content after the snapshot is ready.</p>
+      </article>
+      <article class="info-item">
+        <h3>Auto-apply mirror for configured sender addresses</h3>
+        <p>Default: off. This applies mirror replacement automatically for messages that match the sender address list managed on the settings page.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="help-card">
+    <h2 class="icon-subheading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">visibility</span>What The Helper Shows</h2>
+    <div class="info-grid">
+      <article class="info-item">
+        <h3>Email Mirror</h3>
+        <p>A formatted mirror of the opened message so you can inspect links in context before interacting with them.</p>
+      </article>
+      <article class="info-item">
+        <h3>Workflow</h3>
+        <p>The step-by-step URL pipeline, including raw detection, cleanup, resolution details, final URLs, digest output, and modified email content.</p>
+      </article>
+      <article class="info-item">
+        <h3>Diagnostics</h3>
+        <p>Detection mode, counts, and any pipeline errors that can explain why a message did or did not populate correctly. Storage values now live on the Storage page from Settings.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="help-card">
+    <h2 class="icon-subheading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">support</span>Troubleshooting</h2>
+    <div class="issue-list">
+      <article class="issue-item">
+        <h3>No email detected</h3>
+        <p>Make sure an email is open in the reading view, not just the inbox list. The helper stays empty until the message body is visible and readable on a supported host.</p>
+      </article>
+      <article class="issue-item">
+        <h3>The popup says the helper is unavailable</h3>
+        <p>Check that the current tab is one of the supported webmail hosts and that the page has finished loading. Then reopen the popup and refresh diagnostics.</p>
+      </article>
+      <article class="issue-item">
+        <h3>The wrong message stays in the rail after navigation</h3>
+        <p>Use the helper <strong>Refresh</strong> button after major inbox navigation changes. If the issue persists, reopen the target email and then open the helper again.</p>
+      </article>
+      <article class="issue-item">
+        <h3>Copy actions do not produce the expected output</h3>
+        <p>Check the Diagnostics tab for pipeline errors, then confirm whether URL normalization and repair is on or off. Those settings change the final output.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="help-card">
+    <h2 class="icon-subheading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">dns</span>Supported Hosts</h2>
+    <ul class="host-list">
+      <li><code>mail.google.com</code></li>
+      <li><code>outlook.office.com</code></li>
+      <li><code>outlook.live.com</code></li>
+      <li><code>outlook.office365.com</code></li>
+      <li><code>mail.yahoo.com</code></li>
+      <li><code>mail.proton.me</code></li>
+      <li><code>app.hey.com</code></li>
+      <li><code>app.fastmail.com</code></li>
+    </ul>
+  </section>
+</main>
+<script src="./page-navigation.js"></script>
+</body>
+</html>

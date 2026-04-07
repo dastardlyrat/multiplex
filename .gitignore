@@ -1,0 +1,13 @@
+node_modules/
+backups/
+link lab source/
+lab/firefox-extension-dev/amo-assets/
+
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+.DS_Store
+Thumbs.db
+*.lnk
