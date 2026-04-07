@@ -856,6 +856,52 @@
       return !normalizedAnchorText || /^https?:\/\//i.test(normalizedAnchorText) || normalizedAnchorText === normalizedAnchorText.toLowerCase();
     }
 
+    // Function: check whether a child node is a line break element.
+    function isLineBreakElementNode(childNode) {
+      return childNode.nodeType === getNodeTypeValue("ELEMENT_NODE", 1) && childNode.tagName === "BR";
+    }
+
+    // Function: check whether a text node should not reset a line break run.
+    function isIgnorableLineBreakTextSeparator(childNode, shouldNormalizeTextSeparators) {
+      if (childNode.nodeType !== getNodeTypeValue("TEXT_NODE", 3)) {
+        return false;
+      }
+
+      const separatorText = shouldNormalizeTextSeparators
+        ? normalizeTextValue(childNode.nodeValue || "")
+        : (childNode.nodeValue || "");
+
+      return !separatorText.trim();
+    }
+
+    // Function: trim line break runs.
+    function trimLineBreakRuns(rootNode, options) {
+      const optionBag = options || {};
+      const shouldNormalizeTextSeparators = optionBag.normalizeTextSeparators === true;
+
+      Array.from(rootNode.querySelectorAll("*")).forEach(function trimLineBreakRunsForElement(elementNode) {
+        let consecutiveBreakCount = 0;
+
+        // Loop: remove the third and later break in a visible run.
+        Array.from(elementNode.childNodes).forEach(function inspectLineBreakRunNode(childNode) {
+          if (isLineBreakElementNode(childNode)) {
+            consecutiveBreakCount += 1;
+
+            if (consecutiveBreakCount > 2) {
+              childNode.remove();
+            }
+            return;
+          }
+
+          if (isIgnorableLineBreakTextSeparator(childNode, shouldNormalizeTextSeparators)) {
+            return;
+          }
+
+          consecutiveBreakCount = 0;
+        });
+      });
+    }
+
     // Function: cleanup markup.
     function cleanupMarkup(rootNode) {
       // Branch: follow this path only when the current condition passes.
@@ -908,30 +954,7 @@
         }
       });
 
-      // Loop: iterate through each item in the current collection.
-      Array.from(rootNode.querySelectorAll("*")).forEach(function trimExcessLineBreaks(elementNode) {
-        let consecutiveBreakCount = 0;
-
-        // Loop: iterate through each item in the current collection.
-        Array.from(elementNode.childNodes).forEach(function inspectChildNode(childNode) {
-          // Branch: follow this path only when the current condition passes.
-          if (childNode.nodeType === getNodeTypeValue("ELEMENT_NODE", 1) && childNode.tagName === "BR") {
-            consecutiveBreakCount += 1;
-            // Branch: follow this path only when the current condition passes.
-            if (consecutiveBreakCount > 2) {
-              childNode.remove();
-            }
-            return;
-          }
-
-          // Branch: follow this path only when the current condition passes.
-          if (childNode.nodeType === getNodeTypeValue("TEXT_NODE", 3) && !normalizeTextValue(childNode.nodeValue || "").trim()) {
-            return;
-          }
-
-          consecutiveBreakCount = 0;
-        });
-      });
+      trimLineBreakRuns(rootNode, { normalizeTextSeparators: true });
     }
 
     // Function: rewrite anchors.
@@ -1269,29 +1292,7 @@
 
     // Function: trim standalone preview line break runs.
     function trimStandalonePreviewLineBreakRuns(documentRoot) {
-      Array.from(documentRoot.querySelectorAll("*")).forEach(function trimPreviewLineBreakRuns(elementNode) {
-        let consecutiveBreakCount = 0;
-
-        // Loop: iterate through each item in the current collection.
-        Array.from(elementNode.childNodes).forEach(function inspectChildNode(childNode) {
-          // Branch: follow this path only when the current condition passes.
-          if (childNode.nodeType === getNodeTypeValue("ELEMENT_NODE", 1) && childNode.tagName === "BR") {
-            consecutiveBreakCount += 1;
-            // Branch: follow this path only when the current condition passes.
-            if (consecutiveBreakCount > 2) {
-              childNode.remove();
-            }
-            return;
-          }
-
-          // Branch: follow this path only when the current condition passes.
-          if (childNode.nodeType === getNodeTypeValue("TEXT_NODE", 3) && !(childNode.nodeValue || "").trim()) {
-            return;
-          }
-
-          consecutiveBreakCount = 0;
-        });
-      });
+      trimLineBreakRuns(documentRoot, { normalizeTextSeparators: false });
     }
 
     // Function: remove empty standalone preview structural nodes.
