@@ -328,107 +328,165 @@
     );
   }
 
+  // Function: check whether settings controls are available.
+  function hasSettingsControls() {
+    return !!(
+      DOM.enableUrlNormalizationRepair ||
+      DOM.replaceEmailBodyWithMirrorContent ||
+      DOM.autoApplyMirrorForConfiguredSenders ||
+      DOM.senderAddressList
+    );
+  }
+
+  // Function: check whether settings storage can be read.
+  function canReadSettingsStorage() {
+    return !!(
+      extensionApi &&
+      extensionApi.storage &&
+      extensionApi.storage.local &&
+      typeof extensionApi.storage.local.get === "function"
+    );
+  }
+
+  // Function: resolve load settings options.
+  function resolveLoadSettingsOptions(options) {
+    const optionBag = options || {};
+
+    return {
+      silentStatus: optionBag.silentStatus === true
+    };
+  }
+
+  // Function: apply stored checkbox values.
+  function applyStoredCheckboxValues(storedSettings) {
+    if (DOM.enableUrlNormalizationRepair) {
+      DOM.enableUrlNormalizationRepair.checked = storedSettings[storageKeys.enableUrlNormalizationRepair] === true;
+    }
+
+    if (DOM.replaceEmailBodyWithMirrorContent) {
+      DOM.replaceEmailBodyWithMirrorContent.checked = storedSettings[storageKeys.replaceEmailBodyWithMirrorContent] === true;
+    }
+
+    if (DOM.autoApplyMirrorForConfiguredSenders) {
+      const resolvedAutoApplyValue = resolveStoredAutoApplyConfiguredSendersValue(storedSettings);
+      DOM.autoApplyMirrorForConfiguredSenders.checked =
+        resolvedAutoApplyValue === true || resolvedAutoApplyValue === false
+          ? resolvedAutoApplyValue === true
+          : defaults.autoApplyMirrorForConfiguredSenders;
+    }
+  }
+
+  // Function: get stored sender email list.
+  function getStoredSenderEmailList(storedSettings) {
+    return Object.prototype.hasOwnProperty.call(storedSettings, storageKeys.autoApplyMirrorSenderEmailList)
+      ? sanitizeSenderEmailList(storedSettings[storageKeys.autoApplyMirrorSenderEmailList])
+      : defaults.autoApplyMirrorSenderEmailList;
+  }
+
+  // Function: apply stored settings to controls.
+  function applyStoredSettingsToControls(storedSettings) {
+    applyStoredCheckboxValues(storedSettings);
+    applySenderEmailList(getStoredSenderEmailList(storedSettings));
+  }
+
+  // Function: log loaded settings debug state.
+  function logLoadedSettingsDebugState() {
+    if (!debugApi) {
+      return;
+    }
+
+    debugApi.storage("settings loaded", {
+      senderEmailCount: settingsState.senderEmailList.length,
+      enableUrlNormalizationRepair: !!(DOM.enableUrlNormalizationRepair && DOM.enableUrlNormalizationRepair.checked),
+      replaceEmailBodyWithMirrorContent: !!(DOM.replaceEmailBodyWithMirrorContent && DOM.replaceEmailBodyWithMirrorContent.checked),
+      autoApplyMirrorForConfiguredSenders: !!(DOM.autoApplyMirrorForConfiguredSenders && DOM.autoApplyMirrorForConfiguredSenders.checked)
+    });
+    debugApi.functionOut("settings.loadSettings", { source: "storage.local" });
+  }
+
+  // Function: finish successful settings load.
+  function finishSuccessfulSettingsLoad(storedSettings, loadOptions) {
+    setSettingsStorageSnapshot("storage.local", storedSettings, "");
+    renderDiagnostics();
+    setSenderAddressStatus("Sender address list loaded.", "");
+
+    if (!loadOptions.silentStatus) {
+      setStatus("Settings loaded. You can change any toggle at any time.", "");
+    }
+
+    logLoadedSettingsDebugState();
+  }
+
+  // Function: handle settings controls unavailable.
+  function handleSettingsControlsUnavailable() {
+    renderDiagnostics();
+
+    if (debugApi) {
+      debugApi.conditional("settings load skipped because settings controls are unavailable");
+      debugApi.functionOut("settings.loadSettings", { source: "no-controls" });
+    }
+  }
+
+  // Function: handle settings storage unavailable.
+  function handleSettingsStorageUnavailable(loadOptions) {
+    applyDefaultCheckboxValues();
+    setSettingsStorageSnapshot("storage-unavailable", null, "storage.local.get is unavailable in this context.");
+    renderDiagnostics();
+    setSenderAddressStatus("Storage is unavailable in this context.", "error");
+
+    if (!loadOptions.silentStatus) {
+      setStatus("Storage is unavailable in this context.", "error");
+    }
+
+    if (debugApi) {
+      debugApi.storage("settings storage unavailable", { hasExtensionApi: !!extensionApi });
+      debugApi.functionOut("settings.loadSettings", { source: "storage-unavailable" });
+    }
+  }
+
+  // Function: handle settings load failure.
+  function handleSettingsLoadFailure(error, loadOptions) {
+    const errorMessage = error && error.message ? error.message : "unknown error";
+
+    applyDefaultCheckboxValues();
+    setSettingsStorageSnapshot("storage-error", null, errorMessage);
+    renderDiagnostics();
+    setSenderAddressStatus("Could not load sender address list: " + errorMessage, "error");
+
+    if (!loadOptions.silentStatus) {
+      setStatus("Could not load settings: " + errorMessage, "error");
+    }
+
+    if (debugApi) {
+      debugApi.error("settings load failed", { message: errorMessage });
+      debugApi.functionOut("settings.loadSettings", { source: "storage-error" });
+    }
+  }
+
   // Function: load settings.
   async function loadSettings(options) {
     if (debugApi) {
       debugApi.functionIn("settings.loadSettings", { silentStatus: !!(options && options.silentStatus) });
     }
 
-    const optionBag = options || {};
-    const silentStatus = optionBag.silentStatus === true;
+    const loadOptions = resolveLoadSettingsOptions(options);
 
-    // Branch: follow this path only when the current condition passes.
-    if (
-      !DOM.enableUrlNormalizationRepair &&
-      !DOM.replaceEmailBodyWithMirrorContent &&
-      !DOM.autoApplyMirrorForConfiguredSenders &&
-      !DOM.senderAddressList
-    ) {
-      renderDiagnostics();
-      if (debugApi) {
-        debugApi.conditional("settings load skipped because settings controls are unavailable");
-        debugApi.functionOut("settings.loadSettings", { source: "no-controls" });
-      }
+    if (!hasSettingsControls()) {
+      handleSettingsControlsUnavailable();
       return;
     }
 
-    // Branch: follow this path only when the current condition passes.
-    if (!extensionApi || !extensionApi.storage || !extensionApi.storage.local || typeof extensionApi.storage.local.get !== "function") {
-      applyDefaultCheckboxValues();
-      setSettingsStorageSnapshot("storage-unavailable", null, "storage.local.get is unavailable in this context.");
-      renderDiagnostics();
-      setSenderAddressStatus("Storage is unavailable in this context.", "error");
-      if (!silentStatus) {
-        setStatus("Storage is unavailable in this context.", "error");
-      }
-      if (debugApi) {
-        debugApi.storage("settings storage unavailable", { hasExtensionApi: !!extensionApi });
-        debugApi.functionOut("settings.loadSettings", { source: "storage-unavailable" });
-      }
+    if (!canReadSettingsStorage()) {
+      handleSettingsStorageUnavailable(loadOptions);
       return;
     }
 
-    // Branch: try the primary operation before handling failures.
     try {
       const storedSettings = await extensionApi.storage.local.get(storageModel.getStorageReadKeys());
-
-      if (DOM.enableUrlNormalizationRepair) {
-        DOM.enableUrlNormalizationRepair.checked = storedSettings[storageKeys.enableUrlNormalizationRepair] === true;
-      }
-
-      if (DOM.replaceEmailBodyWithMirrorContent) {
-        DOM.replaceEmailBodyWithMirrorContent.checked = storedSettings[storageKeys.replaceEmailBodyWithMirrorContent] === true;
-      }
-
-      if (DOM.autoApplyMirrorForConfiguredSenders) {
-        const resolvedAutoApplyValue = resolveStoredAutoApplyConfiguredSendersValue(storedSettings);
-        DOM.autoApplyMirrorForConfiguredSenders.checked =
-          resolvedAutoApplyValue === true || resolvedAutoApplyValue === false
-            ? resolvedAutoApplyValue === true
-            : defaults.autoApplyMirrorForConfiguredSenders;
-      }
-
-      applySenderEmailList(
-        Object.prototype.hasOwnProperty.call(storedSettings, storageKeys.autoApplyMirrorSenderEmailList)
-          ? sanitizeSenderEmailList(storedSettings[storageKeys.autoApplyMirrorSenderEmailList])
-          : defaults.autoApplyMirrorSenderEmailList
-      );
-
-      setSettingsStorageSnapshot("storage.local", storedSettings, "");
-      renderDiagnostics();
-      setSenderAddressStatus("Sender address list loaded.", "");
-      if (!silentStatus) {
-        setStatus("Settings loaded. You can change any toggle at any time.", "");
-      }
-      if (debugApi) {
-        debugApi.storage("settings loaded", {
-          senderEmailCount: settingsState.senderEmailList.length,
-          enableUrlNormalizationRepair: !!(DOM.enableUrlNormalizationRepair && DOM.enableUrlNormalizationRepair.checked),
-          replaceEmailBodyWithMirrorContent: !!(DOM.replaceEmailBodyWithMirrorContent && DOM.replaceEmailBodyWithMirrorContent.checked),
-          autoApplyMirrorForConfiguredSenders: !!(DOM.autoApplyMirrorForConfiguredSenders && DOM.autoApplyMirrorForConfiguredSenders.checked)
-        });
-        debugApi.functionOut("settings.loadSettings", { source: "storage.local" });
-      }
-    // Branch: handle errors from the guarded operation.
+      applyStoredSettingsToControls(storedSettings);
+      finishSuccessfulSettingsLoad(storedSettings, loadOptions);
     } catch (error) {
-      applyDefaultCheckboxValues();
-      setSettingsStorageSnapshot(
-        "storage-error",
-        null,
-        error && error.message ? error.message : "unknown error"
-      );
-      renderDiagnostics();
-      setSenderAddressStatus(
-        "Could not load sender address list: " + (error && error.message ? error.message : "unknown error"),
-        "error"
-      );
-      if (!silentStatus) {
-        setStatus("Could not load settings: " + (error && error.message ? error.message : "unknown error"), "error");
-      }
-      if (debugApi) {
-        debugApi.error("settings load failed", { message: error && error.message ? error.message : "unknown error" });
-        debugApi.functionOut("settings.loadSettings", { source: "storage-error" });
-      }
+      handleSettingsLoadFailure(error, loadOptions);
     }
   }
 
