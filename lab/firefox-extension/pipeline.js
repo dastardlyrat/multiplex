@@ -1216,8 +1216,8 @@
       return anchorText.split(/\s+/).length <= 10;
     }
 
-    // Function: cleanup standalone preview markup.
-    function cleanupStandalonePreviewMarkup(documentRoot, parsedDocument) {
+    // Function: collect standalone preview text nodes.
+    function collectStandalonePreviewTextNodes(documentRoot, parsedDocument) {
       const textWalker = parsedDocument.createTreeWalker(documentRoot, getNodeFilterFlag("SHOW_TEXT", 4));
       const textNodes = [];
       let currentTextNode = textWalker.nextNode();
@@ -1228,7 +1228,11 @@
         currentTextNode = textWalker.nextNode();
       }
 
-      // Loop: iterate through each item in the current collection.
+      return textNodes;
+    }
+
+    // Function: normalize standalone preview text nodes.
+    function normalizeStandalonePreviewTextNodes(textNodes) {
       textNodes.forEach(function normalizePreviewTextNode(textNode) {
         const parentTagName = textNode.parentElement ? textNode.parentElement.tagName : "";
         const shouldPreserveWhitespace = /^(PRE|TEXTAREA)$/i.test(parentTagName);
@@ -1247,8 +1251,10 @@
           textNode.nodeValue = normalizedValue;
         }
       });
+    }
 
-      // Loop: iterate through each item in the current collection.
+    // Function: normalize standalone preview anchors.
+    function normalizeStandalonePreviewAnchors(parsedDocument) {
       Array.from(parsedDocument.querySelectorAll("a[href]")).forEach(function normalizePreviewAnchor(anchorElement) {
         const trimmedHref = convertValueToString(anchorElement.getAttribute("href")).trim();
         anchorElement.setAttribute("href", trimmedHref);
@@ -1259,36 +1265,40 @@
           anchorElement.textContent = normalizedAnchorLabel;
         }
       });
+    }
 
-      // Function: build anchor signature.
-      function buildAnchorSignature(anchorElement) {
-        // Branch: follow this path only when the current condition passes.
-        if (!anchorElement || anchorElement.tagName !== "A" || !anchorElement.hasAttribute("href")) {
-          return "";
-        }
-
-        const hrefValue = convertValueToString(anchorElement.getAttribute("href")).trim();
-        const textValue = normalizeTextValue(anchorElement.textContent || "").trim();
-        return hrefValue + "||" + textValue;
+    // Function: build standalone preview anchor signature.
+    function buildStandalonePreviewAnchorSignature(anchorElement) {
+      if (!anchorElement || anchorElement.tagName !== "A" || !anchorElement.hasAttribute("href")) {
+        return "";
       }
 
-      // Function: is ignorable node between links.
-      function isIgnorableNodeBetweenLinks(node) {
-        // Branch: follow this path only when the current condition passes.
-        if (!node) return true;
-        // Branch: follow this path only when the current condition passes.
-        if (node.nodeType === getNodeTypeValue("TEXT_NODE", 3)) return !normalizeTextValue(node.nodeValue || "").trim();
-        return node.nodeType === getNodeTypeValue("ELEMENT_NODE", 1) && node.tagName === "BR";
+      const hrefValue = convertValueToString(anchorElement.getAttribute("href")).trim();
+      const textValue = normalizeTextValue(anchorElement.textContent || "").trim();
+      return hrefValue + "||" + textValue;
+    }
+
+    // Function: check whether a node can sit between duplicate preview links.
+    function isIgnorableStandalonePreviewLinkSeparator(node) {
+      if (!node) {
+        return true;
       }
 
-      // Loop: iterate through each item in the current collection.
+      if (node.nodeType === getNodeTypeValue("TEXT_NODE", 3)) {
+        return !normalizeTextValue(node.nodeValue || "").trim();
+      }
+
+      return node.nodeType === getNodeTypeValue("ELEMENT_NODE", 1) && node.tagName === "BR";
+    }
+
+    // Function: remove immediate duplicate standalone preview anchors.
+    function removeImmediateDuplicateStandalonePreviewAnchors(documentRoot) {
       Array.from(documentRoot.querySelectorAll("*")).forEach(function removeImmediateDuplicateAnchors(parentElement) {
         let previousAnchorSignature = "";
 
         // Loop: iterate through each item in the current collection.
         Array.from(parentElement.childNodes).forEach(function inspectChildNode(childNode) {
-          // Branch: follow this path only when the current condition passes.
-          if (isIgnorableNodeBetweenLinks(childNode)) {
+          if (isIgnorableStandalonePreviewLinkSeparator(childNode)) {
             return;
           }
 
@@ -1298,7 +1308,7 @@
             childNode.tagName === "A" &&
             childNode.hasAttribute("href")
           ) {
-            const currentAnchorSignature = buildAnchorSignature(childNode);
+            const currentAnchorSignature = buildStandalonePreviewAnchorSignature(childNode);
 
             // Branch: follow this path only when the current condition passes.
             if (currentAnchorSignature && currentAnchorSignature === previousAnchorSignature) {
@@ -1313,50 +1323,48 @@
           previousAnchorSignature = "";
         });
       });
+    }
 
-      // Function: build simple block signature.
-      function buildSimpleBlockSignature(blockElement) {
-        // Branch: follow this path only when the current condition passes.
-        if (!blockElement || blockElement.nodeType !== getNodeTypeValue("ELEMENT_NODE", 1)) {
-          return "";
-        }
-
-        const directElementChildren = Array.from(blockElement.children);
-        // Loop: keep only items that match the current check.
-        const directAnchorChildren = directElementChildren.filter(function keepAnchorChildren(childElement) {
-          return childElement.tagName === "A" && childElement.hasAttribute("href");
-        });
-        // Loop: keep only items that match the current check.
-        const otherNonBreakChildren = directElementChildren.filter(function keepOtherChildren(childElement) {
-          return childElement.tagName !== "A" && childElement.tagName !== "BR";
-        });
-
-        // Branch: follow this path only when the current condition passes.
-        if (directAnchorChildren.length !== 1 || otherNonBreakChildren.length > 0) {
-          return "";
-        }
-
-        const clonedBlockElement = blockElement.cloneNode(true);
-        // Loop: iterate through each item in the current collection.
-        Array.from(clonedBlockElement.querySelectorAll("a,br")).forEach(function removeLinkArtifacts(node) {
-          node.remove();
-        });
-
-        const remainingText = normalizeTextValue(clonedBlockElement.textContent || "").replace(/\s+/g, "").trim();
-        // Branch: follow this path only when the current condition passes.
-        if (remainingText) {
-          return "";
-        }
-
-        return buildAnchorSignature(directAnchorChildren[0]);
+    // Function: build simple standalone preview link block signature.
+    function buildSimpleStandalonePreviewLinkBlockSignature(blockElement) {
+      if (!blockElement || blockElement.nodeType !== getNodeTypeValue("ELEMENT_NODE", 1)) {
+        return "";
       }
 
+      const directElementChildren = Array.from(blockElement.children);
+      const directAnchorChildren = directElementChildren.filter(function keepAnchorChildren(childElement) {
+        return childElement.tagName === "A" && childElement.hasAttribute("href");
+      });
+      const otherNonBreakChildren = directElementChildren.filter(function keepOtherChildren(childElement) {
+        return childElement.tagName !== "A" && childElement.tagName !== "BR";
+      });
+
+      if (directAnchorChildren.length !== 1 || otherNonBreakChildren.length > 0) {
+        return "";
+      }
+
+      const clonedBlockElement = blockElement.cloneNode(true);
+      Array.from(clonedBlockElement.querySelectorAll("a,br")).forEach(function removeLinkArtifacts(node) {
+        node.remove();
+      });
+
+      const remainingText = normalizeTextValue(clonedBlockElement.textContent || "").replace(/\s+/g, "").trim();
+
+      if (remainingText) {
+        return "";
+      }
+
+      return buildStandalonePreviewAnchorSignature(directAnchorChildren[0]);
+    }
+
+    // Function: remove duplicate single-link standalone preview blocks.
+    function removeDuplicateSingleLinkStandalonePreviewBlocks(documentRoot) {
       const blockCandidates = Array.from(documentRoot.querySelectorAll("p,div,li,td,th,span"));
       let previousBlockSignature = "";
 
       // Loop: iterate through each item in the current collection.
       blockCandidates.forEach(function removeDuplicateSingleLinkBlocks(blockElement) {
-        const currentBlockSignature = buildSimpleBlockSignature(blockElement);
+        const currentBlockSignature = buildSimpleStandalonePreviewLinkBlockSignature(blockElement);
 
         // Branch: follow this path only when the current condition passes.
         if (!currentBlockSignature) {
@@ -1372,8 +1380,10 @@
 
         previousBlockSignature = currentBlockSignature;
       });
+    }
 
-      // Loop: iterate through each item in the current collection.
+    // Function: trim standalone preview line break runs.
+    function trimStandalonePreviewLineBreakRuns(documentRoot) {
       Array.from(documentRoot.querySelectorAll("*")).forEach(function trimPreviewLineBreakRuns(elementNode) {
         let consecutiveBreakCount = 0;
 
@@ -1397,7 +1407,10 @@
           consecutiveBreakCount = 0;
         });
       });
+    }
 
+    // Function: remove empty standalone preview structural nodes.
+    function removeEmptyStandalonePreviewStructuralNodes(documentRoot) {
       const reverseCleanupCandidates = Array.from(documentRoot.querySelectorAll("p,div,span,td,th,li")).reverse();
 
       // Loop: iterate through each item in the current collection.
@@ -1418,6 +1431,16 @@
           elementNode.remove();
         }
       });
+    }
+
+    // Function: cleanup standalone preview markup.
+    function cleanupStandalonePreviewMarkup(documentRoot, parsedDocument) {
+      normalizeStandalonePreviewTextNodes(collectStandalonePreviewTextNodes(documentRoot, parsedDocument));
+      normalizeStandalonePreviewAnchors(parsedDocument);
+      removeImmediateDuplicateStandalonePreviewAnchors(documentRoot);
+      removeDuplicateSingleLinkStandalonePreviewBlocks(documentRoot);
+      trimStandalonePreviewLineBreakRuns(documentRoot);
+      removeEmptyStandalonePreviewStructuralNodes(documentRoot);
     }
 
     // Function: rewrite html for standalone preview.
