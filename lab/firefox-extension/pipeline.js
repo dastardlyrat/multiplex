@@ -1,8 +1,8 @@
 // Function: attach merged link lab pipeline.
-(function attachMergedLinkLabPipeline(globalScope, pipelineBase, createPipelineApi) {
+(function attachMergedLinkLabPipeline(globalScope, pipelineBase, pipelineUrlResolverFactory, createPipelineApi) {
   "use strict";
 
-  const pipelineApi = createPipelineApi(globalScope, pipelineBase);
+  const pipelineApi = createPipelineApi(globalScope, pipelineBase, pipelineUrlResolverFactory);
 
   // Branch: follow this path only when the current condition passes.
   if (typeof module !== "undefined" && module.exports) {
@@ -31,9 +31,25 @@
 
     return null;
   }(typeof globalThis !== "undefined" ? globalThis : this)),
+  // Function: resolve shared pipeline URL resolver helpers.
+  (function resolveMergedLinkLabPipelineUrlResolver(globalScope) {
+    if (globalScope && globalScope.urlForensicsPipelineUrlResolver) {
+      return globalScope.urlForensicsPipelineUrlResolver;
+    }
+
+    if (typeof require === "function") {
+      try {
+        return require("./pipeline-url-resolver.js");
+      } catch {
+        return null;
+      }
+    }
+
+    return null;
+  }(typeof globalThis !== "undefined" ? globalThis : this)),
   // Function: create merged link lab pipeline api.
   // eslint-disable-next-line max-lines-per-function -- Compatibility wrapper while pipeline helper groups move into focused modules.
-  function createMergedLinkLabPipelineApi(globalScope, pipelineBase) {
+  function createMergedLinkLabPipelineApi(globalScope, pipelineBase, pipelineUrlResolverFactory) {
     "use strict";
 
     const debugApi = globalScope && globalScope.mergedLinkLabDebug ? globalScope.mergedLinkLabDebug : null;
@@ -45,9 +61,11 @@
       throw new Error("URL Forensics pipeline base helpers are unavailable.");
     }
 
+    if (!pipelineUrlResolverFactory || typeof pipelineUrlResolverFactory.create !== "function") {
+      throw new Error("URL Forensics pipeline URL resolver helpers are unavailable.");
+    }
+
     const regularExpressions = pipelineBase.regularExpressions;
-    const preferredTrackingParameterNames = pipelineBase.preferredTrackingParameterNames;
-    const trackingHostKeywords = pipelineBase.trackingHostKeywords;
     const defaultPipelineSettings = pipelineBase.defaultPipelineSettings;
     const convertValueToString = pipelineBase.convertValueToString;
     const resolvePipelineSettings = pipelineBase.resolvePipelineSettings;
@@ -57,6 +75,27 @@
     const validateTitle = pipelineBase.validateTitle;
     const normalizeTitle = pipelineBase.normalizeTitle;
     const createDetectedUrlRecord = pipelineBase.createDetectedUrlRecord;
+    const urlResolver = pipelineUrlResolverFactory.create(pipelineBase);
+    const peel = urlResolver.peel;
+    const decodeValue = urlResolver.decodeValue;
+    const decodeRepeated = urlResolver.decodeRepeated;
+    const extractFirstAbsoluteUrl = urlResolver.extractFirstAbsoluteUrl;
+    const firstUrlCandidate = urlResolver.firstUrlCandidate;
+    const isLikelyTrackerHost = urlResolver.isLikelyTrackerHost;
+    const extractTrackingCandidates = urlResolver.extractTrackingCandidates;
+    const extractTracking = urlResolver.extractTracking;
+    const splitMerged = urlResolver.splitMerged;
+    const resolveURL = urlResolver.resolveURL;
+    const resolveURLMinimalRecursive = urlResolver.resolveURLMinimalRecursive;
+    const isValidURL = urlResolver.isValidURL;
+    const extractHost = urlResolver.extractHost;
+    const extractBaseUrl = urlResolver.extractBaseUrl;
+    const extractOriginUrl = urlResolver.extractOriginUrl;
+    const buildFinalUrlDisplayName = urlResolver.buildFinalUrlDisplayName;
+    const buildFinalUrlLinkText = urlResolver.buildFinalUrlLinkText;
+    const buildFinalUrlEntry = urlResolver.buildFinalUrlEntry;
+    const classify = urlResolver.classify;
+    const classifyUrlValue = urlResolver.classifyUrlValue;
 
     // Function: get node filter flag.
     function getNodeFilterFlag(flagName, fallbackValue) {
@@ -175,392 +214,6 @@
       }
 
       return detectedItems;
-    }
-
-    // Function: peel.
-    function peel(urlValue, options) {
-      const pipelineSettings = resolvePipelineSettings(options);
-      let peeledUrl = convertValueToString(urlValue).trim();
-      const cleanupNotes = [];
-
-      // Branch: follow this path only when the current condition passes.
-      if (!pipelineSettings.enableUrlNormalizationRepair) {
-        return {
-          value: peeledUrl,
-          notes: cleanupNotes
-        };
-      }
-
-      // Branch: follow this path only when the current condition passes.
-      if (regularExpressions.trailingUrlPunctuation.test(peeledUrl)) {
-        peeledUrl = peeledUrl.replace(regularExpressions.trailingUrlPunctuation, "");
-        cleanupNotes.push("TRAILING_PUNCT_REMOVED");
-      }
-
-      // Branch: follow this path only when the current condition passes.
-      if (/^https?:\/([^/])/.test(peeledUrl)) {
-        peeledUrl = peeledUrl.replace(/^https?:\/([^/])/, "https://$1");
-        cleanupNotes.push("PROTOCOL_REPAIRED");
-      }
-
-      return {
-        value: peeledUrl,
-        notes: cleanupNotes
-      };
-    }
-
-    // Function: decode value.
-    function decodeValue(valueToDecode) {
-      // Branch: try the primary operation before handling failures.
-      try {
-        return decodeURIComponent(valueToDecode);
-      // Branch: handle errors from the guarded operation.
-      } catch {
-        return valueToDecode;
-      }
-    }
-
-    // Function: decode repeated.
-    function decodeRepeated(valueToDecode, maximumRounds) {
-      let decodedValue = valueToDecode;
-      const totalDecodePasses = maximumRounds || 3;
-
-      // Loop: step through the current range or collection.
-      for (let decodeRoundIndex = 0; decodeRoundIndex < totalDecodePasses; decodeRoundIndex += 1) {
-        const nextDecodedValue = decodeValue(decodedValue);
-        // Branch: follow this path only when the current condition passes.
-        if (nextDecodedValue === decodedValue) break;
-        decodedValue = nextDecodedValue;
-      }
-
-      return decodedValue;
-    }
-
-    // Function: extract first absolute url.
-    function extractFirstAbsoluteUrl(valueToInspect) {
-      const candidateText = convertValueToString(valueToInspect).trim();
-
-      // Branch: follow this path only when the current condition passes.
-      if (!candidateText) {
-        return null;
-      }
-
-      const directLeadingMatch = candidateText.match(/^https?:\/\/[^\s<>"']+/i);
-      // Branch: follow this path only when the current condition passes.
-      if (directLeadingMatch) {
-        return directLeadingMatch[0];
-      }
-
-      const embeddedUrlMatch = candidateText.match(/https?:\/\/[^\s<>"']+/i);
-      return embeddedUrlMatch ? embeddedUrlMatch[0] : null;
-    }
-
-    // Function: first url candidate.
-    function firstUrlCandidate(candidateValues) {
-      // Loop: step through the current range or collection.
-      for (let valueIndex = 0; valueIndex < candidateValues.length; valueIndex += 1) {
-        const rawCandidateValue = convertValueToString(candidateValues[valueIndex]).trim();
-
-        // Branch: follow this path only when the current condition passes.
-        if (!rawCandidateValue) {
-          continue;
-        }
-
-        const decodedCandidateValue = decodeRepeated(rawCandidateValue, 4);
-        const extractedAbsoluteUrl = extractFirstAbsoluteUrl(decodedCandidateValue);
-
-        // Branch: follow this path only when the current condition passes.
-        if (extractedAbsoluteUrl) {
-          return extractedAbsoluteUrl;
-        }
-      }
-
-      return null;
-    }
-
-    // Function: is likely tracker host.
-    function isLikelyTrackerHost(hostName) {
-      const normalizedHostName = convertValueToString(hostName).toLowerCase();
-
-      // Branch: follow this path only when the current condition passes.
-      if (!normalizedHostName) {
-        return false;
-      }
-
-      // Loop: stop once any item matches the current check.
-      return trackingHostKeywords.some(function hasTrackingKeyword(keyword) {
-        return normalizedHostName.includes(keyword);
-      });
-    }
-
-    // Function: extract tracking candidates.
-    function extractTrackingCandidates(urlValue) {
-      const foundDestinationUrls = [];
-      const seenDestinationUrls = new Set();
-      const trimmedUrlValue = convertValueToString(urlValue).trim();
-
-      // Function: remember destination candidate.
-      function rememberDestinationCandidate(candidateValue) {
-        const extractedAbsoluteUrl = extractFirstAbsoluteUrl(candidateValue);
-
-        // Branch: follow this path only when the current condition passes.
-        if (!extractedAbsoluteUrl || extractedAbsoluteUrl === trimmedUrlValue || seenDestinationUrls.has(extractedAbsoluteUrl)) {
-          return;
-        }
-
-        seenDestinationUrls.add(extractedAbsoluteUrl);
-        foundDestinationUrls.push(extractedAbsoluteUrl);
-      }
-
-      let parsedUrl = null;
-
-      // Branch: try the primary operation before handling failures.
-      try {
-        parsedUrl = new URL(trimmedUrlValue);
-      // Branch: handle errors from the guarded operation.
-      } catch {
-        parsedUrl = null;
-      }
-
-      // Branch: follow this path only when the current condition passes.
-      if (parsedUrl) {
-        // Loop: iterate through each item in the current collection.
-        preferredTrackingParameterNames.forEach(function inspectTrackingParameter(parameterName) {
-          // Loop: iterate through each item in the current collection.
-          parsedUrl.searchParams.getAll(parameterName).forEach(function addTrackingParameterValue(parameterValue) {
-            rememberDestinationCandidate(decodeRepeated(parameterValue, 4));
-          });
-        });
-
-        // Loop: iterate through each item in the current collection.
-        parsedUrl.searchParams.forEach(function inspectAllSearchParameterValues(parameterValue) {
-          rememberDestinationCandidate(decodeRepeated(parameterValue, 4));
-        });
-
-        // Branch: follow this path only when the current condition passes.
-        if (isLikelyTrackerHost(parsedUrl.hostname)) {
-          rememberDestinationCandidate(decodeRepeated(trimmedUrlValue, 4));
-        }
-      }
-
-      const embeddedTrackingMatches = [...trimmedUrlValue.matchAll(regularExpressions.embeddedTrackingParameter)];
-      // Loop: iterate through each item in the current collection.
-      embeddedTrackingMatches.forEach(function inspectEmbeddedTrackingMatch(embeddedMatch) {
-        rememberDestinationCandidate(decodeRepeated(embeddedMatch[1], 4));
-      });
-
-      return foundDestinationUrls;
-    }
-
-    // Function: extract tracking.
-    function extractTracking(urlValue) {
-      const detectedTrackingCandidates = extractTrackingCandidates(urlValue);
-      return detectedTrackingCandidates.length ? detectedTrackingCandidates[0] : null;
-    }
-
-    // Function: split merged.
-    function splitMerged(urlValue) {
-      const mergedUrlSegments = convertValueToString(urlValue).match(/https?:\/\/.*?(?=https?:\/\/|$)/g);
-      return mergedUrlSegments && mergedUrlSegments.length ? mergedUrlSegments : [convertValueToString(urlValue)];
-    }
-
-    // Function: resolve url.
-    function resolveURL(urlValue) {
-      const pendingUrlQueue = [{ value: urlValue, depth: 0 }];
-      const seenQueuedUrls = new Set([urlValue]);
-      const resolvedLeafUrls = [];
-      const seenLeafUrls = new Set();
-      const maximumResolutionDepth = 6;
-
-      // Loop: repeat while the guard condition stays true.
-      while (pendingUrlQueue.length) {
-        const currentQueueEntry = pendingUrlQueue.shift();
-        const mergedUrlParts = splitMerged(currentQueueEntry.value);
-
-        // Loop: iterate through each item in the current collection.
-        mergedUrlParts.forEach(function inspectMergedUrlPart(mergedUrlPart) {
-          const destinationCandidates = extractTrackingCandidates(mergedUrlPart);
-
-          // Branch: follow this path only when the current condition passes.
-          if (destinationCandidates.length && currentQueueEntry.depth < maximumResolutionDepth) {
-            // Loop: iterate through each item in the current collection.
-            destinationCandidates.forEach(function queueDestinationCandidate(candidateUrl) {
-              // Branch: follow this path only when the current condition passes.
-              if (seenQueuedUrls.has(candidateUrl)) {
-                return;
-              }
-
-              seenQueuedUrls.add(candidateUrl);
-              pendingUrlQueue.push({
-                value: candidateUrl,
-                depth: currentQueueEntry.depth + 1
-              });
-            });
-
-            return;
-          }
-
-          // Branch: follow this path only when the current condition passes.
-          if (!seenLeafUrls.has(mergedUrlPart)) {
-            seenLeafUrls.add(mergedUrlPart);
-            resolvedLeafUrls.push(mergedUrlPart);
-          }
-        });
-      }
-
-      return resolvedLeafUrls.length ? resolvedLeafUrls : [urlValue];
-    }
-
-    // Function: resolve urlminimal recursive.
-    function resolveURLMinimalRecursive(urlValue, options) {
-      const seenIntermediateUrls = new Set();
-      const pipelineSettings = resolvePipelineSettings(options);
-      let currentUrlValue = convertValueToString(urlValue).trim();
-      let safetyGuardCount = 0;
-
-      // Branch: follow this path only when the current condition passes.
-      if (!pipelineSettings.enableUrlNormalizationRepair) {
-        return currentUrlValue;
-      }
-
-      // Loop: repeat while the guard condition stays true.
-      while (currentUrlValue && !seenIntermediateUrls.has(currentUrlValue) && safetyGuardCount < 24) {
-        safetyGuardCount += 1;
-        seenIntermediateUrls.add(currentUrlValue);
-
-        const peeledUrl = peel(currentUrlValue, pipelineSettings).value;
-        const decodedUrl = decodeRepeated(peeledUrl, 4);
-        const resolvedCandidates = resolveURL(decodedUrl);
-        const validResolvedCandidates = resolvedCandidates.filter(isValidURL);
-        const preferredNextUrl = convertValueToString(validResolvedCandidates[0] || resolvedCandidates[0] || decodedUrl || currentUrlValue).trim();
-
-        // Branch: follow this path only when the current condition passes.
-        if (!preferredNextUrl || preferredNextUrl === currentUrlValue) {
-          break;
-        }
-
-        currentUrlValue = preferredNextUrl;
-      }
-
-      return currentUrlValue || convertValueToString(urlValue).trim();
-    }
-
-    // Function: is valid url.
-    function isValidURL(urlValue) {
-      // Branch: try the primary operation before handling failures.
-      try {
-        new URL(urlValue);
-        return true;
-      // Branch: handle errors from the guarded operation.
-      } catch {
-        return false;
-      }
-    }
-
-    // Function: extract host.
-    function extractHost(urlValue) {
-      // Branch: try the primary operation before handling failures.
-      try {
-        return new URL(urlValue).hostname;
-      // Branch: handle errors from the guarded operation.
-      } catch {
-        return "";
-      }
-    }
-
-    // Function: extract base url.
-    function extractBaseUrl(urlValue) {
-      // Branch: try the primary operation before handling failures.
-      try {
-        const parsedUrl = new URL(urlValue);
-        return parsedUrl.origin + parsedUrl.pathname.replace(/\/$/, "");
-      // Branch: handle errors from the guarded operation.
-      } catch {
-        return urlValue;
-      }
-    }
-
-    // Function: extract origin url.
-    function extractOriginUrl(urlValue) {
-      // Branch: try the primary operation before handling failures.
-      try {
-        const parsedUrl = new URL(urlValue);
-        return parsedUrl.protocol + "//" + parsedUrl.host;
-      // Branch: handle errors from the guarded operation.
-      } catch {
-        return urlValue;
-      }
-    }
-
-    // Function: build final url display name.
-    function buildFinalUrlDisplayName(urlValue) {
-      const trimmedUrlValue = convertValueToString(urlValue).trim();
-      return extractOriginUrl(trimmedUrlValue) || trimmedUrlValue;
-    }
-
-    // Function: build final url link text.
-    function buildFinalUrlLinkText(finalUrlEntry) {
-      const finalUrlLabel = convertValueToString(finalUrlEntry && finalUrlEntry.label).trim();
-      const finalUrlType = convertValueToString(finalUrlEntry && finalUrlEntry.type).trim();
-
-      if (!finalUrlLabel) {
-        return finalUrlType;
-      }
-
-      return finalUrlType ? finalUrlLabel + " (" + finalUrlType + ")" : finalUrlLabel;
-    }
-
-    // Function: build final url entry.
-    function buildFinalUrlEntry(urlValue, options) {
-      const optionBag = options || {};
-      const trimmedUrlValue = convertValueToString(urlValue).trim();
-      const hostName = extractHost(trimmedUrlValue);
-      const detectedType = convertValueToString(optionBag.detectedType || optionBag.type).trim();
-
-      return {
-        url: trimmedUrlValue,
-        host: hostName,
-        type: detectedType || classify(hostName),
-        label: buildFinalUrlDisplayName(trimmedUrlValue)
-      };
-    }
-
-    // Function: classify.
-    function classify(hostName) {
-      const normalizedHostName = convertValueToString(hostName).toLowerCase();
-
-      // Branch: follow this path only when the current condition passes.
-      if (!normalizedHostName) return "unknown";
-      // Branch: follow this path only when the current condition passes.
-      if (normalizedHostName.includes("list-manage")) return "publisher";
-      // Branch: follow this path only when the current condition passes.
-      if (
-        normalizedHostName.includes("rs6.net") ||
-        normalizedHostName.includes("kajabimail") ||
-        normalizedHostName.includes("ymlpmail") ||
-        normalizedHostName.includes("ccsend.com") ||
-        normalizedHostName.includes("mailchi.mp")
-      ) return "newsletter";
-      // Branch: follow this path only when the current condition passes.
-      if (/track|trk|click|redirect/i.test(normalizedHostName)) return "tracker";
-      return "destination";
-    }
-
-    // Function: classify url value.
-    function classifyUrlValue(urlValue) {
-      const trimmedUrlValue = convertValueToString(urlValue).trim();
-      const hostName = extractHost(trimmedUrlValue);
-      const classifiedHostType = classify(hostName);
-
-      if (classifiedHostType !== "destination") {
-        return classifiedHostType;
-      }
-
-      if (extractTrackingCandidates(trimmedUrlValue).length || isLikelyTrackerHost(hostName)) {
-        return "tracker";
-      }
-
-      return classifiedHostType;
     }
 
     // Function: normalize anchor text.
