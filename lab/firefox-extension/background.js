@@ -453,6 +453,101 @@
     }
   }
 
+  // Function: get runtime message type.
+  function getRuntimeMessageType(message) {
+    return message && message.type ? String(message.type) : "";
+  }
+
+  // Function: create debug test event.
+  function createDebugTestEvent(message) {
+    return {
+      timestamp: Date.now(),
+      level: "info",
+      category: "runtime",
+      context: "debugging-page",
+      module: "debug-test",
+      message: "program debug test event",
+      details: {
+        source: message.source || "unknown",
+        adjustedConfig: message.adjustedConfig === true
+      }
+    };
+  }
+
+  // Function: handle debug runtime message.
+  function handleDebugRuntimeMessage(message, sender, sendResponse) {
+    const messageType = getRuntimeMessageType(message);
+
+    if (messageType === "merged-link-lab:debug-event") {
+      return respondToRuntimeMessage(recordDebugEvent(message.event, sender), sendResponse);
+    }
+
+    if (messageType === "merged-link-lab:debug:get-state") {
+      return respondToRuntimeMessage(getDebugStatePayload(message), sendResponse);
+    }
+
+    if (messageType === "merged-link-lab:debug:set-config") {
+      return respondToRuntimeMessagePromise(setDebugConfig(message.config, message), sendResponse);
+    }
+
+    if (messageType === "merged-link-lab:debug:test") {
+      return respondToRuntimeMessage(recordDebugEvent(createDebugTestEvent(message), sender), sendResponse);
+    }
+
+    if (messageType === "merged-link-lab:debug:clear") {
+      return respondToRuntimeMessage(clearDebugEvents(message), sendResponse);
+    }
+
+    return null;
+  }
+
+  // Function: log runtime message receipt.
+  function logRuntimeMessageReceipt(message, sender) {
+    debugLog("messaging", "info", "runtime message received", {
+      type: getRuntimeMessageType(message) || "unknown",
+      hasSenderTab: !!(sender && sender.tab && sender.tab.id)
+    });
+  }
+
+  // Function: handle settings page runtime message.
+  function handleSettingsPageRuntimeMessage(message, sendResponse) {
+    if (getRuntimeMessageType(message) !== "merged-link-lab:open-settings-page") {
+      return null;
+    }
+
+    return respondToRuntimeMessagePromise(openSettingsPage(), sendResponse);
+  }
+
+  // Function: remember active sender tab if needed.
+  function rememberActiveSenderTabIfNeeded(sender) {
+    if (sender && sender.tab && sender.tab.id && sender.tab.active) {
+      rememberActiveTab(sender.tab.id, sender.tab.windowId);
+    }
+  }
+
+  // Function: handle email state runtime message.
+  function handleEmailStateRuntimeMessage(message, sender) {
+    const senderTabId = sender && sender.tab ? sender.tab.id : null;
+    const messageType = getRuntimeMessageType(message);
+
+    if (!senderTabId) {
+      return;
+    }
+
+    rememberActiveSenderTabIfNeeded(sender);
+
+    if (messageType === "merged-link-lab:email-snapshot") {
+      rememberWhetherTabHasDetectedEmail(senderTabId, true);
+      syncToolbarButtonTitle();
+      return;
+    }
+
+    if (messageType === "merged-link-lab:email-cleared") {
+      rememberWhetherTabHasDetectedEmail(senderTabId, false);
+      syncToolbarButtonTitle();
+    }
+  }
+
   // Function: handle tab activated.
   extensionApi.tabs.onActivated.addListener(function handleTabActivated(activeInfo) {
     // Branch: follow this path only when the current condition passes.
@@ -501,67 +596,21 @@
 
   // Function: handle runtime message.
   extensionApi.runtime.onMessage.addListener(function handleRuntimeMessage(message, sender, sendResponse) {
-    if (message && message.type === "merged-link-lab:debug-event") {
-      return respondToRuntimeMessage(recordDebugEvent(message.event, sender), sendResponse);
+    const debugResponse = handleDebugRuntimeMessage(message, sender, sendResponse);
+
+    if (debugResponse !== null) {
+      return debugResponse;
     }
 
-    if (message && message.type === "merged-link-lab:debug:get-state") {
-      return respondToRuntimeMessage(getDebugStatePayload(message), sendResponse);
+    logRuntimeMessageReceipt(message, sender);
+
+    const settingsResponse = handleSettingsPageRuntimeMessage(message, sendResponse);
+
+    if (settingsResponse !== null) {
+      return settingsResponse;
     }
 
-    if (message && message.type === "merged-link-lab:debug:set-config") {
-      return respondToRuntimeMessagePromise(setDebugConfig(message.config, message), sendResponse);
-    }
-
-    if (message && message.type === "merged-link-lab:debug:test") {
-      return respondToRuntimeMessage(recordDebugEvent({
-        timestamp: Date.now(),
-        level: "info",
-        category: "runtime",
-        context: "debugging-page",
-        module: "debug-test",
-        message: "program debug test event",
-        details: {
-          source: message.source || "unknown",
-          adjustedConfig: message.adjustedConfig === true
-        }
-      }, sender), sendResponse);
-    }
-
-    if (message && message.type === "merged-link-lab:debug:clear") {
-      return respondToRuntimeMessage(clearDebugEvents(message), sendResponse);
-    }
-
-    debugLog("messaging", "info", "runtime message received", {
-      type: message && message.type ? message.type : "unknown",
-      hasSenderTab: !!(sender && sender.tab && sender.tab.id)
-    });
-
-    // Branch: follow this path only when the current condition passes.
-    if (message && message.type === "merged-link-lab:open-settings-page") {
-      return respondToRuntimeMessagePromise(openSettingsPage(), sendResponse);
-    }
-
-    // Branch: follow this path only when the current condition passes.
-    if (sender && sender.tab && sender.tab.id) {
-      // Branch: follow this path only when the current condition passes.
-      if (sender.tab.active) {
-        rememberActiveTab(sender.tab.id, sender.tab.windowId);
-      }
-
-      // Branch: follow this path only when the current condition passes.
-      if (message && message.type === "merged-link-lab:email-snapshot") {
-        rememberWhetherTabHasDetectedEmail(sender.tab.id, true);
-        syncToolbarButtonTitle();
-      }
-
-      // Branch: follow this path only when the current condition passes.
-      if (message && message.type === "merged-link-lab:email-cleared") {
-        rememberWhetherTabHasDetectedEmail(sender.tab.id, false);
-        syncToolbarButtonTitle();
-      }
-    }
-
+    handleEmailStateRuntimeMessage(message, sender);
     return undefined;
   });
 
