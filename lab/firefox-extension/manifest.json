@@ -21,6 +21,7 @@
   },
   "background": {
     "scripts": [
+      "debug-redaction.js",
       "debug.js",
       "background.js"
     ]
@@ -49,6 +50,7 @@
         "page-pane.css"
       ],
       "js": [
+        "debug-redaction.js",
         "debug.js",
         "pipeline-base.js",
         "pipeline.js",
@@ -66,6 +68,7 @@
         "icons.css",
         "app.css",
         "app.js",
+        "debug-redaction.js",
         "debug.js",
         "pipeline-base.js",
         "pipeline.js",

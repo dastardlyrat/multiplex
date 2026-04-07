@@ -15,6 +15,13 @@
     focusedWindowId: null
   };
   const debugApi = typeof globalThis !== "undefined" ? globalThis.mergedLinkLabDebug : null;
+  const debugRedaction = typeof globalThis !== "undefined" && globalThis.urlForensicsDebugRedaction
+    ? globalThis.urlForensicsDebugRedaction
+    : {
+        sanitizeDetails: function sanitizeDebugDetailsFailClosed() {
+          return "[debug redaction helper unavailable]";
+        }
+      };
   const debugLevels = {
     off: 0,
     error: 1,
@@ -50,51 +57,6 @@
 
   if (debugApi && typeof debugApi.configure === "function") {
     debugApi.configure({ context: "background", module: "background" });
-  }
-
-  // Function: sanitize debug event details in background collector.
-  function sanitizeDebugCollectorDetails(value, depth) {
-    const safeDepth = Number.isFinite(depth) ? depth : 0;
-    const redactedKeyPattern = /^(rawtext|sourcehtml|sourcemarkup|htmlmarkup|rewrittenhtml|emailbody|bodytext|innertext|textcontent|clipboard|payload|snapshot|messagebody)$/i;
-
-    if (value === null || typeof value === "undefined") {
-      return value;
-    }
-
-    if (typeof value === "string") {
-      return value.length > 240 ? value.slice(0, 237) + "..." : value;
-    }
-
-    if (typeof value === "number" || typeof value === "boolean") {
-      return value;
-    }
-
-    if (safeDepth >= 4) {
-      return "[depth limit]";
-    }
-
-    if (Array.isArray(value)) {
-      return value.slice(0, 16).map(function sanitizeDebugCollectorArrayItem(item) {
-        return sanitizeDebugCollectorDetails(item, safeDepth + 1);
-      });
-    }
-
-    if (typeof value === "object") {
-      const output = {};
-
-      Object.keys(value).slice(0, 40).forEach(function sanitizeDebugCollectorObjectEntry(key) {
-        if (redactedKeyPattern.test(key)) {
-          output[key] = "[redacted]";
-          return;
-        }
-
-        output[key] = sanitizeDebugCollectorDetails(value[key], safeDepth + 1);
-      });
-
-      return output;
-    }
-
-    return String(value);
   }
 
   // Function: normalize debug config.
@@ -151,7 +113,7 @@
       context: String(safeEvent.context || (senderTab ? "content-script" : "extension")),
       module: String(safeEvent.module || "unknown"),
       message: String(safeEvent.message || ""),
-      details: sanitizeDebugCollectorDetails(safeEvent.details || {}, 0),
+      details: debugRedaction.sanitizeDetails(safeEvent.details || {}, 0),
       tabId: senderTab && senderTab.id ? senderTab.id : null,
       url: senderTab && senderTab.url ? senderTab.url : ""
     };

@@ -5,6 +5,11 @@
   const extensionApi = typeof browser !== "undefined" ? browser : (typeof chrome !== "undefined" ? chrome : null);
   const localEvents = [];
   const maxLocalEvents = 500;
+  const debugRedaction = globalScope.urlForensicsDebugRedaction || {
+    sanitizeDetails: function sanitizeDebugDetailsFailClosed() {
+      return "[debug redaction helper unavailable]";
+    }
+  };
   const debugLevels = {
     off: 0,
     error: 1,
@@ -24,7 +29,6 @@
     loop: false,
     variable: false
   };
-  const redactedKeyPattern = /^(rawtext|sourcehtml|sourcemarkup|htmlmarkup|rewrittenhtml|emailbody|bodytext|innertext|textcontent|clipboard|payload|snapshot|messagebody)$/i;
   const helperState = {
     context: "unknown",
     module: "unknown"
@@ -39,50 +43,6 @@
     }
   }
 
-  // Function: sanitize debug details.
-  function sanitizeDetails(value, depth) {
-    const safeDepth = Number.isFinite(depth) ? depth : 0;
-
-    if (value === null || typeof value === "undefined") {
-      return value;
-    }
-
-    if (typeof value === "string") {
-      return value.length > 240 ? value.slice(0, 237) + "..." : value;
-    }
-
-    if (typeof value === "number" || typeof value === "boolean") {
-      return value;
-    }
-
-    if (safeDepth >= 4) {
-      return "[depth limit]";
-    }
-
-    if (Array.isArray(value)) {
-      return value.slice(0, 16).map(function sanitizeArrayItem(item) {
-        return sanitizeDetails(item, safeDepth + 1);
-      });
-    }
-
-    if (typeof value === "object") {
-      const output = {};
-
-      Object.keys(value).slice(0, 40).forEach(function sanitizeObjectEntry(key) {
-        if (redactedKeyPattern.test(key)) {
-          output[key] = "[redacted]";
-          return;
-        }
-
-        output[key] = sanitizeDetails(value[key], safeDepth + 1);
-      });
-
-      return output;
-    }
-
-    return String(value);
-  }
-
   // Function: emit debug event.
   function emit(category, level, message, details) {
     const normalizedCategory = Object.prototype.hasOwnProperty.call(defaultCategories, category) ? category : "runtime";
@@ -94,7 +54,7 @@
       context: helperState.context,
       module: helperState.module,
       message: String(message || ""),
-      details: sanitizeDetails(details || {}, 0)
+      details: debugRedaction.sanitizeDetails(details || {}, 0)
     };
 
     if (extensionApi && extensionApi.runtime && typeof extensionApi.runtime.sendMessage === "function") {
