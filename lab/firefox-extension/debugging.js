@@ -3,6 +3,7 @@
   "use strict";
 
   const extensionApi = typeof browser !== "undefined" ? browser : (typeof chrome !== "undefined" ? chrome : null);
+  const pageUi = globalThis.urlForensicsPageUi;
   const defaultDebugConfig = {
     level: "off",
     categories: {
@@ -63,39 +64,17 @@
 
   // Function: set status.
   function setStatus(message, tone) {
-    if (!DOM.statusMessage) {
-      return;
-    }
-
-    DOM.statusMessage.textContent = String(message || "");
-    DOM.statusMessage.classList.toggle("is-saved", tone === "saved");
-    DOM.statusMessage.classList.toggle("is-error", tone === "error");
+    pageUi.setStatusText(DOM.statusMessage, message, tone);
   }
 
   // Function: set badge text.
   function setBadgeText(element, text) {
-    if (!element) {
-      return;
-    }
-
-    element.textContent = String(text || "Unavailable");
+    pageUi.setBadgeText(element, text, "Unavailable");
   }
 
   // Function: format timestamp.
   function formatTimestamp(timestampValue) {
-    if (!timestampValue) {
-      return "Unavailable";
-    }
-
-    try {
-      return new Date(timestampValue).toLocaleTimeString([], {
-        hour: "numeric",
-        minute: "2-digit",
-        second: "2-digit"
-      });
-    } catch {
-      return "Unavailable";
-    }
+    return pageUi.formatTimestamp(timestampValue, { timeOnly: true });
   }
 
   // Function: send runtime message.
@@ -574,45 +553,12 @@
 
   // Function: open extension page.
   async function openExtensionPage(pageName, label) {
-    if (!extensionApi || !extensionApi.runtime || typeof extensionApi.runtime.getURL !== "function") {
-      setStatus(label + " page is unavailable in this context.", "error");
-      return;
-    }
-
-    try {
-      const pageUrl = extensionApi.runtime.getURL(pageName);
-
-      if (extensionApi.tabs && typeof extensionApi.tabs.create === "function") {
-        await extensionApi.tabs.create({ url: pageUrl });
-      } else {
-        window.open(pageUrl, "_blank", "noopener");
-      }
-
-      setStatus("Opened " + label.toLowerCase() + " page.", "saved");
-    } catch (error) {
-      setStatus("Could not open " + label.toLowerCase() + " page: " + (error && error.message ? error.message : "unknown error"), "error");
-    }
+    await pageUi.openExtensionPage(extensionApi, pageName, label, setStatus);
   }
 
   // Function: open settings page.
   async function openSettingsPage() {
-    if (!extensionApi || !extensionApi.runtime) {
-      setStatus("Settings page is unavailable in this context.", "error");
-      return;
-    }
-
-    try {
-      if (typeof extensionApi.runtime.openOptionsPage === "function") {
-        await extensionApi.runtime.openOptionsPage();
-        setStatus("Opened settings page.", "saved");
-        return;
-      }
-    } catch (error) {
-      setStatus("Could not open settings page: " + (error && error.message ? error.message : "unknown error"), "error");
-      return;
-    }
-
-    await openExtensionPage("settings.html", "Settings");
+    await pageUi.openSettingsPage(extensionApi, setStatus);
   }
 
   // Function: update render limit.

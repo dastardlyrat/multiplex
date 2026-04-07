@@ -3,6 +3,7 @@
   "use strict";
 
   const extensionApi = typeof browser !== "undefined" ? browser : (typeof chrome !== "undefined" ? chrome : null);
+  const pageUi = globalThis.urlForensicsPageUi;
   const debugApi = typeof globalThis !== "undefined" ? globalThis.mergedLinkLabDebug : null;
   if (debugApi && typeof debugApi.configure === "function") {
     debugApi.configure({ context: "settings-page", module: "settings" });
@@ -16,9 +17,6 @@
   const normalizeSenderEmailAddress = storageModel.normalizeSenderEmailAddress;
   const sanitizeSenderEmailList = storageModel.sanitizeSenderEmailList;
   const resolveStoredAutoApplyConfiguredSendersValue = storageModel.resolveStoredAutoApplyConfiguredSendersValue;
-  const formatStorageBooleanEntry = storageModel.formatStorageBooleanEntry;
-  const formatStorageEmailListEntry = storageModel.formatStorageEmailListEntry;
-  const getStorageSourceLabel = storageModel.getStorageSourceLabel;
   const settingsState = {
     manifest: null,
     storageSnapshot: null,
@@ -60,63 +58,27 @@
 
   // Function: set status.
   function setStatus(message, tone) {
-    // Branch: follow this path only when the current condition passes.
-    if (!DOM.statusMessage) {
-      return;
-    }
-
-    DOM.statusMessage.textContent = message;
-    DOM.statusMessage.classList.toggle("is-saved", tone === "saved");
-    DOM.statusMessage.classList.toggle("is-error", tone === "error");
+    pageUi.setStatusText(DOM.statusMessage, message, tone);
   }
 
   // Function: set sender-address status.
   function setSenderAddressStatus(message, tone) {
-    if (!DOM.senderAddressStatus) {
-      return;
-    }
-
-    DOM.senderAddressStatus.textContent = String(message || "");
-    DOM.senderAddressStatus.classList.toggle("is-saved", tone === "saved");
-    DOM.senderAddressStatus.classList.toggle("is-error", tone === "error");
+    pageUi.setStatusText(DOM.senderAddressStatus, message, tone);
   }
 
   // Function: set diagnostic badge.
   function setDiagnosticBadge(text) {
-    if (!DOM.diagnosticBadge) {
-      return;
-    }
-
-    DOM.diagnosticBadge.textContent = String(text || "Unavailable");
+    pageUi.setBadgeText(DOM.diagnosticBadge, text, "Unavailable");
   }
 
   // Function: format timestamp.
   function formatTimestamp(timestampValue) {
-    if (!timestampValue) {
-      return "Unavailable";
-    }
-
-    try {
-      return new Date(timestampValue).toLocaleString();
-    } catch {
-      return "Unavailable";
-    }
+    return pageUi.formatTimestamp(timestampValue);
   }
 
   // Function: shorten value.
   function shortenValue(value, maximumLength) {
-    const normalizedValue = String(value || "").trim();
-    const safeMaximumLength = Number.isFinite(maximumLength) ? Number(maximumLength) : 92;
-
-    if (!normalizedValue) {
-      return "Unavailable";
-    }
-
-    if (normalizedValue.length <= safeMaximumLength) {
-      return normalizedValue;
-    }
-
-    return normalizedValue.slice(0, safeMaximumLength - 3) + "...";
+    return pageUi.shortenValue(value, Number.isFinite(maximumLength) ? maximumLength : 92);
   }
 
   // Function: update sender count chip.
@@ -217,97 +179,24 @@
 
   // Function: render diagnostics list.
   function renderDiagnosticsList(rows) {
-    if (!DOM.diagnosticsList) {
-      return;
-    }
-
-    const listRows = Array.isArray(rows) ? rows : [];
-    const fragment = document.createDocumentFragment();
-    DOM.diagnosticsList.textContent = "";
-
-    listRows.forEach(function appendDiagnosticRow(row) {
-      const nextRow = row && typeof row === "object" ? row : {};
-      const rowContainer = document.createElement("div");
-      const labelElement = document.createElement("dt");
-      const valueElement = document.createElement("dd");
-
-      rowContainer.className = "diagnostic-row";
-      labelElement.textContent = String(nextRow.label || "");
-      valueElement.textContent = String(nextRow.value || "");
-      rowContainer.appendChild(labelElement);
-      rowContainer.appendChild(valueElement);
-      fragment.appendChild(rowContainer);
-    });
-
-    DOM.diagnosticsList.appendChild(fragment);
+    pageUi.renderDefinitionRows(DOM.diagnosticsList, rows, "diagnostic-row");
   }
 
   // Function: render diagnostics.
   function renderDiagnostics() {
-    const manifest = settingsState.manifest || {};
-    const geckoSettings =
-      manifest &&
-      manifest.browser_specific_settings &&
-      manifest.browser_specific_settings.gecko &&
-      typeof manifest.browser_specific_settings.gecko === "object"
-        ? manifest.browser_specific_settings.gecko
-        : {};
-    const storageSnapshot = settingsState.storageSnapshot;
-    const rows = [
-      { label: "Extension", value: String(manifest.name || "URL Forensics Workbench") },
-      { label: "Version", value: String(manifest.version || "Unavailable") },
-      { label: "Gecko ID", value: String(geckoSettings.id || "Unavailable") },
-      { label: "Firefox Min Version", value: String(geckoSettings.strict_min_version || "Unavailable") },
-      { label: "Settings Page", value: shortenValue(window.location.href, 108) },
-      { label: "Ready State", value: String(document.readyState || "unknown") }
-    ];
-
-    if (!storageSnapshot) {
-      rows.push({ label: "Storage Source", value: "Unavailable" });
-      setDiagnosticBadge("Storage unknown");
-      renderDiagnosticsList(rows);
-      return;
-    }
-
-    rows.push({ label: "Storage Source", value: getStorageSourceLabel(storageSnapshot.source) });
-    rows.push({ label: "Storage Loaded", value: formatTimestamp(storageSnapshot.loadedAt) });
-    rows.push({
-      label: "Storage URL Normalization",
-      value: formatStorageBooleanEntry(storageSnapshot.enableUrlNormalizationRepair)
-    });
-    rows.push({
-      label: "Storage Replace Body",
-      value: formatStorageBooleanEntry(storageSnapshot.replaceEmailBodyWithMirrorContent)
-    });
-    rows.push({
-      label: "Storage Auto-Apply Toggle",
-      value: formatStorageBooleanEntry(storageSnapshot.autoApplyMirrorForConfiguredSenders)
-    });
-    rows.push({
-      label: "Storage Sender Addresses",
-      value: formatStorageEmailListEntry(storageSnapshot.autoApplyMirrorSenderEmailList)
+    const rows = storageModel.buildStorageDiagnosticsRows({
+      manifest: settingsState.manifest,
+      storageSnapshot: settingsState.storageSnapshot,
+      pageLabel: "Settings Page",
+      pageUrl: window.location.href,
+      readyState: document.readyState,
+      shortenValue: shortenValue,
+      formatTimestamp: formatTimestamp
     });
 
-    if (storageSnapshot.errorMessage) {
-      rows.push({
-        label: "Storage Error",
-        value: storageSnapshot.errorMessage
-      });
-    }
-
-    if (storageSnapshot.source === "storage.local" || storageSnapshot.source === "storage.onChanged") {
-      setDiagnosticBadge("Storage loaded");
-    } else if (storageSnapshot.source === "storage-error") {
-      setDiagnosticBadge("Storage error");
-    } else if (storageSnapshot.source === "storage-unavailable") {
-      setDiagnosticBadge("Storage unavailable");
-    } else {
-      setDiagnosticBadge("Storage unknown");
-    }
-
+    setDiagnosticBadge(storageModel.getStorageBadgeLabel(settingsState.storageSnapshot));
     renderDiagnosticsList(rows);
   }
-
   // Function: apply default checkbox values.
   function applyDefaultCheckboxValues() {
     if (DOM.enableUrlNormalizationRepair) {
@@ -613,24 +502,7 @@
 
   // Function: open help page.
   async function openHelpPage() {
-    if (!extensionApi || !extensionApi.runtime || typeof extensionApi.runtime.getURL !== "function") {
-      setStatus("Help page is unavailable in this context.", "error");
-      return;
-    }
-
-    try {
-      const helpUrl = extensionApi.runtime.getURL("help.html");
-
-      if (extensionApi.tabs && typeof extensionApi.tabs.create === "function") {
-        await extensionApi.tabs.create({ url: helpUrl });
-      } else {
-        window.open(helpUrl, "_blank", "noopener");
-      }
-
-      setStatus("Opened help page.", "saved");
-    } catch (error) {
-      setStatus("Could not open help page: " + (error && error.message ? error.message : "unknown error"), "error");
-    }
+    await pageUi.openExtensionPage(extensionApi, "help.html", "Help", setStatus);
   }
 
   // Function: open diagnostics page.
@@ -639,24 +511,7 @@
       debugApi.ui("settings open diagnostics clicked");
     }
 
-    if (!extensionApi || !extensionApi.runtime || typeof extensionApi.runtime.getURL !== "function") {
-      setStatus("Diagnostics page is unavailable in this context.", "error");
-      return;
-    }
-
-    try {
-      const diagnosticsUrl = extensionApi.runtime.getURL("diagnostics.html");
-
-      if (extensionApi.tabs && typeof extensionApi.tabs.create === "function") {
-        await extensionApi.tabs.create({ url: diagnosticsUrl });
-      } else {
-        window.open(diagnosticsUrl, "_blank", "noopener");
-      }
-
-      setStatus("Opened diagnostics page.", "saved");
-    } catch (error) {
-      setStatus("Could not open diagnostics page: " + (error && error.message ? error.message : "unknown error"), "error");
-    }
+    await pageUi.openExtensionPage(extensionApi, "diagnostics.html", "Diagnostics", setStatus);
   }
 
   // Function: open debugging page.
@@ -665,24 +520,7 @@
       debugApi.ui("settings open debugging clicked");
     }
 
-    if (!extensionApi || !extensionApi.runtime || typeof extensionApi.runtime.getURL !== "function") {
-      setStatus("Debugging page is unavailable in this context.", "error");
-      return;
-    }
-
-    try {
-      const debuggingUrl = extensionApi.runtime.getURL("debugging.html");
-
-      if (extensionApi.tabs && typeof extensionApi.tabs.create === "function") {
-        await extensionApi.tabs.create({ url: debuggingUrl });
-      } else {
-        window.open(debuggingUrl, "_blank", "noopener");
-      }
-
-      setStatus("Opened debugging page.", "saved");
-    } catch (error) {
-      setStatus("Could not open debugging page: " + (error && error.message ? error.message : "unknown error"), "error");
-    }
+    await pageUi.openExtensionPage(extensionApi, "debugging.html", "Debugging", setStatus);
   }
 
   // Function: open storage page.
@@ -691,24 +529,7 @@
       debugApi.ui("settings open storage clicked");
     }
 
-    if (!extensionApi || !extensionApi.runtime || typeof extensionApi.runtime.getURL !== "function") {
-      setStatus("Storage page is unavailable in this context.", "error");
-      return;
-    }
-
-    try {
-      const storageUrl = extensionApi.runtime.getURL("storage.html");
-
-      if (extensionApi.tabs && typeof extensionApi.tabs.create === "function") {
-        await extensionApi.tabs.create({ url: storageUrl });
-      } else {
-        window.open(storageUrl, "_blank", "noopener");
-      }
-
-      setStatus("Opened storage page.", "saved");
-    } catch (error) {
-      setStatus("Could not open storage page: " + (error && error.message ? error.message : "unknown error"), "error");
-    }
+    await pageUi.openExtensionPage(extensionApi, "storage.html", "Storage", setStatus);
   }
 
   // Function: handle storage changes.

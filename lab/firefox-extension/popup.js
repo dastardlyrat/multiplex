@@ -3,6 +3,7 @@
   "use strict";
 
   const extensionApi = typeof browser !== "undefined" ? browser : (typeof chrome !== "undefined" ? chrome : null);
+  const pageUi = globalThis.urlForensicsPageUi;
   const debugApi = typeof globalThis !== "undefined" ? globalThis.mergedLinkLabDebug : null;
   if (debugApi && typeof debugApi.configure === "function") {
     debugApi.configure({ context: "popup", module: "popup" });
@@ -38,13 +39,7 @@
 
   // Function: set status.
   function setStatus(message, tone) {
-    if (!DOM.statusMessage) {
-      return;
-    }
-
-    DOM.statusMessage.textContent = message;
-    DOM.statusMessage.classList.toggle("is-saved", tone === "saved");
-    DOM.statusMessage.classList.toggle("is-error", tone === "error");
+    pageUi.setStatusText(DOM.statusMessage, message, tone);
   }
 
   // Function: apply default settings.
@@ -68,15 +63,7 @@
 
   // Function: format timestamp.
   function formatTimestamp(timestampValue) {
-    if (!timestampValue) {
-      return "Unavailable";
-    }
-
-    try {
-      return new Date(timestampValue).toLocaleString();
-    } catch {
-      return "Unavailable";
-    }
+    return pageUi.formatTimestamp(timestampValue);
   }
 
   // Function: format diagnostic value.
@@ -137,54 +124,17 @@
 
   // Function: shorten url value.
   function shortenUrlValue(urlValue) {
-    const normalizedValue = String(urlValue || "").trim();
-
-    if (!normalizedValue) {
-      return "Unavailable";
-    }
-
-    if (normalizedValue.length <= 72) {
-      return normalizedValue;
-    }
-
-    return normalizedValue.slice(0, 69) + "...";
+    return pageUi.shortenValue(urlValue, 72);
   }
 
   // Function: render diagnostic list.
   function renderDiagnosticList(rows) {
-    if (!DOM.diagnosticsList) {
-      return;
-    }
-
-    const listRows = Array.isArray(rows) ? rows : [];
-    const fragment = document.createDocumentFragment();
-
-    DOM.diagnosticsList.textContent = "";
-
-    listRows.forEach(function appendDiagnosticRow(row) {
-      const nextRow = row && typeof row === "object" ? row : {};
-      const rowContainer = document.createElement("div");
-      const labelElement = document.createElement("dt");
-      const valueElement = document.createElement("dd");
-
-      rowContainer.className = "diagnostic-row";
-      labelElement.textContent = String(nextRow.label || "");
-      valueElement.textContent = String(nextRow.value || "");
-      rowContainer.appendChild(labelElement);
-      rowContainer.appendChild(valueElement);
-      fragment.appendChild(rowContainer);
-    });
-
-    DOM.diagnosticsList.appendChild(fragment);
+    pageUi.renderDefinitionRows(DOM.diagnosticsList, rows, "diagnostic-row");
   }
 
   // Function: set diagnostic badge.
   function setDiagnosticBadge(text) {
-    if (!DOM.diagnosticBadge) {
-      return;
-    }
-
-    DOM.diagnosticBadge.textContent = text;
+    pageUi.setBadgeText(DOM.diagnosticBadge, text, "Unavailable");
   }
 
   // Function: render diagnostics from snapshot.
@@ -452,27 +402,10 @@
 
   // Function: open help page.
   async function openHelpPage() {
-    if (!extensionApi || !extensionApi.runtime || typeof extensionApi.runtime.getURL !== "function") {
-      setStatus("Help unavailable here.", "error");
-      return;
-    }
-
-    try {
-      const helpUrl = extensionApi.runtime.getURL("help.html");
-
-      if (extensionApi.tabs && typeof extensionApi.tabs.create === "function") {
-        await extensionApi.tabs.create({ url: helpUrl });
-      } else {
-        window.open(helpUrl, "_blank", "noopener");
-      }
-
-      window.close();
-    } catch (error) {
-      setStatus(
-        "Help open failed: " + (error && error.message ? error.message : "unknown error"),
-        "error"
-      );
-    }
+    await pageUi.openExtensionPage(extensionApi, "help.html", "Help", setStatus, {
+      closeOnSuccess: true,
+      unavailableMessage: "Help unavailable here."
+    });
   }
 
   // Function: open diagnostics page.
@@ -481,28 +414,20 @@
       debugApi.ui("popup open diagnostics clicked");
     }
 
-    if (!extensionApi || !extensionApi.runtime || typeof extensionApi.runtime.getURL !== "function") {
-      setStatus("Diagnostics unavailable here.", "error");
-      return;
-    }
-
     try {
       const activeTab = await getActiveTab();
       const sourceTabId = activeTab && activeTab.id ? String(activeTab.id) : "";
-      const diagnosticsUrl = extensionApi.runtime.getURL(
-        sourceTabId ? "diagnostics.html?tabId=" + encodeURIComponent(sourceTabId) : "diagnostics.html"
-      );
+      const diagnosticsPageName = sourceTabId
+        ? "diagnostics.html?tabId=" + encodeURIComponent(sourceTabId)
+        : "diagnostics.html";
 
-      if (extensionApi.tabs && typeof extensionApi.tabs.create === "function") {
-        await extensionApi.tabs.create({ url: diagnosticsUrl });
-      } else {
-        window.open(diagnosticsUrl, "_blank", "noopener");
-      }
-
-      window.close();
+      await pageUi.openExtensionPage(extensionApi, diagnosticsPageName, "Diagnostics", setStatus, {
+        closeOnSuccess: true,
+        unavailableMessage: "Diagnostics unavailable here."
+      });
     } catch (error) {
       setStatus(
-        "Diagnostics open failed: " + (error && error.message ? error.message : "unknown error"),
+        "Diagnostics open failed: " + pageUi.getReadableErrorMessage(error),
         "error"
       );
     }
@@ -514,27 +439,10 @@
       debugApi.ui("popup open debugging clicked");
     }
 
-    if (!extensionApi || !extensionApi.runtime || typeof extensionApi.runtime.getURL !== "function") {
-      setStatus("Debugging unavailable here.", "error");
-      return;
-    }
-
-    try {
-      const debuggingUrl = extensionApi.runtime.getURL("debugging.html");
-
-      if (extensionApi.tabs && typeof extensionApi.tabs.create === "function") {
-        await extensionApi.tabs.create({ url: debuggingUrl });
-      } else {
-        window.open(debuggingUrl, "_blank", "noopener");
-      }
-
-      window.close();
-    } catch (error) {
-      setStatus(
-        "Debugging open failed: " + (error && error.message ? error.message : "unknown error"),
-        "error"
-      );
-    }
+    await pageUi.openExtensionPage(extensionApi, "debugging.html", "Debugging", setStatus, {
+      closeOnSuccess: true,
+      unavailableMessage: "Debugging unavailable here."
+    });
   }
 
   // Function: open full settings page.
@@ -543,38 +451,10 @@
       debugApi.ui("popup open settings clicked");
     }
 
-    if (!extensionApi || !extensionApi.runtime) {
-      setStatus("Settings unavailable here.", "error");
-      return;
-    }
-
-    try {
-      if (typeof extensionApi.runtime.openOptionsPage === "function") {
-        await extensionApi.runtime.openOptionsPage();
-        window.close();
-        return;
-      }
-
-      if (
-        extensionApi.tabs &&
-        typeof extensionApi.tabs.create === "function" &&
-        typeof extensionApi.runtime.getURL === "function"
-      ) {
-        await extensionApi.tabs.create({
-          url: extensionApi.runtime.getURL("settings.html")
-        });
-        window.close();
-        return;
-      }
-    } catch (error) {
-      setStatus(
-        "Settings open failed: " + (error && error.message ? error.message : "unknown error"),
-        "error"
-      );
-      return;
-    }
-
-    setStatus("Settings unavailable here.", "error");
+    await pageUi.openSettingsPage(extensionApi, setStatus, {
+      closeOnSuccess: true,
+      unavailableMessage: "Settings unavailable here."
+    });
   }
 
   // Function: bind ui.

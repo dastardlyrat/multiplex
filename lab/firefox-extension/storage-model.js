@@ -399,6 +399,118 @@
     );
   }
 
+  // Function: get gecko manifest settings.
+  function getGeckoManifestSettings(manifest) {
+    return (
+      manifest &&
+      manifest.browser_specific_settings &&
+      manifest.browser_specific_settings.gecko &&
+      typeof manifest.browser_specific_settings.gecko === "object"
+        ? manifest.browser_specific_settings.gecko
+        : {}
+    );
+  }
+
+  // Function: get storage badge label.
+  function getStorageBadgeLabel(storageSnapshot) {
+    if (!storageSnapshot) {
+      return "Storage unknown";
+    }
+
+    if (storageSnapshot.source === "storage.local" || storageSnapshot.source === "storage.onChanged") {
+      return "Storage loaded";
+    }
+
+    if (storageSnapshot.source === "storage-error") {
+      return "Storage error";
+    }
+
+    if (storageSnapshot.source === "storage-unavailable") {
+      return "Storage unavailable";
+    }
+
+    return "Storage unknown";
+  }
+
+  // Function: build storage diagnostics rows.
+  function buildStorageDiagnosticsRows(options) {
+    const rowOptions = options && typeof options === "object" ? options : {};
+    const manifest = rowOptions.manifest && typeof rowOptions.manifest === "object" ? rowOptions.manifest : {};
+    const geckoSettings = getGeckoManifestSettings(manifest);
+    const storageSnapshot = rowOptions.storageSnapshot || null;
+    const pageLabel = String(rowOptions.pageLabel || "Page");
+    const pageUrl = String(rowOptions.pageUrl || "");
+    const shouldIncludeDebugChoices = rowOptions.includeDebugChoices === true;
+    const shortenPageValue =
+      typeof rowOptions.shortenValue === "function"
+        ? rowOptions.shortenValue
+        : function useRawPageValue(value) {
+            return String(value || "Unavailable");
+          };
+    const formatLoadedAt =
+      typeof rowOptions.formatTimestamp === "function"
+        ? rowOptions.formatTimestamp
+        : function formatRawTimestamp(timestampValue) {
+            return String(timestampValue || "Unavailable");
+          };
+    const rows = [
+      { label: "Extension", value: String(manifest.name || "URL Forensics Workbench") },
+      { label: "Version", value: String(manifest.version || "Unavailable") },
+      { label: "Gecko ID", value: String(geckoSettings.id || "Unavailable") },
+      { label: "Firefox Min Version", value: String(geckoSettings.strict_min_version || "Unavailable") },
+      { label: pageLabel, value: shortenPageValue(pageUrl, 108) },
+      { label: "Ready State", value: String(rowOptions.readyState || "unknown") }
+    ];
+
+    if (!storageSnapshot) {
+      rows.push({ label: "Storage Source", value: "Unavailable" });
+      return rows;
+    }
+
+    rows.push({ label: "Storage Source", value: getStorageSourceLabel(storageSnapshot.source) });
+    rows.push({ label: "Storage Loaded", value: formatLoadedAt(storageSnapshot.loadedAt) });
+    rows.push({
+      label: "Storage URL Normalization",
+      value: formatStorageBooleanEntry(storageSnapshot.enableUrlNormalizationRepair)
+    });
+    rows.push({
+      label: "Storage Replace Body",
+      value: formatStorageBooleanEntry(storageSnapshot.replaceEmailBodyWithMirrorContent)
+    });
+    rows.push({
+      label: "Storage Auto-Apply Toggle",
+      value: formatStorageBooleanEntry(storageSnapshot.autoApplyMirrorForConfiguredSenders)
+    });
+    rows.push({
+      label: "Storage Sender Addresses",
+      value: formatStorageEmailListEntry(storageSnapshot.autoApplyMirrorSenderEmailList)
+    });
+
+    if (shouldIncludeDebugChoices) {
+      rows.push({
+        label: "Debug Output Choices",
+        value: formatDebugConfigEntry(storageSnapshot.programDebugConfig)
+      });
+      rows.push({
+        label: "Debug Page Choices",
+        value: formatDebugPageChoicesEntry(storageSnapshot.programDebugPageChoices)
+      });
+      rows.push({
+        label: "Debug Output Storage",
+        value: "Not persisted; in-memory only"
+      });
+    }
+
+    if (storageSnapshot.errorMessage) {
+      rows.push({
+        label: "Storage Error",
+        value: storageSnapshot.errorMessage
+      });
+    }
+
+    return rows;
+  }
+
   globalThis.urlForensicsStorageModel = Object.freeze({
     storageKeys: storageKeys,
     legacyStorageKeys: legacyStorageKeys,
@@ -424,6 +536,9 @@
     formatStorageBooleanEntry: formatStorageBooleanEntry,
     formatStorageEmailListEntry: formatStorageEmailListEntry,
     formatDebugConfigEntry: formatDebugConfigEntry,
-    formatDebugPageChoicesEntry: formatDebugPageChoicesEntry
+    formatDebugPageChoicesEntry: formatDebugPageChoicesEntry,
+    getGeckoManifestSettings: getGeckoManifestSettings,
+    getStorageBadgeLabel: getStorageBadgeLabel,
+    buildStorageDiagnosticsRows: buildStorageDiagnosticsRows
   });
 }());
