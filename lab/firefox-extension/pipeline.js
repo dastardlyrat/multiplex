@@ -1,8 +1,8 @@
 // Function: attach merged link lab pipeline.
-(function attachMergedLinkLabPipeline(globalScope, createPipelineApi) {
+(function attachMergedLinkLabPipeline(globalScope, pipelineBase, createPipelineApi) {
   "use strict";
 
-  const pipelineApi = createPipelineApi(globalScope);
+  const pipelineApi = createPipelineApi(globalScope, pipelineBase);
 
   // Branch: follow this path only when the current condition passes.
   if (typeof module !== "undefined" && module.exports) {
@@ -15,8 +15,25 @@
   }
 })(
   typeof globalThis !== "undefined" ? globalThis : this,
+  // Function: resolve shared pipeline base helpers.
+  (function resolveMergedLinkLabPipelineBase(globalScope) {
+    if (globalScope && globalScope.urlForensicsPipelineBase) {
+      return globalScope.urlForensicsPipelineBase;
+    }
+
+    if (typeof require === "function") {
+      try {
+        return require("./pipeline-base.js");
+      } catch {
+        return null;
+      }
+    }
+
+    return null;
+  }(typeof globalThis !== "undefined" ? globalThis : this)),
   // Function: create merged link lab pipeline api.
-  function createMergedLinkLabPipelineApi(globalScope) {
+  // eslint-disable-next-line max-lines-per-function -- Compatibility wrapper while pipeline helper groups move into focused modules.
+  function createMergedLinkLabPipelineApi(globalScope, pipelineBase) {
     "use strict";
 
     const debugApi = globalScope && globalScope.mergedLinkLabDebug ? globalScope.mergedLinkLabDebug : null;
@@ -24,168 +41,36 @@
       debugApi.configure({ context: "pipeline", module: "pipeline" });
     }
 
-    const regularExpressions = {
-      urlToken: /https?:\/\/[^\s<>"']+/gi,
-      trailingUrlPunctuation: /[)\]\.,>]+$/,
-      wrappedNoise: /[<>]/g,
-      lightweightWhitespaceNoise: /[\u2000-\u200F\u2028-\u202F]/g,
-      heavyWhitespaceNoise: /[\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180E\u2000-\u200F\u2028-\u202F\u2060-\u206F\uFEFF]/g,
-      protectedMarkupTag: /^(A|SCRIPT|STYLE|NOSCRIPT|TEXTAREA|PRE|CODE)$/i,
-      embeddedTrackingParameter:
-        /[?&](?:url|u|target|redirect|redirect_url|dest|destination|next|forward|goto|continue|to|href|link|data)=([^&]+)/gi
-    };
-
-    const preferredTrackingParameterNames = [
-      "url",
-      "u",
-      "target",
-      "redirect",
-      "redirect_url",
-      "dest",
-      "destination",
-      "next",
-      "forward",
-      "goto",
-      "continue",
-      "to",
-      "href",
-      "link",
-      "data"
-    ];
-
-    const trackingHostKeywords = [
-      "list-manage",
-      "rs6.net",
-      "ccsend.com",
-      "kajabimail",
-      "mail",
-      "tracking",
-      "redirect",
-      "click"
-    ];
-
-    const defaultPipelineSettings = {
-      enableUrlNormalizationRepair: false
-    };
-
-    // Function: convert value to string.
-    function convertValueToString(value) {
-      return String(value || "");
+    if (!pipelineBase || !pipelineBase.regularExpressions) {
+      throw new Error("URL Forensics pipeline base helpers are unavailable.");
     }
 
-    // Function: resolve pipeline settings.
-    function resolvePipelineSettings(options) {
-      const optionBag = options || {};
-
-      return {
-        enableUrlNormalizationRepair: optionBag.enableUrlNormalizationRepair === true
-      };
-    }
+    const regularExpressions = pipelineBase.regularExpressions;
+    const preferredTrackingParameterNames = pipelineBase.preferredTrackingParameterNames;
+    const trackingHostKeywords = pipelineBase.trackingHostKeywords;
+    const defaultPipelineSettings = pipelineBase.defaultPipelineSettings;
+    const convertValueToString = pipelineBase.convertValueToString;
+    const resolvePipelineSettings = pipelineBase.resolvePipelineSettings;
+    const escapeHtml = pipelineBase.escapeHtml;
+    const cleanInputText = pipelineBase.cleanInputText;
+    const normalizeLine = pipelineBase.normalizeLine;
+    const validateTitle = pipelineBase.validateTitle;
+    const normalizeTitle = pipelineBase.normalizeTitle;
+    const createDetectedUrlRecord = pipelineBase.createDetectedUrlRecord;
 
     // Function: get node filter flag.
     function getNodeFilterFlag(flagName, fallbackValue) {
-      return globalScope && globalScope.NodeFilter && typeof globalScope.NodeFilter[flagName] === "number"
-        ? globalScope.NodeFilter[flagName]
-        : fallbackValue;
+      return pipelineBase.getNodeFilterFlag(globalScope, flagName, fallbackValue);
     }
 
     // Function: get node type value.
     function getNodeTypeValue(typeName, fallbackValue) {
-      return globalScope && globalScope.Node && typeof globalScope.Node[typeName] === "number"
-        ? globalScope.Node[typeName]
-        : fallbackValue;
+      return pipelineBase.getNodeTypeValue(globalScope, typeName, fallbackValue);
     }
 
     // Function: create html parser document.
     function createHtmlParserDocument(sourceMarkup) {
-      // Branch: follow this path only when the current condition passes.
-      if (!globalScope || typeof globalScope.DOMParser !== "function") {
-        return null;
-      }
-
-      const htmlParser = new globalScope.DOMParser();
-      return htmlParser.parseFromString(convertValueToString(sourceMarkup), "text/html");
-    }
-
-    // Function: escape html.
-    function escapeHtml(text) {
-      return convertValueToString(text)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#39;");
-    }
-
-    // Function: clean input text.
-    function cleanInputText(rawInput) {
-      const normalizedText = convertValueToString(rawInput)
-        .replace(/\r\n?/g, "\n")
-        .replace(/\u00A0/g, " ")
-        .replace(regularExpressions.lightweightWhitespaceNoise, "");
-
-      const normalizedLines = normalizedText
-        .split("\n")
-        // Loop: transform each item in the current collection.
-        .map(function collapseLineWhitespace(lineText) {
-          return lineText.replace(/[ \t]+/g, " ").replace(/[ \t]+$/g, "");
-        });
-
-      return normalizedLines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
-    }
-
-    // Function: normalize line.
-    function normalizeLine(lineText) {
-      return convertValueToString(lineText)
-        .replace(regularExpressions.wrappedNoise, "")
-        .replace(regularExpressions.lightweightWhitespaceNoise, "")
-        .trim();
-    }
-
-    // Function: validate title.
-    function validateTitle(rawTitleText) {
-      const normalizedTitle = normalizeLine(rawTitleText)
-        .replace(/[*_`]/g, "")
-        .replace(/^\|\s*/, "")
-        .replace(/\s+/g, " ")
-        .trim();
-
-      // Branch: follow this path only when the current condition passes.
-      if (!normalizedTitle) return null;
-      // Branch: follow this path only when the current condition passes.
-      if (normalizedTitle.startsWith("[image")) return null;
-      // Branch: follow this path only when the current condition passes.
-      if (normalizedTitle.split(" ").length > 15) return null;
-      // Branch: follow this path only when the current condition passes.
-      if (/^[a-z].*\.$/.test(normalizedTitle)) return null;
-      // Branch: follow this path only when the current condition passes.
-      if (!/[A-Z0-9:!?]/.test(normalizedTitle)) return null;
-
-      return normalizedTitle;
-    }
-
-    // Function: normalize title.
-    function normalizeTitle(titleText, fallbackHost) {
-      // Branch: follow this path only when the current condition passes.
-      if (!titleText) return fallbackHost;
-      // Branch: follow this path only when the current condition passes.
-      if (titleText.includes("http://") || titleText.includes("https://")) return fallbackHost;
-      // Branch: follow this path only when the current condition passes.
-      if (titleText.length > 120) return fallbackHost;
-      return titleText;
-    }
-
-    // Function: create detected url record.
-    function createDetectedUrlRecord(originalUrl, recordId) {
-      return {
-        id: recordId,
-        original: originalUrl,
-        normalized: null,
-        resolved: [],
-        validResolved: [],
-        replacementUrl: "",
-        notes: []
-      };
+      return pipelineBase.createHtmlParserDocument(globalScope, sourceMarkup);
     }
 
     // Function: detect urls.

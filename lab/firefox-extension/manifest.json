@@ -50,6 +50,7 @@
       ],
       "js": [
         "debug.js",
+        "pipeline-base.js",
         "pipeline.js",
         "storage-model.js",
         "inbox-detectors.js",
@@ -66,6 +67,7 @@
         "app.css",
         "app.js",
         "debug.js",
+        "pipeline-base.js",
         "pipeline.js",
         "core-components/components.css",
         "core-components/components.js",
