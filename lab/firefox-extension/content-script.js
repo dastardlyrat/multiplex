@@ -1826,62 +1826,80 @@
     return true;
   }
 
+  // Function: check whether an element belongs to the URL Forensics pane.
+  function isInsideUrlForensicsPane(element) {
+    return !!(element && (element.id === "merged-link-lab-page-pane" || element.closest("#merged-link-lab-page-pane")));
+  }
+
+  // Function: get viewport reservation dimensions.
+  function getViewportReservationDimensions() {
+    return {
+      width: Math.max(window.innerWidth || 0, document.documentElement ? document.documentElement.clientWidth || 0 : 0),
+      height: Math.max(window.innerHeight || 0, document.documentElement ? document.documentElement.clientHeight || 0 : 0)
+    };
+  }
+
+  // Function: check whether an element has a useful display mode for viewport reservation.
+  function hasReservableDisplayMode(element) {
+    const computedStyle = window.getComputedStyle(element);
+    return computedStyle.display !== "inline" && computedStyle.display !== "contents";
+  }
+
+  // Function: check whether an element is large enough to reserve viewport space.
+  function isLargeEnoughForViewportReservation(element, viewportDimensions) {
+    const rect = element.getBoundingClientRect();
+    return (
+      rect.width >= Math.max(360, viewportDimensions.width * 0.58) &&
+      rect.height >= Math.max(220, viewportDimensions.height * 0.42)
+    );
+  }
+
+  // Function: check whether an element is a viewport reservation candidate.
+  function isViewportReservationCandidate(element, viewportDimensions) {
+    return hasReservableDisplayMode(element) && isLargeEnoughForViewportReservation(element, viewportDimensions);
+  }
+
+  // Function: find structured viewport reservation fallback container.
+  function findStructuredViewportReservationContainer(root) {
+    const structuredContainer = root.closest("main, [role='main'], [data-app-section], #app, #app-root, #root, #content");
+
+    if (structuredContainer && !isInsideUrlForensicsPane(structuredContainer)) {
+      return structuredContainer;
+    }
+
+    return null;
+  }
+
   // Function: find viewport reservation container.
   function findViewportReservationContainer(root) {
-    // Branch: follow this path only when the current condition passes.
     if (!root || !root.isConnected) {
       return null;
     }
 
-    const viewportWidth = Math.max(window.innerWidth || 0, document.documentElement ? document.documentElement.clientWidth || 0 : 0);
-    const viewportHeight = Math.max(window.innerHeight || 0, document.documentElement ? document.documentElement.clientHeight || 0 : 0);
+    const viewportDimensions = getViewportReservationDimensions();
     let currentElement = root;
     let bestContainer = null;
     let depth = 0;
 
-    // Loop: repeat while the guard condition stays true.
+    // Loop: walk outward from the detected email body toward the app shell.
     while (currentElement && currentElement !== document.body && currentElement !== document.documentElement && depth < 14) {
-      // Branch: follow this path only when the current condition passes.
-      if (currentElement.id === "merged-link-lab-page-pane" || currentElement.closest("#merged-link-lab-page-pane")) {
+      if (isInsideUrlForensicsPane(currentElement)) {
         break;
       }
 
-      const rect = currentElement.getBoundingClientRect();
-      const computedStyle = window.getComputedStyle(currentElement);
-      const visibleDisplay = computedStyle.display !== "inline" && computedStyle.display !== "contents";
-      const wideEnough = rect.width >= Math.max(360, viewportWidth * 0.58);
-      const tallEnough = rect.height >= Math.max(220, viewportHeight * 0.42);
-      const likelyAppShell =
-        currentElement.matches("main, [role='main'], [data-app-section], #app, #app-root, #root, #content") ||
-        /\b(app|mail|outlook|gmail|yahoo|proton|fastmail|workspace|shell|layout|main)\b/i.test(
-          [currentElement.id, currentElement.className].filter(Boolean).join(" ")
-        );
-
-      // Branch: follow this path only when the current condition passes.
-      if (visibleDisplay && wideEnough && tallEnough) {
+      if (isViewportReservationCandidate(currentElement, viewportDimensions)) {
         bestContainer = currentElement;
-        // Branch: follow this path only when the current condition passes.
-        if (likelyAppShell && rect.width >= viewportWidth * 0.72) {
-          bestContainer = currentElement;
-        }
       }
 
       currentElement = currentElement.parentElement;
       depth += 1;
     }
 
-    // Branch: follow this path only when the current condition passes.
     if (bestContainer) {
       return bestContainer;
     }
 
-    const structuredContainer = root.closest("main, [role='main'], [data-app-section], #app, #app-root, #root, #content");
-    // Branch: follow this path only when the current condition passes.
-    if (structuredContainer && !structuredContainer.closest("#merged-link-lab-page-pane")) {
-      return structuredContainer;
-    }
-
-    return root.parentElement || root;
+    return findStructuredViewportReservationContainer(root) || root.parentElement || root;
   }
 
   // Function: apply reservation to app viewport.
