@@ -43,6 +43,7 @@
     extensionVersion: document.getElementById("extensionVersion"),
     refreshDebugButton: document.getElementById("refreshDebugButton"),
     emitDebugTestButton: document.getElementById("emitDebugTestButton"),
+    openTestSuitePageButton: document.getElementById("openTestSuitePageButton"),
     clearDebugButton: document.getElementById("clearDebugButton"),
     exportDebugButton: document.getElementById("exportDebugButton"),
     openDiagnosticsPageButton: document.getElementById("openDiagnosticsPageButton"),
@@ -733,6 +734,12 @@
 
     if (DOM.emitDebugTestButton) {
       DOM.emitDebugTestButton.addEventListener("click", emitDebugTestEvent);
+    }
+
+    if (DOM.openTestSuitePageButton) {
+      DOM.openTestSuitePageButton.addEventListener("click", function openTestSuiteFromDebugging() {
+        openExtensionPage("test-suite.html", "Test Suite");
+      });
     }
 
     if (DOM.clearDebugButton) {

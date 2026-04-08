@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>URL Forensics Workbench Test Suite</title>
+<link rel="stylesheet" href="./icons.css">
+<link rel="stylesheet" href="./page-pane.css">
+<link rel="stylesheet" href="./test-suite.css">
+</head>
+<body data-url-forensics-test-page="true">
+<main class="test-suite-shell">
+  <section class="test-suite-card">
+    <p class="eyebrow">URL Forensics Workbench</p>
+    <nav class="page-nav" aria-label="Extension pages">
+      <button class="page-link" type="button" data-page-href="./settings.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">settings</span>Settings</button>
+      <button class="page-link" type="button" data-page-href="./tracking-parameters.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">filter_alt</span>Trackers</button>
+      <button class="page-link" type="button" data-page-href="./diagnostics.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">analytics</span>Diagnostics</button>
+      <button class="page-link" type="button" data-page-href="./debugging.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">bug_report</span>Debugging</button>
+      <button class="page-link" type="button" data-page-href="./storage.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">storage</span>Storage</button>
+      <button class="page-link" type="button" data-page-href="./help.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">help</span>Help</button>
+      <button class="page-link" type="button" data-page-href="./about.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">info</span>About</button>
+    </nav>
+
+    <div class="hero-row">
+      <div>
+        <h1 class="icon-heading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">science</span>Built-In Test Suite</h1>
+        <p class="lede">
+          This page is shaped like a readable email body and loads the same detector, pipeline, workflow, and sidepanel used on supported inbox sites.
+        </p>
+      </div>
+      <span class="test-badge">Live detector target</span>
+    </div>
+
+    <section class="info-card">
+      <h2 class="icon-subheading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">rule</span>How To Use It</h2>
+      <ul class="info-list">
+        <li>The sidepanel should detect this page automatically and expand once so the full workflow is visible.</li>
+        <li>Use the Workflow tab to inspect rewritten links, tracker cleanup, and final href labels.</li>
+        <li>Use the Sidepanel Diagnostics tab to confirm snapshot mode, counts, and storage-driven settings.</li>
+        <li>Use the Debugging page in another tab if you want to watch live runtime or pipeline traces while refreshing this page.</li>
+      </ul>
+    </section>
+
+    <article class="test-email" data-email-body data-message-body aria-label="Built-in test email body">
+      <header class="message-header">
+        <div><strong>From:</strong> URL Forensics QA &lt;qa@example.com&gt;</div>
+        <div><strong>To:</strong> Debug Session &lt;debugger@example.com&gt;</div>
+        <div><strong>Subject:</strong> Built-in tracker and redirect regression suite</div>
+        <div><strong>Date:</strong> April 8, 2026 9:00 AM</div>
+      </header>
+
+      <section class="message-copy">
+        <p>
+          This built-in message contains direct destinations, destination URLs with known tracker parameters, wrapped redirect links,
+          a mailto link, and plain text URLs. It exists so the extension sidepanel can be tested without depending on a live inbox.
+        </p>
+      </section>
+
+      <section class="suite-section">
+        <h2>Anchor Suite</h2>
+        <div class="test-grid">
+          <article class="test-case">
+            <h3>Direct Destination</h3>
+            <p>Expected label: destination.</p>
+            <a href="https://example.com/articles/clean-destination?keep=yes">https://example.com/articles/clean-destination?keep=yes</a>
+          </article>
+
+          <article class="test-case">
+            <h3>UTM Parameters</h3>
+            <p>Expected label: tracker or tracker cleaned, depending on tracker stripping.</p>
+            <a href="https://example.com/articles/utm-suite?utm_source=newsletter&utm_medium=email&utm_campaign=april_release&keep=yes">https://example.com/articles/utm-suite?utm_source=newsletter&utm_medium=email&utm_campaign=april_release&keep=yes</a>
+          </article>
+
+          <article class="test-case">
+            <h3>Google Click IDs</h3>
+            <p>Expected label: tracker or tracker cleaned, depending on tracker stripping.</p>
+            <a href="https://example.com/articles/google-suite?gclid=AAA111&dclid=BBB222&gbraid=CCC333&wbraid=DDD444&keep=yes">https://example.com/articles/google-suite?gclid=AAA111&dclid=BBB222&gbraid=CCC333&wbraid=DDD444&keep=yes</a>
+          </article>
+
+          <article class="test-case">
+            <h3>Microsoft And TikTok Click IDs</h3>
+            <p>Expected label: tracker or tracker cleaned, depending on tracker stripping.</p>
+            <a href="https://example.com/articles/ad-suite?msclkid=EEE555&ttclid=FFF666&keep=yes">https://example.com/articles/ad-suite?msclkid=EEE555&ttclid=FFF666&keep=yes</a>
+          </article>
+
+          <article class="test-case">
+            <h3>Meta, LinkedIn, And Mailchimp</h3>
+            <p>Expected label: tracker or tracker cleaned, depending on tracker stripping.</p>
+            <a href="https://example.com/articles/social-suite?li_fat_id=GGG777&fbclid=HHH888&mc_cid=III999&mc_eid=JJJ000&mc_tc=KKK111&keep=yes">https://example.com/articles/social-suite?li_fat_id=GGG777&fbclid=HHH888&mc_cid=III999&mc_eid=JJJ000&mc_tc=KKK111&keep=yes</a>
+          </article>
+
+          <article class="test-case">
+            <h3>HubSpot Tracking</h3>
+            <p>Expected label: tracker or tracker cleaned, depending on tracker stripping.</p>
+            <a href="https://example.com/articles/hubspot-suite?hsenc=LLL222&_hsmi=MMM333&hsCtaTracking=NNN444&keep=yes">https://example.com/articles/hubspot-suite?hsenc=LLL222&_hsmi=MMM333&hsCtaTracking=NNN444&keep=yes</a>
+          </article>
+
+          <article class="test-case">
+            <h3>Redirect Wrapper</h3>
+            <p>Expected behavior: unwrap destination first, then detect or clean tracker parameters on the final destination URL.</p>
+            <a href="https://tracker.example.net/click?url=https%3A%2F%2Fexample.com%2Farticles%2Fwrapped-suite%3Futm_source%3Ddigest%26fbclid%3DQQQ777%26keep%3Dyes">https://tracker.example.net/click?url=https%3A%2F%2Fexample.com%2Farticles%2Fwrapped-suite%3Futm_source%3Ddigest%26fbclid%3DQQQ777%26keep%3Dyes</a>
+          </article>
+
+          <article class="test-case">
+            <h3>Mailto Link</h3>
+            <p>Expected label: not a tracker. Email addresses and mail parameters should not be counted as trackers.</p>
+            <a href="mailto:debugger@example.com?subject=Tracker%20Suite%20Response">mailto:debugger@example.com?subject=Tracker%20Suite%20Response</a>
+          </article>
+        </div>
+      </section>
+
+      <section class="suite-section">
+        <h2>Plain Text URL Suite</h2>
+        <p>The detector should also surface these URLs from readable message text.</p>
+        <div class="plain-url-list">
+          <p>Plain text UTM case: https://example.com/plain/utm-case?utm_source=plain_text&utm_content=footer&keep=yes</p>
+          <p>Plain text ad click case: https://example.com/plain/ad-case?gclid=OOO555&msclkid=PPP666&keep=yes</p>
+          <p>Plain text safe email parameter case: https://example.com/plain/email-case?email=tester@example.com&keep=yes</p>
+          <p>Plain text wrapper case: https://redirect.example.org/?target=https%3A%2F%2Fexample.com%2Fplain%2Fwrapped%3Ffbclid%3DRRR888%26keep%3Dyes</p>
+        </div>
+      </section>
+
+      <section class="suite-section">
+        <h2>Expected Debug Signals</h2>
+        <ul class="info-list">
+          <li>Detection mode should read as <code>full-page-read</code>.</li>
+          <li>The workflow tracker pane should show removed parameter names when stripping is enabled.</li>
+          <li>The hover breakdown should place known tracker parameters in <code>Tracker Parameters</code> and non-trackers in <code>Other Parameters</code>.</li>
+          <li>The final href label should show <code>tracker</code> when tracker parameters remain and <code>tracker cleaned</code> when they are stripped.</li>
+        </ul>
+      </section>
+    </article>
+  </section>
+</main>
+
+<script src="./page-navigation.js"></script>
+<script src="./debug-redaction.js"></script>
+<script src="./debug.js"></script>
+<script src="./tracking-parameter-model.js"></script>
+<script src="./pipeline-base.js"></script>
+<script src="./pipeline-url-resolver.js"></script>
+<script src="./pipeline-html-rewriter.js"></script>
+<script src="./pipeline.js"></script>
+<script src="./storage-model.js"></script>
+<script src="./inbox-detectors.js"></script>
+<script src="./settings-opener.js"></script>
+<script src="./content-script.js"></script>
+</body>
+</html>

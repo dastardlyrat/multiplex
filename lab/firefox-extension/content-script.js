@@ -148,6 +148,7 @@
   const unavailableMirrorLinkHoverMessage = "Mirror hover inspection is unavailable for this email body.";
   let mirrorHoverListenerCleanup = null;
   let latestDetectedMirrorHoverInfoText = "";
+  let didAutoExpandBuiltInTestPagePane = false;
   const urlNormalizationRepairStorageKey = storageModel.storageKeys.enableUrlNormalizationRepair;
   const trackingParameterStripStorageKey = storageModel.storageKeys.stripKnownTrackingParameters;
   const trackingParameterFiltersStorageKey = storageModel.storageKeys.trackingParameterFilters;
@@ -260,6 +261,14 @@
     isExpanded: false
   };
   const reservedLayoutEntries = [];
+
+  // Function: check whether current page is the built-in test suite.
+  function isBuiltInTestSuitePage() {
+    return !!(
+      document.body &&
+      document.body.getAttribute("data-url-forensics-test-page") === "true"
+    );
+  }
 
   // Function: get pipeline settings.
   function getPipelineSettings() {
@@ -2950,6 +2959,11 @@
   async function publishSnapshot(snapshot) {
     latestSnapshot = snapshot;
     lastPublishedSnapshotSignature = createSnapshotSignature(snapshot);
+
+    if (isBuiltInTestSuitePage() && !didAutoExpandBuiltInTestPagePane) {
+      workflowRailElements.isExpanded = true;
+      didAutoExpandBuiltInTestPagePane = true;
+    }
 
     const nextPaneKey = createSnapshotPaneKey(snapshot);
     // Branch: follow this path only when the current condition passes.
