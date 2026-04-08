@@ -506,7 +506,10 @@
   function applyStoredAutoApplyMirrorForConfiguredSendersSetting(nextValue) {
     if (nextValue === true || nextValue === false) {
       extensionSettings.autoApplyMirrorForConfiguredSenders = nextValue === true;
+      return;
     }
+
+    extensionSettings.autoApplyMirrorForConfiguredSenders = storageModel.defaultSettings.autoApplyMirrorForConfiguredSenders;
   }
 
   // Function: apply stored sender email list.
