@@ -29,6 +29,7 @@
     openPagePaneButton: document.getElementById("openPagePaneButton"),
     openHelpPageButton: document.getElementById("openHelpPageButton"),
     openSettingsPageButton: document.getElementById("openSettingsPageButton"),
+    openSettingsPageButtonHero: document.getElementById("openSettingsPageButtonHero"),
     openDiagnosticsPageButton: document.getElementById("openDiagnosticsPageButton"),
     openDebuggingPageButton: document.getElementById("openDebuggingPageButton"),
     refreshDiagnosticsButton: document.getElementById("refreshDiagnosticsButton"),
@@ -504,6 +505,10 @@
 
     if (DOM.openSettingsPageButton) {
       DOM.openSettingsPageButton.addEventListener("click", openSettingsPage);
+    }
+
+    if (DOM.openSettingsPageButtonHero) {
+      DOM.openSettingsPageButtonHero.addEventListener("click", openSettingsPage);
     }
   }
 

@@ -53,12 +53,13 @@
       <section class="message-copy">
         <p>
           This built-in message contains direct destinations, destination URLs with known tracker parameters, wrapped redirect links,
-          a mailto link, and plain text URLs. It exists so the extension sidepanel can be tested without depending on a live inbox.
+          a mailto link, plain text URLs, safe non-tracker parameters, nested wrappers, and mixed encoded destinations. It exists so
+          the extension sidepanel can be tested without depending on a live inbox.
         </p>
       </section>
 
       <section class="suite-section">
-        <h2>Anchor Suite</h2>
+        <h2>Anchor Suite: Direct And Tracked Destinations</h2>
         <div class="test-grid">
           <article class="test-case">
             <h3>Direct Destination</h3>
@@ -97,6 +98,12 @@
           </article>
 
           <article class="test-case">
+            <h3>Mixed Tracker Families</h3>
+            <p>Expected label: tracker or tracker cleaned with multiple removed names shown in the tracker pane.</p>
+            <a href="https://example.com/articles/mixed-suite?utm_source=release_notes&gclid=OOO555&msclkid=PPP666&ttclid=QQQ777&fbclid=RRR888&keep=yes">https://example.com/articles/mixed-suite?utm_source=release_notes&gclid=OOO555&msclkid=PPP666&ttclid=QQQ777&fbclid=RRR888&keep=yes</a>
+          </article>
+
+          <article class="test-case">
             <h3>Redirect Wrapper</h3>
             <p>Expected behavior: unwrap destination first, then detect or clean tracker parameters on the final destination URL.</p>
             <a href="https://tracker.example.net/click?url=https%3A%2F%2Fexample.com%2Farticles%2Fwrapped-suite%3Futm_source%3Ddigest%26fbclid%3DQQQ777%26keep%3Dyes">https://tracker.example.net/click?url=https%3A%2F%2Fexample.com%2Farticles%2Fwrapped-suite%3Futm_source%3Ddigest%26fbclid%3DQQQ777%26keep%3Dyes</a>
@@ -106,6 +113,59 @@
             <h3>Mailto Link</h3>
             <p>Expected label: not a tracker. Email addresses and mail parameters should not be counted as trackers.</p>
             <a href="mailto:debugger@example.com?subject=Tracker%20Suite%20Response">mailto:debugger@example.com?subject=Tracker%20Suite%20Response</a>
+          </article>
+
+          <article class="test-case">
+            <h3>Email Query Parameter</h3>
+            <p>Expected label: destination. An <code>email</code> query parameter should not be treated as a tracker.</p>
+            <a href="https://example.com/articles/email-parameter?email=debugger@example.com&keep=yes">https://example.com/articles/email-parameter?email=debugger@example.com&keep=yes</a>
+          </article>
+
+          <article class="test-case">
+            <h3>Marketing Text Without Tracked Params</h3>
+            <p>Expected label: destination. The word “campaign” alone should not trigger tracker classification.</p>
+            <a href="https://example.com/articles/campaign-summary?campaign=april&keep=yes">https://example.com/articles/campaign-summary?campaign=april&keep=yes</a>
+          </article>
+        </div>
+      </section>
+
+      <section class="suite-section">
+        <h2>Anchor Suite: Wrapper And Redirect Variants</h2>
+        <div class="test-grid">
+          <article class="test-case">
+            <h3>Target Wrapper</h3>
+            <p>Expected behavior: unwrap <code>target</code> and then detect or clean trackers on the resulting destination.</p>
+            <a href="https://redirect.example.org/?target=https%3A%2F%2Fexample.com%2Farticles%2Ftarget-wrapper%3Futm_medium%3Demail%26keep%3Dyes">https://redirect.example.org/?target=https%3A%2F%2Fexample.com%2Farticles%2Ftarget-wrapper%3Futm_medium%3Demail%26keep%3Dyes</a>
+          </article>
+
+          <article class="test-case">
+            <h3>Redirect URL Wrapper</h3>
+            <p>Expected behavior: unwrap <code>redirect_url</code> and then classify the destination correctly.</p>
+            <a href="https://mailer.example.net/exit?redirect_url=https%3A%2F%2Fexample.com%2Farticles%2Fredirect-url-wrapper%3Ffbclid%3DSSS999%26keep%3Dyes">https://mailer.example.net/exit?redirect_url=https%3A%2F%2Fexample.com%2Farticles%2Fredirect-url-wrapper%3Ffbclid%3DSSS999%26keep%3Dyes</a>
+          </article>
+
+          <article class="test-case">
+            <h3>Continue Wrapper</h3>
+            <p>Expected behavior: unwrap <code>continue</code> and preserve non-tracker parameters on the final URL.</p>
+            <a href="https://continue.example.com/?continue=https%3A%2F%2Fexample.com%2Farticles%2Fcontinue-wrapper%3Fmc_eid%3DTTT000%26keep%3Dyes">https://continue.example.com/?continue=https%3A%2F%2Fexample.com%2Farticles%2Fcontinue-wrapper%3Fmc_eid%3DTTT000%26keep%3Dyes</a>
+          </article>
+
+          <article class="test-case">
+            <h3>Double Encoded Wrapper</h3>
+            <p>Expected behavior: peel the wrapper and still find the nested tracker parameter.</p>
+            <a href="https://edge.example.org/click?url=https%253A%252F%252Fexample.com%252Farticles%252Fdouble-encoded%253Fhsenc%253DUUU111%2526keep%253Dyes">https://edge.example.org/click?url=https%253A%252F%252Fexample.com%252Farticles%252Fdouble-encoded%253Fhsenc%253DUUU111%2526keep%253Dyes</a>
+          </article>
+
+          <article class="test-case">
+            <h3>Nested Wrapper Chain</h3>
+            <p>Expected behavior: unwrap through multiple redirect layers until the final destination is classified.</p>
+            <a href="https://chain.example.com/?target=https%3A%2F%2Fredirect.example.org%2F%3Furl%3Dhttps%253A%252F%252Fexample.com%252Farticles%252Fnested-chain%253Fttclid%253DVVV222%2526keep%253Dyes">https://chain.example.com/?target=https%3A%2F%2Fredirect.example.org%2F%3Furl%3Dhttps%253A%252F%252Fexample.com%252Farticles%252Fnested-chain%253Fttclid%253DVVV222%2526keep%253Dyes</a>
+          </article>
+
+          <article class="test-case">
+            <h3>Wrapper With Safe Final Email Parameter</h3>
+            <p>Expected behavior: unwrap destination, keep the email parameter, and do not mark it as a tracker.</p>
+            <a href="https://safe.example.net/?url=https%3A%2F%2Fexample.com%2Farticles%2Fsafe-wrapper%3Femail%3Dqa%2540example.com%26keep%3Dyes">https://safe.example.net/?url=https%3A%2F%2Fexample.com%2Farticles%2Fsafe-wrapper%3Femail%3Dqa%2540example.com%26keep%3Dyes</a>
           </article>
         </div>
       </section>
@@ -118,6 +178,22 @@
           <p>Plain text ad click case: https://example.com/plain/ad-case?gclid=OOO555&msclkid=PPP666&keep=yes</p>
           <p>Plain text safe email parameter case: https://example.com/plain/email-case?email=tester@example.com&keep=yes</p>
           <p>Plain text wrapper case: https://redirect.example.org/?target=https%3A%2F%2Fexample.com%2Fplain%2Fwrapped%3Ffbclid%3DRRR888%26keep%3Dyes</p>
+          <p>Plain text HubSpot case: https://example.com/plain/hubspot-case?hsenc=WWW333&_hsmi=XXX444&keep=yes</p>
+          <p>Plain text LinkedIn case: https://example.com/plain/linkedin-case?li_fat_id=YYY555&keep=yes</p>
+          <p>Plain text Mailchimp case: https://example.com/plain/mailchimp-case?mc_cid=ZZZ666&mc_eid=AAA777&mc_tc=BBB888&keep=yes</p>
+          <p>Plain text nested wrapper case: https://wrap.example.net/?continue=https%3A%2F%2Fredirect.example.org%2F%3Ftarget%3Dhttps%253A%252F%252Fexample.com%252Fplain%252Fnested-wrapper%253Futm_campaign%253Dplain_suite%2526keep%253Dyes</p>
+          <p>Plain text safe contact case: https://example.com/plain/contact-case?reply_to=debugger@example.com&keep=yes</p>
+        </div>
+      </section>
+
+      <section class="suite-section">
+        <h2>Expected Classification Matrix</h2>
+        <div class="plain-url-list">
+          <p>Clean direct URLs should remain <code>destination</code>.</p>
+          <p>Known tracking parameters left in place should label final href text as <code>tracker</code>.</p>
+          <p>Known tracking parameters that are removed should label final href text as <code>tracker cleaned</code>.</p>
+          <p>Email addresses, <code>mailto:</code> links, and safe contact-style parameters should not be promoted to tracker status.</p>
+          <p>Wrapped destinations should be classified by the resolved final destination, not just the wrapper host.</p>
         </div>
       </section>
 
@@ -128,6 +204,7 @@
           <li>The workflow tracker pane should show removed parameter names when stripping is enabled.</li>
           <li>The hover breakdown should place known tracker parameters in <code>Tracker Parameters</code> and non-trackers in <code>Other Parameters</code>.</li>
           <li>The final href label should show <code>tracker</code> when tracker parameters remain and <code>tracker cleaned</code> when they are stripped.</li>
+          <li>Wrapper cases should demonstrate whether the resolver is peeling <code>url</code>, <code>target</code>, <code>redirect_url</code>, and <code>continue</code> consistently.</li>
         </ul>
       </section>
     </article>
