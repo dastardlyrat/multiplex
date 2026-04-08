@@ -24,6 +24,18 @@ function runPipelineSmokeTest() {
       }
     }
   });
+  const nestedWrapperInput =
+    "Plain text nested wrapper case: https://wrap.example.net/?continue=https%3A%2F%2Fredirect.example.org%2F%3Ftarget%3Dhttps%253A%252F%252Fexample.com%252Fplain%252Fnested-wrapper%253Futm_campaign%253Dplain_suite%2526keep%253Dyes";
+  const nestedWrapperResult = pipeline.analyzeInput({
+    rawText: nestedWrapperInput,
+    options: {}
+  });
+  const nestedWrapperBypassedStripResult = pipeline.analyzeInput({
+    rawText: nestedWrapperInput,
+    options: {
+      stripKnownTrackingParameters: false
+    }
+  });
 
   if (
     !defaultResult ||
@@ -48,6 +60,22 @@ function runPipelineSmokeTest() {
     selectiveBypassResult.finalUrls[0] !== "https://example.com/path?fbclid=123&keep=yes"
   ) {
     throw new Error("pipeline per-tracker filter smoke test failed");
+  }
+
+  if (
+    !nestedWrapperResult ||
+    nestedWrapperResult.finalUrls.length !== 1 ||
+    nestedWrapperResult.finalUrls[0] !== "https://example.com/plain/nested-wrapper?keep=yes"
+  ) {
+    throw new Error("pipeline nested wrapper resolution smoke test failed");
+  }
+
+  if (
+    !nestedWrapperBypassedStripResult ||
+    nestedWrapperBypassedStripResult.finalUrls.length !== 1 ||
+    nestedWrapperBypassedStripResult.finalUrls[0] !== "https://example.com/plain/nested-wrapper?utm_campaign=plain_suite&keep=yes"
+  ) {
+    throw new Error("pipeline nested wrapper strip bypass smoke test failed");
   }
 
   if (pipeline.classifyUrlValue("https://example.com/path?gclid=456&keep=yes") !== "tracker") {
@@ -83,6 +111,24 @@ function runPipelineSmokeTest() {
     pipeline.buildFinalUrlLinkText(cleanedFinalEntries[0]).indexOf("(tracker cleaned)") === -1
   ) {
     throw new Error("pipeline cleaned tracker href label smoke test failed");
+  }
+
+  const nestedWrapperFinalEntries = pipeline.buildFinalUrlEntries(nestedWrapperResult.items);
+  if (
+    !nestedWrapperFinalEntries.length ||
+    nestedWrapperFinalEntries[0].type !== "tracker cleaned" ||
+    pipeline.buildFinalUrlLinkText(nestedWrapperFinalEntries[0]).indexOf("(tracker cleaned)") === -1
+  ) {
+    throw new Error("pipeline nested wrapper cleaned label smoke test failed");
+  }
+
+  const nestedWrapperRetainedEntries = pipeline.buildFinalUrlEntries(nestedWrapperBypassedStripResult.items);
+  if (
+    !nestedWrapperRetainedEntries.length ||
+    nestedWrapperRetainedEntries[0].type !== "tracker" ||
+    pipeline.buildFinalUrlLinkText(nestedWrapperRetainedEntries[0]).indexOf("(tracker)") === -1
+  ) {
+    throw new Error("pipeline nested wrapper retained label smoke test failed");
   }
 }
 

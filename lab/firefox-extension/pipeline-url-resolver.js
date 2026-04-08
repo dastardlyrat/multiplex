@@ -86,17 +86,44 @@ function urlForensicsPipelineUrlExtractFirstAbsoluteUrl(resolverContext, valueTo
   return embeddedUrlMatch ? embeddedUrlMatch[0] : null;
 }
 
+// Function: normalize destination candidate value.
+function urlForensicsPipelineUrlNormalizeDestinationCandidateValue(resolverContext, candidateValue, maximumRounds) {
+  let currentValue = resolverContext.convertValueToString(candidateValue).trim();
+  const totalDecodePasses = maximumRounds || 4;
+
+  if (!currentValue) {
+    return null;
+  }
+
+  for (let decodeRoundIndex = 0; decodeRoundIndex <= totalDecodePasses; decodeRoundIndex += 1) {
+    if (urlForensicsPipelineUrlIsValidURL(currentValue)) {
+      return currentValue;
+    }
+
+    const extractedAbsoluteUrl = urlForensicsPipelineUrlExtractFirstAbsoluteUrl(resolverContext, currentValue);
+    if (extractedAbsoluteUrl && urlForensicsPipelineUrlIsValidURL(extractedAbsoluteUrl)) {
+      return extractedAbsoluteUrl;
+    }
+
+    const nextDecodedValue = urlForensicsPipelineUrlDecodeValue(currentValue);
+    if (nextDecodedValue === currentValue) {
+      break;
+    }
+
+    currentValue = resolverContext.convertValueToString(nextDecodedValue).trim();
+  }
+
+  return urlForensicsPipelineUrlExtractFirstAbsoluteUrl(resolverContext, currentValue);
+}
+
 // Function: find first URL candidate.
 function urlForensicsPipelineUrlFirstCandidate(resolverContext, candidateValues) {
   for (let valueIndex = 0; valueIndex < candidateValues.length; valueIndex += 1) {
-    const rawCandidateValue = resolverContext.convertValueToString(candidateValues[valueIndex]).trim();
-
-    if (!rawCandidateValue) {
-      continue;
-    }
-
-    const decodedCandidateValue = urlForensicsPipelineUrlDecodeRepeated(rawCandidateValue, 4);
-    const extractedAbsoluteUrl = urlForensicsPipelineUrlExtractFirstAbsoluteUrl(resolverContext, decodedCandidateValue);
+    const extractedAbsoluteUrl = urlForensicsPipelineUrlNormalizeDestinationCandidateValue(
+      resolverContext,
+      candidateValues[valueIndex],
+      4
+    );
 
     if (extractedAbsoluteUrl) {
       return extractedAbsoluteUrl;
@@ -127,7 +154,11 @@ function urlForensicsPipelineUrlExtractTrackingCandidates(resolverContext, urlVa
 
   // Function: remember destination candidate.
   function rememberDestinationCandidate(candidateValue) {
-    const extractedAbsoluteUrl = urlForensicsPipelineUrlExtractFirstAbsoluteUrl(resolverContext, candidateValue);
+    const extractedAbsoluteUrl = urlForensicsPipelineUrlNormalizeDestinationCandidateValue(
+      resolverContext,
+      candidateValue,
+      4
+    );
 
     if (!extractedAbsoluteUrl || extractedAbsoluteUrl === trimmedUrlValue || seenDestinationUrls.has(extractedAbsoluteUrl)) {
       return;
@@ -148,22 +179,19 @@ function urlForensicsPipelineUrlExtractTrackingCandidates(resolverContext, urlVa
   if (parsedUrl) {
     resolverContext.preferredTrackingParameterNames.forEach(function inspectTrackingParameter(parameterName) {
       parsedUrl.searchParams.getAll(parameterName).forEach(function addTrackingParameterValue(parameterValue) {
-        rememberDestinationCandidate(urlForensicsPipelineUrlDecodeRepeated(parameterValue, 4));
+        rememberDestinationCandidate(parameterValue);
       });
     });
 
     parsedUrl.searchParams.forEach(function inspectAllSearchParameterValues(parameterValue) {
-      rememberDestinationCandidate(urlForensicsPipelineUrlDecodeRepeated(parameterValue, 4));
+      rememberDestinationCandidate(parameterValue);
     });
 
-    if (urlForensicsPipelineUrlIsLikelyTrackerHost(resolverContext, parsedUrl.hostname)) {
-      rememberDestinationCandidate(urlForensicsPipelineUrlDecodeRepeated(trimmedUrlValue, 4));
-    }
   }
 
   const embeddedTrackingMatches = [...trimmedUrlValue.matchAll(resolverContext.regularExpressions.embeddedTrackingParameter)];
   embeddedTrackingMatches.forEach(function inspectEmbeddedTrackingMatch(embeddedMatch) {
-    rememberDestinationCandidate(urlForensicsPipelineUrlDecodeRepeated(embeddedMatch[1], 4));
+    rememberDestinationCandidate(embeddedMatch[1]);
   });
 
   return foundDestinationUrls;

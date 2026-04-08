@@ -583,17 +583,6 @@
       const pipelineSettings = resolvePipelineSettings(options);
       const shouldBypassNormalizationRepair = !pipelineSettings.enableUrlNormalizationRepair;
       const shouldBypassTrackingParameterStrip = !pipelineSettings.stripKnownTrackingParameters;
-      // Branch: follow this path only when the current condition passes.
-      if (shouldBypassNormalizationRepair && shouldBypassTrackingParameterStrip) {
-        if (debugApi) {
-          debugApi.conditional("pipeline cleanup disabled; bypassing resolution", {
-            itemCount: Array.isArray(items) ? items.length : 0
-          });
-          debugApi.functionOut("pipeline.populateResolvedDataForItems", { mode: "bypass" });
-        }
-
-        return populateBypassedDataForItems(items);
-      }
 
       // Loop: iterate through each item in the current collection.
       (items || []).forEach(function inspectDetectedItem(item) {
@@ -606,7 +595,8 @@
 
         if (shouldBypassNormalizationRepair) {
           item.normalized = originalUrl;
-          item.resolved = originalUrl ? [originalUrl] : [];
+          // Keep destination extraction active even when normalization repair is off.
+          item.resolved = originalUrl ? resolveURL(item.normalized) : [];
           appendUniqueItemNote(item, "NORMALIZATION_REPAIR_BYPASSED");
         } else {
           const peeledUrlToken = peel(item.original, pipelineSettings);
