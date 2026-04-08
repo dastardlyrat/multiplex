@@ -41,6 +41,7 @@
         <li>Use the Workflow tab to inspect rewritten links, tracker cleanup, and final href labels.</li>
         <li>Use the Sidepanel Diagnostics tab to confirm snapshot mode, counts, and storage-driven settings.</li>
         <li>Use the Debugging page in another tab if you want to watch live runtime or pipeline traces while refreshing this page.</li>
+        <li>Plain-text and broken-URL cases are rendered as normal text nodes, not code blocks, because the pipeline intentionally ignores text inside <code>code</code> and <code>pre</code> tags.</li>
       </ul>
     </section>
 
@@ -260,7 +261,7 @@
             <tr>
               <td class="suite-url-cell">
                 <span class="suite-case-label">Plain text UTM case</span>
-                <code>https://example.com/plain/utm-case?utm_source=plain_text&utm_content=footer&keep=yes</code>
+                <div class="suite-raw-url">https://example.com/plain/utm-case?utm_source=plain_text&utm_content=footer&keep=yes</div>
               </td>
               <td class="suite-expected-cell">
                 <p>Should be extracted from visible text and classified as <code>tracker</code> or <code>tracker cleaned</code>.</p>
@@ -270,7 +271,7 @@
             <tr>
               <td class="suite-url-cell">
                 <span class="suite-case-label">Plain text ad-click case</span>
-                <code>https://example.com/plain/ad-case?gclid=OOO555&msclkid=PPP666&keep=yes</code>
+                <div class="suite-raw-url">https://example.com/plain/ad-case?gclid=OOO555&msclkid=PPP666&keep=yes</div>
               </td>
               <td class="suite-expected-cell">
                 <p>Should show known tracker detection for ad-click IDs in plain text.</p>
@@ -280,7 +281,7 @@
             <tr>
               <td class="suite-url-cell">
                 <span class="suite-case-label">Plain text safe email parameter</span>
-                <code>https://example.com/plain/email-case?email=tester@example.com&keep=yes</code>
+                <div class="suite-raw-url">https://example.com/plain/email-case?email=tester@example.com&keep=yes</div>
               </td>
               <td class="suite-expected-cell">
                 <p>Should be extracted and remain <code>destination</code>.</p>
@@ -290,7 +291,7 @@
             <tr>
               <td class="suite-url-cell">
                 <span class="suite-case-label">Plain text wrapper case</span>
-                <code>https://redirect.example.org/?target=https%3A%2F%2Fexample.com%2Fplain%2Fwrapped%3Ffbclid%3DRRR888%26keep%3Dyes</code>
+                <div class="suite-raw-url">https://redirect.example.org/?target=https%3A%2F%2Fexample.com%2Fplain%2Fwrapped%3Ffbclid%3DRRR888%26keep%3Dyes</div>
               </td>
               <td class="suite-expected-cell">
                 <p>Must unwrap from plain text and classify the final destination rather than the wrapper.</p>
@@ -300,7 +301,7 @@
             <tr>
               <td class="suite-url-cell">
                 <span class="suite-case-label">Plain text HubSpot case</span>
-                <code>https://example.com/plain/hubspot-case?hsenc=WWW333&_hsmi=XXX444&keep=yes</code>
+                <div class="suite-raw-url">https://example.com/plain/hubspot-case?hsenc=WWW333&_hsmi=XXX444&keep=yes</div>
               </td>
               <td class="suite-expected-cell">
                 <p>Should detect HubSpot tracker parameters from raw visible text.</p>
@@ -310,7 +311,7 @@
             <tr>
               <td class="suite-url-cell">
                 <span class="suite-case-label">Plain text LinkedIn case</span>
-                <code>https://example.com/plain/linkedin-case?li_fat_id=YYY555&keep=yes</code>
+                <div class="suite-raw-url">https://example.com/plain/linkedin-case?li_fat_id=YYY555&keep=yes</div>
               </td>
               <td class="suite-expected-cell">
                 <p>Should classify as a tracker-bearing destination.</p>
@@ -320,7 +321,7 @@
             <tr>
               <td class="suite-url-cell">
                 <span class="suite-case-label">Plain text Mailchimp case</span>
-                <code>https://example.com/plain/mailchimp-case?mc_cid=ZZZ666&mc_eid=AAA777&mc_tc=BBB888&keep=yes</code>
+                <div class="suite-raw-url">https://example.com/plain/mailchimp-case?mc_cid=ZZZ666&mc_eid=AAA777&mc_tc=BBB888&keep=yes</div>
               </td>
               <td class="suite-expected-cell">
                 <p>Should detect Mailchimp tracker names and classify the final href accordingly.</p>
@@ -330,7 +331,7 @@
             <tr>
               <td class="suite-url-cell">
                 <span class="suite-case-label">Plain text nested wrapper case</span>
-                <code>https://wrap.example.net/?continue=https%3A%2F%2Fredirect.example.org%2F%3Ftarget%3Dhttps%253A%252F%252Fexample.com%252Fplain%252Fnested-wrapper%253Futm_campaign%253Dplain_suite%2526keep%253Dyes</code>
+                <div class="suite-raw-url">https://wrap.example.net/?continue=https%3A%2F%2Fredirect.example.org%2F%3Ftarget%3Dhttps%253A%252F%252Fexample.com%252Fplain%252Fnested-wrapper%253Futm_campaign%253Dplain_suite%2526keep%253Dyes</div>
               </td>
               <td class="suite-expected-cell">
                 <p>Must unwrap through all wrapper layers and land on the final <code>example.com</code> destination.</p>
@@ -340,7 +341,7 @@
             <tr>
               <td class="suite-url-cell">
                 <span class="suite-case-label">Plain text safe reply-to case</span>
-                <code>https://example.com/plain/contact-case?reply_to=debugger@example.com&keep=yes</code>
+                <div class="suite-raw-url">https://example.com/plain/contact-case?reply_to=debugger@example.com&keep=yes</div>
               </td>
               <td class="suite-expected-cell">
                 <p>Should remain <code>destination</code>.</p>
@@ -364,7 +365,7 @@
             <tr>
               <td class="suite-url-cell">
                 <span class="suite-case-label">Trailing punctuation destination</span>
-                <code>https://example.com/path?keep=yes).</code>
+                <div class="suite-raw-url">https://example.com/path?keep=yes).</div>
               </td>
               <td class="suite-expected-cell">
                 <p>Normalization repair on: remove trailing punctuation and resolve to <code>https://example.com/path?keep=yes</code>.</p>
@@ -374,7 +375,7 @@
             <tr>
               <td class="suite-url-cell">
                 <span class="suite-case-label">Tracked destination with trailing punctuation</span>
-                <code>https://example.com/path?gclid=111&amp;keep=yes).</code>
+                <div class="suite-raw-url">https://example.com/path?gclid=111&amp;keep=yes).</div>
               </td>
               <td class="suite-expected-cell">
                 <p>Normalization repair on: final URL should clean to <code>https://example.com/path?keep=yes</code>.</p>
@@ -384,7 +385,7 @@
             <tr>
               <td class="suite-url-cell">
                 <span class="suite-case-label">Wrapped destination with trailing punctuation</span>
-                <code>https://redirect.example.org/?target=https%3A%2F%2Fexample.com%2Frepair-wrapper%3Futm_source%3Drepair%26keep%3Dyes).</code>
+                <div class="suite-raw-url">https://redirect.example.org/?target=https%3A%2F%2Fexample.com%2Frepair-wrapper%3Futm_source%3Drepair%26keep%3Dyes).</div>
               </td>
               <td class="suite-expected-cell">
                 <p>Normalization repair on: unwrap and clean to <code>https://example.com/repair-wrapper?keep=yes</code>.</p>
@@ -394,7 +395,7 @@
             <tr>
               <td class="suite-url-cell">
                 <span class="suite-case-label">Angle-wrapped destination</span>
-                <code>&lt;https://example.com/path?keep=yes&gt;</code>
+                <div class="suite-raw-url">&lt;https://example.com/path?keep=yes&gt;</div>
               </td>
               <td class="suite-expected-cell">
                 <p>Should be detected in both modes because the valid absolute URL token is still present inside the angle brackets.</p>
@@ -418,7 +419,7 @@
             <tr>
               <td class="suite-url-cell">
                 <span class="suite-case-label">Missing second slash</span>
-                <code>https:/example.com/path?keep=yes</code>
+                <div class="suite-raw-url">https:/example.com/path?keep=yes</div>
               </td>
               <td class="suite-expected-cell">
                 <p>Current expected output: empty.</p>
@@ -428,7 +429,7 @@
             <tr>
               <td class="suite-url-cell">
                 <span class="suite-case-label">Missing colon after protocol</span>
-                <code>https//example.com/path?keep=yes</code>
+                <div class="suite-raw-url">https//example.com/path?keep=yes</div>
               </td>
               <td class="suite-expected-cell">
                 <p>Current expected output: empty.</p>
@@ -438,7 +439,7 @@
             <tr>
               <td class="suite-url-cell">
                 <span class="suite-case-label">Missing leading h</span>
-                <code>ttps://example.com/path?keep=yes</code>
+                <div class="suite-raw-url">ttps://example.com/path?keep=yes</div>
               </td>
               <td class="suite-expected-cell">
                 <p>Current expected output: empty.</p>
@@ -448,7 +449,7 @@
             <tr>
               <td class="suite-url-cell">
                 <span class="suite-case-label">Whitespace-damaged protocol</span>
-                <code>https:// example.com/path?keep=yes</code>
+                <div class="suite-raw-url">https:// example.com/path?keep=yes</div>
               </td>
               <td class="suite-expected-cell">
                 <p>Current expected output: empty.</p>
