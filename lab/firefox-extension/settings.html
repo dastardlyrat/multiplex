@@ -20,7 +20,7 @@
     </nav>
     <h1 class="icon-heading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">settings</span>Extension Settings</h1>
     <p class="lede">
-      Control URL normalization, in-page mirror replacement, and sender-based auto-apply behavior.
+      Control URL cleanup, in-page mirror replacement, and sender-based auto-apply behavior.
     </p>
 
     <div class="settings-list">
@@ -49,6 +49,19 @@
         </span>
         <span class="switch">
           <input id="replaceEmailBodyWithMirrorContent" type="checkbox" aria-label="Replace opened email body with mirror content">
+          <span class="switch-track" aria-hidden="true"></span>
+        </span>
+      </div>
+
+      <div class="setting-row">
+        <span class="setting-copy">
+          <strong>Strip known tracking parameters</strong>
+          <span class="setting-note">
+            When on, known marketing click IDs such as <code>utm_*</code>, <code>fbclid</code>, <code>gclid</code>, <code>mc_*</code>, and <code>hsa_*</code> are removed from final workflow URLs. Default: on.
+          </span>
+        </span>
+        <span class="switch">
+          <input id="stripKnownTrackingParameters" type="checkbox" aria-label="Strip known tracking parameters">
           <span class="switch-track" aria-hidden="true"></span>
         </span>
       </div>

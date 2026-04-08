@@ -105,6 +105,7 @@
     const extractTrackingCandidates = urlResolver.extractTrackingCandidates;
     const extractTracking = urlResolver.extractTracking;
     const splitMerged = urlResolver.splitMerged;
+    const stripKnownTrackingParameters = urlResolver.stripKnownTrackingParameters;
     const resolveURL = urlResolver.resolveURL;
     const resolveURLMinimalRecursive = urlResolver.resolveURLMinimalRecursive;
     const isValidURL = urlResolver.isValidURL;
@@ -387,6 +388,51 @@
       return changedUrlEntries;
     }
 
+    // Function: append unique item note.
+    function appendUniqueItemNote(item, noteText) {
+      if (!item || !Array.isArray(item.notes) || !noteText || item.notes.indexOf(noteText) !== -1) {
+        return;
+      }
+
+      item.notes.push(noteText);
+    }
+
+    // Function: strip tracking parameters from resolved URLs.
+    function stripTrackingParametersFromResolvedUrls(item, pipelineSettings) {
+      const strippedResolvedUrls = [];
+      const seenResolvedUrls = new Set();
+      const removedParameterNames = new Set();
+
+      (item && Array.isArray(item.resolved) ? item.resolved : []).forEach(function stripResolvedUrl(resolvedUrl) {
+        const strippedUrlResult = stripKnownTrackingParameters(resolvedUrl, pipelineSettings);
+        const strippedUrlValue = convertValueToString(
+          strippedUrlResult && strippedUrlResult.value ? strippedUrlResult.value : resolvedUrl
+        ).trim();
+
+        (strippedUrlResult && Array.isArray(strippedUrlResult.removedParameterNames)
+          ? strippedUrlResult.removedParameterNames
+          : []
+        ).forEach(function rememberRemovedParameterName(parameterName) {
+          removedParameterNames.add(parameterName);
+        });
+
+        if (!strippedUrlValue || seenResolvedUrls.has(strippedUrlValue)) {
+          return;
+        }
+
+        seenResolvedUrls.add(strippedUrlValue);
+        strippedResolvedUrls.push(strippedUrlValue);
+      });
+
+      if (!pipelineSettings.stripKnownTrackingParameters) {
+        appendUniqueItemNote(item, "TRACKING_PARAMETER_STRIP_BYPASSED");
+      } else if (removedParameterNames.size) {
+        appendUniqueItemNote(item, "TRACKING_PARAMS_STRIPPED: " + Array.from(removedParameterNames).join(", "));
+      }
+
+      return strippedResolvedUrls;
+    }
+
     // Function: get preferred replacement url.
     function getPreferredReplacementUrl(item) {
       const preferredUrl = getItemFinalUrls(item)[0] || "";
@@ -421,6 +467,18 @@
       const invalidResolvedUrlCount = (items || []).reduce(function addInvalidResolvedUrls(totalInvalidCount, item) {
         return totalInvalidCount + ((item.resolved || []).length - (item.validResolved || []).length);
       }, 0);
+      // Loop: accumulate the current collection into one result.
+      const strippedTrackingUrlCount = (items || []).reduce(function addStrippedTrackingUrlCount(totalStrippedCount, item) {
+        return totalStrippedCount + (
+          item &&
+          Array.isArray(item.notes) &&
+          item.notes.some(function hasTrackingStripNote(noteText) {
+            return String(noteText || "").indexOf("TRACKING_PARAMS_STRIPPED:") === 0;
+          })
+            ? 1
+            : 0
+        );
+      }, 0);
 
       const diagnosticLines = [
         "INPUT CHARS: " + convertValueToString(rawText).length,
@@ -429,6 +487,9 @@
         "DIGEST ENTRY COUNT: " + (digestEntries || []).length,
         "URL NORMALIZATION + REPAIR: " + (pipelineSettings.enableUrlNormalizationRepair ? "ON" : "OFF"),
         "NORMALIZATION STAGE: " + (pipelineSettings.enableUrlNormalizationRepair ? "EXECUTED" : "BYPASSED"),
+        "KNOWN TRACKING PARAMETER STRIPPING: " + (pipelineSettings.stripKnownTrackingParameters ? "ON" : "OFF"),
+        "TRACKING STRIP STAGE: " + (pipelineSettings.stripKnownTrackingParameters ? "EXECUTED" : "BYPASSED"),
+        "TRACKING STRIP COUNT: " + strippedTrackingUrlCount,
         "INVALID RESOLVED URLS: " + invalidResolvedUrlCount
       ];
 
@@ -477,15 +538,18 @@
       if (debugApi) {
         debugApi.functionIn("pipeline.populateResolvedDataForItems", {
           itemCount: Array.isArray(items) ? items.length : 0,
-          enableUrlNormalizationRepair: !!(options && options.enableUrlNormalizationRepair)
+          enableUrlNormalizationRepair: !!(options && options.enableUrlNormalizationRepair),
+          stripKnownTrackingParameters: !options || options.stripKnownTrackingParameters !== false
         });
       }
 
       const pipelineSettings = resolvePipelineSettings(options);
+      const shouldBypassNormalizationRepair = !pipelineSettings.enableUrlNormalizationRepair;
+      const shouldBypassTrackingParameterStrip = !pipelineSettings.stripKnownTrackingParameters;
       // Branch: follow this path only when the current condition passes.
-      if (!pipelineSettings.enableUrlNormalizationRepair) {
+      if (shouldBypassNormalizationRepair && shouldBypassTrackingParameterStrip) {
         if (debugApi) {
-          debugApi.conditional("pipeline normalization repair disabled; bypassing resolution", {
+          debugApi.conditional("pipeline cleanup disabled; bypassing resolution", {
             itemCount: Array.isArray(items) ? items.length : 0
           });
           debugApi.functionOut("pipeline.populateResolvedDataForItems", { mode: "bypass" });
@@ -500,11 +564,20 @@
           debugApi.loop("pipeline resolving item", { itemId: item.id });
         }
 
-        const peeledUrlToken = peel(item.original, pipelineSettings);
-        item.normalized = peeledUrlToken.value;
-        item.notes.push.apply(item.notes, peeledUrlToken.notes);
+        const originalUrl = convertValueToString(item && item.original).trim();
 
-        item.resolved = resolveURL(item.normalized);
+        if (shouldBypassNormalizationRepair) {
+          item.normalized = originalUrl;
+          item.resolved = originalUrl ? [originalUrl] : [];
+          appendUniqueItemNote(item, "NORMALIZATION_REPAIR_BYPASSED");
+        } else {
+          const peeledUrlToken = peel(item.original, pipelineSettings);
+          item.normalized = peeledUrlToken.value;
+          item.notes.push.apply(item.notes, peeledUrlToken.notes);
+          item.resolved = resolveURL(item.normalized);
+        }
+
+        item.resolved = stripTrackingParametersFromResolvedUrls(item, pipelineSettings);
         item.validResolved = item.resolved.filter(isValidURL);
 
         // Branch: follow this path only when the current condition passes.
@@ -546,7 +619,8 @@
           rawTextLength: normalizedRawText.length,
           sourceMarkupLength: sourceMarkup.length,
           hasSourceMarkup: !!sourceMarkup,
-          enableUrlNormalizationRepair: pipelineSettings.enableUrlNormalizationRepair
+          enableUrlNormalizationRepair: pipelineSettings.enableUrlNormalizationRepair,
+          stripKnownTrackingParameters: pipelineSettings.stripKnownTrackingParameters
         });
       }
 
@@ -661,6 +735,7 @@
       rewriteHtml: rewriteHtml,
       rewriteHtmlForStandalonePreview: rewriteHtmlForStandalonePreview,
       splitMerged: splitMerged,
+      stripKnownTrackingParameters: stripKnownTrackingParameters,
       validateTitle: validateTitle
     };
   }

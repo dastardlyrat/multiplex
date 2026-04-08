@@ -41,8 +41,27 @@ var urlForensicsPipelineBaseTrackingHostKeywords = Object.freeze([
   "click"
 ]);
 
+var urlForensicsPipelineBaseKnownTrackingParameterNames = Object.freeze([
+  "fbclid",
+  "gclid",
+  "gclsrc",
+  "dclid",
+  "mc_cid",
+  "mc_eid",
+  "mkt_tok",
+  "igshid",
+  "twclid",
+  "li_fat_id"
+]);
+
+var urlForensicsPipelineBaseKnownTrackingParameterPrefixes = Object.freeze([
+  "utm_",
+  "hsa_"
+]);
+
 var urlForensicsPipelineBaseDefaultSettings = Object.freeze({
-  enableUrlNormalizationRepair: false
+  enableUrlNormalizationRepair: false,
+  stripKnownTrackingParameters: true
 });
 
 // Function: convert pipeline value to string.
@@ -53,9 +72,15 @@ function urlForensicsPipelineBaseConvertValueToString(value) {
 // Function: resolve pipeline settings.
 function urlForensicsPipelineBaseResolveSettings(options) {
   const optionBag = options || {};
+  const hasOwn = Object.prototype.hasOwnProperty;
 
   return {
-    enableUrlNormalizationRepair: optionBag.enableUrlNormalizationRepair === true
+    enableUrlNormalizationRepair: hasOwn.call(optionBag, "enableUrlNormalizationRepair")
+      ? optionBag.enableUrlNormalizationRepair === true
+      : urlForensicsPipelineBaseDefaultSettings.enableUrlNormalizationRepair,
+    stripKnownTrackingParameters: hasOwn.call(optionBag, "stripKnownTrackingParameters")
+      ? optionBag.stripKnownTrackingParameters === true
+      : urlForensicsPipelineBaseDefaultSettings.stripKnownTrackingParameters
   };
 }
 
@@ -160,6 +185,8 @@ function urlForensicsPipelineBaseCreateDetectedUrlRecord(originalUrl, recordId) 
     regularExpressions: urlForensicsPipelineBaseRegularExpressions,
     preferredTrackingParameterNames: urlForensicsPipelineBasePreferredTrackingParameterNames,
     trackingHostKeywords: urlForensicsPipelineBaseTrackingHostKeywords,
+    knownTrackingParameterNames: urlForensicsPipelineBaseKnownTrackingParameterNames,
+    knownTrackingParameterPrefixes: urlForensicsPipelineBaseKnownTrackingParameterPrefixes,
     defaultPipelineSettings: urlForensicsPipelineBaseDefaultSettings,
     convertValueToString: urlForensicsPipelineBaseConvertValueToString,
     resolvePipelineSettings: urlForensicsPipelineBaseResolveSettings,

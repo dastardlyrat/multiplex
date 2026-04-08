@@ -148,7 +148,8 @@
   const unavailableMirrorLinkHoverMessage = "Mirror hover inspection is unavailable for this email body.";
   let mirrorHoverListenerCleanup = null;
   let latestDetectedMirrorHoverInfoText = "";
-  const pipelineSettingStorageKey = storageModel.storageKeys.enableUrlNormalizationRepair;
+  const urlNormalizationRepairStorageKey = storageModel.storageKeys.enableUrlNormalizationRepair;
+  const trackingParameterStripStorageKey = storageModel.storageKeys.stripKnownTrackingParameters;
   const replaceEmailBodyWithMirrorContentStorageKey = storageModel.storageKeys.replaceEmailBodyWithMirrorContent;
   const autoApplyMirrorForConfiguredSendersStorageKey = storageModel.storageKeys.autoApplyMirrorForConfiguredSenders;
   const autoApplyMirrorSenderEmailListStorageKey = storageModel.storageKeys.autoApplyMirrorSenderEmailList;
@@ -174,6 +175,7 @@
         ? mergedLinkLabPipeline.resolvePipelineSettings(mergedLinkLabPipeline.defaultPipelineSettings).enableUrlNormalizationRepair
         : false
     ),
+    stripKnownTrackingParameters: storageModel.defaultSettings.stripKnownTrackingParameters,
     replaceEmailBodyWithMirrorContent: false,
     autoApplyMirrorForConfiguredSenders: false,
     autoApplyMirrorSenderEmailList: defaultAutoApplyMirrorSenderEmails.slice()
@@ -187,6 +189,11 @@
         hasStoredValue: false,
         rawValue: undefined,
         effectiveValue: extensionSettings.enableUrlNormalizationRepair
+      },
+      stripKnownTrackingParameters: {
+        hasStoredValue: false,
+        rawValue: undefined,
+        effectiveValue: extensionSettings.stripKnownTrackingParameters
       },
       replaceEmailBodyWithMirrorContent: {
         hasStoredValue: false,
@@ -248,7 +255,8 @@
   // Function: get pipeline settings.
   function getPipelineSettings() {
     return {
-      enableUrlNormalizationRepair: !!extensionSettings.enableUrlNormalizationRepair
+      enableUrlNormalizationRepair: !!extensionSettings.enableUrlNormalizationRepair,
+      stripKnownTrackingParameters: !!extensionSettings.stripKnownTrackingParameters
     };
   }
 
@@ -328,8 +336,13 @@
     extensionStorageSnapshot.values = {
       enableUrlNormalizationRepair: buildStorageBooleanSnapshotEntry(
         normalizedStoredSettings,
-        pipelineSettingStorageKey,
+        urlNormalizationRepairStorageKey,
         extensionSettings.enableUrlNormalizationRepair
+      ),
+      stripKnownTrackingParameters: buildStorageBooleanSnapshotEntry(
+        normalizedStoredSettings,
+        trackingParameterStripStorageKey,
+        extensionSettings.stripKnownTrackingParameters
       ),
       replaceEmailBodyWithMirrorContent: buildStorageBooleanSnapshotEntry(
         normalizedStoredSettings,
@@ -474,6 +487,16 @@
     extensionSettings.enableUrlNormalizationRepair = nextValue === true;
   }
 
+  // Function: apply stored tracking-parameter stripping setting.
+  function applyStoredTrackingParameterStripSetting(nextValue) {
+    if (nextValue === true || nextValue === false) {
+      extensionSettings.stripKnownTrackingParameters = nextValue === true;
+      return;
+    }
+
+    extensionSettings.stripKnownTrackingParameters = storageModel.defaultSettings.stripKnownTrackingParameters;
+  }
+
   // Function: apply stored replace-email-body setting.
   function applyStoredReplaceEmailBodySetting(nextValue) {
     extensionSettings.replaceEmailBodyWithMirrorContent = nextValue === true;
@@ -519,7 +542,20 @@
     // Branch: try the primary operation before handling failures.
     try {
       const storedSettings = await extensionApi.storage.local.get(storageModel.getStorageReadKeys());
-      applyStoredPipelineSetting(storedSettings[pipelineSettingStorageKey]);
+      applyStoredPipelineSetting(
+        storageModel.getEffectiveBooleanSettingValue(
+          storedSettings,
+          urlNormalizationRepairStorageKey,
+          storageModel.defaultSettings.enableUrlNormalizationRepair
+        )
+      );
+      applyStoredTrackingParameterStripSetting(
+        storageModel.getEffectiveBooleanSettingValue(
+          storedSettings,
+          trackingParameterStripStorageKey,
+          storageModel.defaultSettings.stripKnownTrackingParameters
+        )
+      );
       applyStoredReplaceEmailBodySetting(storedSettings[replaceEmailBodyWithMirrorContentStorageKey]);
       applyStoredAutoApplyMirrorForConfiguredSendersSetting(resolveStoredAutoApplyConfiguredSendersValue(storedSettings));
       applyStoredAutoApplyMirrorSenderEmailList(storedSettings[autoApplyMirrorSenderEmailListStorageKey], { useDefaultList: true });
@@ -527,6 +563,7 @@
       if (debugApi) {
         debugApi.storage("content settings loaded", {
           enableUrlNormalizationRepair: extensionSettings.enableUrlNormalizationRepair,
+          stripKnownTrackingParameters: extensionSettings.stripKnownTrackingParameters,
           replaceEmailBodyWithMirrorContent: extensionSettings.replaceEmailBodyWithMirrorContent,
           autoApplyMirrorForConfiguredSenders: extensionSettings.autoApplyMirrorForConfiguredSenders,
           autoApplyMirrorSenderEmailCount: extensionSettings.autoApplyMirrorSenderEmailList.length
@@ -2493,6 +2530,7 @@
         "Name: " + (extensionManifest.name || "URL Forensics Workbench"),
         "Version: " + (extensionManifest.version || "0.0.0"),
         "URL Normalization + Repair: " + (pipelineSettings.enableUrlNormalizationRepair ? "enabled" : "disabled"),
+        "Tracking Parameter Stripping: " + (pipelineSettings.stripKnownTrackingParameters ? "enabled" : "disabled"),
         "Replace Email Body With Mirror: " + (extensionSettings.replaceEmailBodyWithMirrorContent ? "enabled" : "disabled"),
         "Auto-Apply Mirror For Configured Senders: " + (extensionSettings.autoApplyMirrorForConfiguredSenders ? "enabled" : "disabled"),
         "Configured Auto-Apply Sender Count: " + String(extensionSettings.autoApplyMirrorSenderEmailList.length),
@@ -3197,8 +3235,13 @@
 
     let didUpdateSettings = false;
 
-    if (changes[pipelineSettingStorageKey]) {
-      applyStoredPipelineSetting(changes[pipelineSettingStorageKey].newValue);
+    if (changes[urlNormalizationRepairStorageKey]) {
+      applyStoredPipelineSetting(changes[urlNormalizationRepairStorageKey].newValue);
+      didUpdateSettings = true;
+    }
+
+    if (changes[trackingParameterStripStorageKey]) {
+      applyStoredTrackingParameterStripSetting(changes[trackingParameterStripStorageKey].newValue);
       didUpdateSettings = true;
     }
 
@@ -3224,7 +3267,8 @@
       setExtensionStorageSnapshot(
         "storage.onChanged",
         {
-          [pipelineSettingStorageKey]: extensionSettings.enableUrlNormalizationRepair,
+          [urlNormalizationRepairStorageKey]: extensionSettings.enableUrlNormalizationRepair,
+          [trackingParameterStripStorageKey]: extensionSettings.stripKnownTrackingParameters,
           [replaceEmailBodyWithMirrorContentStorageKey]: extensionSettings.replaceEmailBodyWithMirrorContent,
           [autoApplyMirrorForConfiguredSendersStorageKey]: extensionSettings.autoApplyMirrorForConfiguredSenders,
           [autoApplyMirrorSenderEmailListStorageKey]: extensionSettings.autoApplyMirrorSenderEmailList.slice()

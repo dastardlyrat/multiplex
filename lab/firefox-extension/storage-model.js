@@ -4,6 +4,7 @@
 
   const storageKeys = Object.freeze({
     enableUrlNormalizationRepair: "enableUrlNormalizationRepair",
+    stripKnownTrackingParameters: "stripKnownTrackingParameters",
     replaceEmailBodyWithMirrorContent: "replaceEmailBodyWithMirrorContent",
     autoApplyMirrorForConfiguredSenders: "autoApplyMirrorForConfiguredSenders",
     autoApplyMirrorSenderEmailList: "autoApplyMirrorSenderEmailList"
@@ -17,6 +18,7 @@
   });
   const defaultSettings = Object.freeze({
     enableUrlNormalizationRepair: false,
+    stripKnownTrackingParameters: true,
     replaceEmailBodyWithMirrorContent: false,
     autoApplyMirrorForConfiguredSenders: false,
     autoApplyMirrorSenderEmailList: Object.freeze([])
@@ -118,6 +120,20 @@
       rawValue: rawValue,
       effectiveValue: hasStoredValue ? rawValue === true : defaultValue === true
     };
+  }
+
+  // Function: get effective stored boolean setting value.
+  function getEffectiveBooleanSettingValue(storedSettings, key, defaultValue) {
+    return buildStorageBooleanEntry(storedSettings, key, defaultValue).effectiveValue;
+  }
+
+  // Function: apply stored boolean setting to checkbox control.
+  function applyStoredBooleanSettingToControl(controlElement, storedSettings, key, defaultValue) {
+    if (!controlElement) {
+      return;
+    }
+
+    controlElement.checked = getEffectiveBooleanSettingValue(storedSettings, key, defaultValue);
   }
 
   // Function: build storage email list entry.
@@ -251,6 +267,11 @@
         normalizedStoredSettings,
         storageKeys.enableUrlNormalizationRepair,
         defaultSettings.enableUrlNormalizationRepair
+      ),
+      stripKnownTrackingParameters: buildStorageBooleanEntry(
+        normalizedStoredSettings,
+        storageKeys.stripKnownTrackingParameters,
+        defaultSettings.stripKnownTrackingParameters
       ),
       replaceEmailBodyWithMirrorContent: buildStorageBooleanEntry(
         normalizedStoredSettings,
@@ -480,6 +501,10 @@
       value: formatStorageBooleanEntry(storageSnapshot.enableUrlNormalizationRepair)
     });
     rows.push({
+      label: "Storage Tracking Parameter Stripping",
+      value: formatStorageBooleanEntry(storageSnapshot.stripKnownTrackingParameters)
+    });
+    rows.push({
       label: "Storage Replace Body",
       value: formatStorageBooleanEntry(storageSnapshot.replaceEmailBodyWithMirrorContent)
     });
@@ -529,6 +554,8 @@
     resolveStoredAutoApplyConfiguredSendersValue: resolveStoredAutoApplyConfiguredSendersValue,
     normalizeStoredSettings: normalizeStoredSettings,
     buildStorageBooleanEntry: buildStorageBooleanEntry,
+    getEffectiveBooleanSettingValue: getEffectiveBooleanSettingValue,
+    applyStoredBooleanSettingToControl: applyStoredBooleanSettingToControl,
     buildStorageEmailListEntry: buildStorageEmailListEntry,
     normalizeDebugConfigChoices: normalizeDebugConfigChoices,
     normalizeDebugPageChoices: normalizeDebugPageChoices,

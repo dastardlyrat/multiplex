@@ -36,7 +36,7 @@
     <div class="section-head">
       <h2 class="icon-subheading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">settings</span>Settings</h2>
       <div class="section-tools">
-        <span class="section-note">Defaults off</span>
+        <span class="section-note">Mixed defaults</span>
         <button id="openSettingsPageButton" class="ghost-button" type="button"><span class="material-symbols-outlined button-icon" aria-hidden="true">settings</span>Settings</button>
       </div>
     </div>
@@ -60,6 +60,17 @@
       </span>
       <span class="switch">
         <input id="replaceEmailBodyWithMirrorContent" type="checkbox" aria-label="Replace email with mirror">
+        <span class="switch-track" aria-hidden="true"></span>
+      </span>
+    </div>
+
+    <div class="switch-row">
+      <span class="setting-copy">
+        <strong>Strip tracking parameters</strong>
+        <span>Removes known click-tracking query parameters such as <code>utm_*</code>, <code>fbclid</code>, and <code>gclid</code>. Default: on.</span>
+      </span>
+      <span class="switch">
+        <input id="stripKnownTrackingParameters" type="checkbox" aria-label="Strip tracking parameters">
         <span class="switch-track" aria-hidden="true"></span>
       </span>
     </div>

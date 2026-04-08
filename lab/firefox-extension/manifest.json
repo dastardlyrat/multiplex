@@ -73,6 +73,7 @@
         "app.js",
         "debug-redaction.js",
         "debug.js",
+        "storage-model.js",
         "pipeline-base.js",
         "pipeline-url-resolver.js",
         "pipeline-html-rewriter.js",

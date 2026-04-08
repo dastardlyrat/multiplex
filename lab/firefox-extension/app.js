@@ -5,6 +5,7 @@
   const componentKit = typeof ComponentKit !== "undefined" ? ComponentKit : null;
   const mergedLinkLabPipeline = typeof MergedLinkLabPipeline !== "undefined" ? MergedLinkLabPipeline : null;
   const extensionApi = typeof browser !== "undefined" ? browser : (typeof chrome !== "undefined" ? chrome : null);
+  const storageModel = typeof globalThis !== "undefined" ? globalThis.urlForensicsStorageModel : null;
   const settingsOpener = typeof globalThis !== "undefined" ? globalThis.urlForensicsSettingsOpener : null;
   const debugApi = typeof globalThis !== "undefined" ? globalThis.mergedLinkLabDebug : null;
   if (debugApi && typeof debugApi.configure === "function") {
@@ -64,23 +65,54 @@
     "Stacked sample",
     "https://site.com/pagehttps://site.com/page2"
   ].join("\n");
-  const pipelineSettingStorageKey = "enableUrlNormalizationRepair";
+  const pipelineStorageKeys = storageModel && storageModel.storageKeys
+    ? storageModel.storageKeys
+    : {
+        enableUrlNormalizationRepair: "enableUrlNormalizationRepair",
+        stripKnownTrackingParameters: "stripKnownTrackingParameters"
+      };
+  const defaultPipelineSettings = storageModel && storageModel.defaultSettings
+    ? storageModel.defaultSettings
+    : {
+        enableUrlNormalizationRepair: false,
+        stripKnownTrackingParameters: true
+      };
+  const getEffectiveBooleanSettingValue = storageModel && typeof storageModel.getEffectiveBooleanSettingValue === "function"
+    ? storageModel.getEffectiveBooleanSettingValue
+    : function getFallbackEffectiveBooleanSettingValue(storedSettings, key, defaultValue) {
+        return storedSettings && Object.prototype.hasOwnProperty.call(storedSettings, key)
+          ? storedSettings[key] === true
+          : defaultValue === true;
+      };
   const pipelineState = {
     settings: mergedLinkLabPipeline.resolvePipelineSettings
       ? mergedLinkLabPipeline.resolvePipelineSettings(mergedLinkLabPipeline.defaultPipelineSettings)
-      : { enableUrlNormalizationRepair: false }
+      : {
+          enableUrlNormalizationRepair: defaultPipelineSettings.enableUrlNormalizationRepair,
+          stripKnownTrackingParameters: defaultPipelineSettings.stripKnownTrackingParameters
+        }
   };
 
   // Function: get pipeline settings.
   function getPipelineSettings() {
     return {
-      enableUrlNormalizationRepair: !!pipelineState.settings.enableUrlNormalizationRepair
+      enableUrlNormalizationRepair: !!pipelineState.settings.enableUrlNormalizationRepair,
+      stripKnownTrackingParameters: !!pipelineState.settings.stripKnownTrackingParameters
     };
   }
 
-  // Function: apply stored pipeline setting.
-  function applyStoredPipelineSetting(nextValue) {
-    pipelineState.settings.enableUrlNormalizationRepair = nextValue === true;
+  // Function: apply stored pipeline settings.
+  function applyStoredPipelineSettings(storedSettings) {
+    pipelineState.settings.enableUrlNormalizationRepair = getEffectiveBooleanSettingValue(
+      storedSettings,
+      pipelineStorageKeys.enableUrlNormalizationRepair,
+      defaultPipelineSettings.enableUrlNormalizationRepair
+    );
+    pipelineState.settings.stripKnownTrackingParameters = getEffectiveBooleanSettingValue(
+      storedSettings,
+      pipelineStorageKeys.stripKnownTrackingParameters,
+      defaultPipelineSettings.stripKnownTrackingParameters
+    );
   }
 
   // Function: load pipeline settings.
@@ -100,8 +132,11 @@
 
     // Branch: try the primary operation before handling failures.
     try {
-      const storedSettings = await extensionApi.storage.local.get(pipelineSettingStorageKey);
-      applyStoredPipelineSetting(storedSettings[pipelineSettingStorageKey]);
+      const storedSettings = await extensionApi.storage.local.get([
+        pipelineStorageKeys.enableUrlNormalizationRepair,
+        pipelineStorageKeys.stripKnownTrackingParameters
+      ]);
+      applyStoredPipelineSettings(storedSettings);
       if (debugApi) {
         debugApi.storage("workbench pipeline settings loaded", getPipelineSettings());
       }
@@ -123,11 +158,30 @@
   // Function: handle pipeline storage change.
   function handlePipelineStorageChange(changes, areaName) {
     // Branch: follow this path only when the current condition passes.
-    if (areaName !== "local" || !changes || !changes[pipelineSettingStorageKey]) {
+    if (
+      areaName !== "local" ||
+      !changes ||
+      (!changes[pipelineStorageKeys.enableUrlNormalizationRepair] && !changes[pipelineStorageKeys.stripKnownTrackingParameters])
+    ) {
       return;
     }
 
-    applyStoredPipelineSetting(changes[pipelineSettingStorageKey].newValue);
+    applyStoredPipelineSettings({
+      [pipelineStorageKeys.enableUrlNormalizationRepair]: changes[pipelineStorageKeys.enableUrlNormalizationRepair]
+        ? (
+            changes[pipelineStorageKeys.enableUrlNormalizationRepair].newValue === undefined
+              ? defaultPipelineSettings.enableUrlNormalizationRepair
+              : changes[pipelineStorageKeys.enableUrlNormalizationRepair].newValue
+          )
+        : pipelineState.settings.enableUrlNormalizationRepair,
+      [pipelineStorageKeys.stripKnownTrackingParameters]: changes[pipelineStorageKeys.stripKnownTrackingParameters]
+        ? (
+            changes[pipelineStorageKeys.stripKnownTrackingParameters].newValue === undefined
+              ? defaultPipelineSettings.stripKnownTrackingParameters
+              : changes[pipelineStorageKeys.stripKnownTrackingParameters].newValue
+          )
+        : pipelineState.settings.stripKnownTrackingParameters
+    });
 
     // Branch: follow this path only when the current condition passes.
     if (DOM.editor) {
@@ -421,11 +475,23 @@
   function renderResolved(items, pipelineOptions) {
     const lines = [];
     const shouldBypassNormalizationRepair = !(pipelineOptions && pipelineOptions.enableUrlNormalizationRepair);
+    const shouldBypassTrackingParameterStripping = !(pipelineOptions && pipelineOptions.stripKnownTrackingParameters);
 
     // Branch: follow this path only when the current condition passes.
     if (shouldBypassNormalizationRepair) {
       lines.push("NORMALIZATION + REPAIR STAGE BYPASSED");
-      lines.push("Setting is OFF, so detected URLs are passed through unchanged.");
+      lines.push(
+        shouldBypassTrackingParameterStripping
+          ? "Setting is OFF, so detected URLs are passed through unchanged."
+          : "Setting is OFF, so redirect repair is skipped while known tracking parameters can still be stripped."
+      );
+      lines.push("");
+    }
+
+    // Branch: follow this path only when the current condition passes.
+    if (shouldBypassTrackingParameterStripping) {
+      lines.push("KNOWN TRACKING PARAMETER STRIP STAGE BYPASSED");
+      lines.push("Setting is OFF, so UTM and other known click IDs are retained.");
       lines.push("");
     }
 
@@ -448,7 +514,9 @@
 
     componentKit.renderCount(
       DOM.resolveSummary,
-      shouldBypassNormalizationRepair ? "BYPASSED" : "RESOLVED",
+      shouldBypassNormalizationRepair && shouldBypassTrackingParameterStripping
+        ? "BYPASSED"
+        : (shouldBypassNormalizationRepair ? "CLEANED" : "RESOLVED"),
       resolvedCount
     );
   }
@@ -599,12 +667,7 @@
 
     // Branch: try the primary operation before handling failures.
     try {
-      // Branch: follow this path only when the current condition passes.
-      if (pipelineSettings.enableUrlNormalizationRepair) {
-        mergedLinkLabPipeline.populateResolvedDataForItems(items, pipelineSettings);
-      } else {
-        mergedLinkLabPipeline.populateBypassedDataForItems(items);
-      }
+      mergedLinkLabPipeline.populateResolvedDataForItems(items, pipelineSettings);
     // Branch: handle errors from the guarded operation.
     } catch (error) {
       errors.push("stageResolve: " + error.message);

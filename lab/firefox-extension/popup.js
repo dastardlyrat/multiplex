@@ -13,6 +13,7 @@
   const storageModel = globalThis.urlForensicsStorageModel;
   const storageKeys = storageModel.storageKeys;
   const defaults = storageModel.defaultSettings;
+  const applyStoredBooleanSettingToControl = storageModel.applyStoredBooleanSettingToControl;
   const formatStorageBooleanEntry = storageModel.formatStorageBooleanEntry;
   const formatStorageEmailListEntry = storageModel.formatStorageEmailListEntry;
   const getStorageSourceLabel = storageModel.getStorageSourceLabel;
@@ -31,6 +32,7 @@
     openDebuggingPageButton: document.getElementById("openDebuggingPageButton"),
     refreshDiagnosticsButton: document.getElementById("refreshDiagnosticsButton"),
     enableUrlNormalizationRepair: document.getElementById("enableUrlNormalizationRepair"),
+    stripKnownTrackingParameters: document.getElementById("stripKnownTrackingParameters"),
     replaceEmailBodyWithMirrorContent: document.getElementById("replaceEmailBodyWithMirrorContent"),
     diagnosticBadge: document.getElementById("diagnosticBadge"),
     diagnosticsList: document.getElementById("diagnosticsList"),
@@ -48,6 +50,10 @@
       DOM.enableUrlNormalizationRepair.checked = defaults.enableUrlNormalizationRepair;
     }
 
+    if (DOM.stripKnownTrackingParameters) {
+      DOM.stripKnownTrackingParameters.checked = defaults.stripKnownTrackingParameters;
+    }
+
     if (DOM.replaceEmailBodyWithMirrorContent) {
       DOM.replaceEmailBodyWithMirrorContent.checked = defaults.replaceEmailBodyWithMirrorContent;
     }
@@ -57,6 +63,7 @@
   function getSettingsPayload() {
     return {
       [storageKeys.enableUrlNormalizationRepair]: !!(DOM.enableUrlNormalizationRepair && DOM.enableUrlNormalizationRepair.checked),
+      [storageKeys.stripKnownTrackingParameters]: !!(DOM.stripKnownTrackingParameters && DOM.stripKnownTrackingParameters.checked),
       [storageKeys.replaceEmailBodyWithMirrorContent]: !!(DOM.replaceEmailBodyWithMirrorContent && DOM.replaceEmailBodyWithMirrorContent.checked)
     };
   }
@@ -97,6 +104,10 @@
       {
         label: "Storage URL Normalization",
         value: formatStorageBooleanEntry(storageSnapshot.enableUrlNormalizationRepair)
+      },
+      {
+        label: "Storage Tracking Parameter Stripping",
+        value: formatStorageBooleanEntry(storageSnapshot.stripKnownTrackingParameters)
       },
       {
         label: "Storage Replace Body",
@@ -213,17 +224,29 @@
       const storedSettings = await extensionApi.storage.local.get(storageModel.getStorageReadKeys());
       setPopupStorageSnapshot("storage.local", storedSettings, "");
 
-      if (DOM.enableUrlNormalizationRepair) {
-        DOM.enableUrlNormalizationRepair.checked = storedSettings[storageKeys.enableUrlNormalizationRepair] === true;
-      }
-
-      if (DOM.replaceEmailBodyWithMirrorContent) {
-        DOM.replaceEmailBodyWithMirrorContent.checked = storedSettings[storageKeys.replaceEmailBodyWithMirrorContent] === true;
-      }
+      applyStoredBooleanSettingToControl(
+        DOM.enableUrlNormalizationRepair,
+        storedSettings,
+        storageKeys.enableUrlNormalizationRepair,
+        defaults.enableUrlNormalizationRepair
+      );
+      applyStoredBooleanSettingToControl(
+        DOM.stripKnownTrackingParameters,
+        storedSettings,
+        storageKeys.stripKnownTrackingParameters,
+        defaults.stripKnownTrackingParameters
+      );
+      applyStoredBooleanSettingToControl(
+        DOM.replaceEmailBodyWithMirrorContent,
+        storedSettings,
+        storageKeys.replaceEmailBodyWithMirrorContent,
+        defaults.replaceEmailBodyWithMirrorContent
+      );
       if (debugApi) {
         debugApi.storage("popup settings loaded", {
-          enableUrlNormalizationRepair: storedSettings[storageKeys.enableUrlNormalizationRepair] === true,
-          replaceEmailBodyWithMirrorContent: storedSettings[storageKeys.replaceEmailBodyWithMirrorContent] === true
+          enableUrlNormalizationRepair: !!(DOM.enableUrlNormalizationRepair && DOM.enableUrlNormalizationRepair.checked),
+          stripKnownTrackingParameters: !!(DOM.stripKnownTrackingParameters && DOM.stripKnownTrackingParameters.checked),
+          replaceEmailBodyWithMirrorContent: !!(DOM.replaceEmailBodyWithMirrorContent && DOM.replaceEmailBodyWithMirrorContent.checked)
         });
         debugApi.functionOut("popup.loadSettings", { source: "storage.local" });
       }
@@ -275,6 +298,13 @@
             : "Mirror replace off.",
           "saved"
         );
+      } else if (changedSettingId === "stripKnownTrackingParameters") {
+        setStatus(
+          nextPayload.stripKnownTrackingParameters
+            ? "Tracking strip on."
+            : "Tracking strip off.",
+          "saved"
+        );
       } else {
         setStatus(
           nextPayload.enableUrlNormalizationRepair
@@ -290,6 +320,7 @@
         debugApi.storage("popup settings saved", {
           changedSettingId: changedSettingId,
           enableUrlNormalizationRepair: nextPayload.enableUrlNormalizationRepair,
+          stripKnownTrackingParameters: nextPayload.stripKnownTrackingParameters,
           replaceEmailBodyWithMirrorContent: nextPayload.replaceEmailBodyWithMirrorContent
         });
         debugApi.functionOut("popup.saveSettings", { saved: true });
@@ -477,6 +508,10 @@
 
     if (DOM.enableUrlNormalizationRepair) {
       DOM.enableUrlNormalizationRepair.addEventListener("change", saveSettings);
+    }
+
+    if (DOM.stripKnownTrackingParameters) {
+      DOM.stripKnownTrackingParameters.addEventListener("change", saveSettings);
     }
 
     if (DOM.replaceEmailBodyWithMirrorContent) {

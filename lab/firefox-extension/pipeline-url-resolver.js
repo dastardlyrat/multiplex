@@ -11,6 +11,8 @@ function urlForensicsPipelineUrlCreateResolverContext(pipelineBase) {
     regularExpressions: pipelineBase.regularExpressions,
     preferredTrackingParameterNames: pipelineBase.preferredTrackingParameterNames,
     trackingHostKeywords: pipelineBase.trackingHostKeywords,
+    knownTrackingParameterNames: pipelineBase.knownTrackingParameterNames || [],
+    knownTrackingParameterPrefixes: pipelineBase.knownTrackingParameterPrefixes || [],
     convertValueToString: pipelineBase.convertValueToString,
     resolvePipelineSettings: pipelineBase.resolvePipelineSettings
   });
@@ -172,6 +174,82 @@ function urlForensicsPipelineUrlExtractTrackingCandidates(resolverContext, urlVa
 function urlForensicsPipelineUrlExtractTracking(resolverContext, urlValue) {
   const detectedTrackingCandidates = urlForensicsPipelineUrlExtractTrackingCandidates(resolverContext, urlValue);
   return detectedTrackingCandidates.length ? detectedTrackingCandidates[0] : null;
+}
+
+// Function: check whether a parameter name is a known tracking parameter.
+function urlForensicsPipelineUrlIsKnownTrackingParameter(resolverContext, parameterName) {
+  const normalizedParameterName = resolverContext.convertValueToString(parameterName).trim().toLowerCase();
+
+  if (!normalizedParameterName) {
+    return false;
+  }
+
+  if (resolverContext.knownTrackingParameterNames.indexOf(normalizedParameterName) !== -1) {
+    return true;
+  }
+
+  return resolverContext.knownTrackingParameterPrefixes.some(function hasTrackingPrefix(prefix) {
+    return normalizedParameterName.indexOf(prefix) === 0;
+  });
+}
+
+// Function: format parsed URL value.
+function urlForensicsPipelineUrlFormatParsedValue(parsedUrl) {
+  const pathnameValue = parsedUrl && parsedUrl.pathname && parsedUrl.pathname !== "/"
+    ? parsedUrl.pathname
+    : "";
+
+  return String(parsedUrl.origin || "") + pathnameValue + String(parsedUrl.search || "") + String(parsedUrl.hash || "");
+}
+
+// Function: strip known tracking parameters.
+function urlForensicsPipelineUrlStripKnownTrackingParameters(resolverContext, urlValue, options) {
+  const pipelineSettings = resolverContext.resolvePipelineSettings(options);
+  const trimmedUrlValue = resolverContext.convertValueToString(urlValue).trim();
+  const removedParameterNames = [];
+
+  if (!pipelineSettings.stripKnownTrackingParameters || !trimmedUrlValue) {
+    return {
+      value: trimmedUrlValue,
+      removedParameterNames: removedParameterNames
+    };
+  }
+
+  let parsedUrl = null;
+
+  try {
+    parsedUrl = new URL(trimmedUrlValue);
+  } catch {
+    return {
+      value: trimmedUrlValue,
+      removedParameterNames: removedParameterNames
+    };
+  }
+
+  const uniqueParameterNames = Array.from(new Set(Array.from(parsedUrl.searchParams.keys()).map(function normalizeParameterName(parameterName) {
+    return resolverContext.convertValueToString(parameterName).trim();
+  })));
+
+  uniqueParameterNames.forEach(function removeTrackingParameter(parameterName) {
+    if (!urlForensicsPipelineUrlIsKnownTrackingParameter(resolverContext, parameterName)) {
+      return;
+    }
+
+    parsedUrl.searchParams.delete(parameterName);
+    removedParameterNames.push(parameterName.toLowerCase());
+  });
+
+  if (!removedParameterNames.length) {
+    return {
+      value: trimmedUrlValue,
+      removedParameterNames: removedParameterNames
+    };
+  }
+
+  return {
+    value: urlForensicsPipelineUrlFormatParsedValue(parsedUrl),
+    removedParameterNames: removedParameterNames
+  };
 }
 
 // Function: split merged URL string.
@@ -407,9 +485,15 @@ function urlForensicsPipelineUrlResolverCreate(pipelineBase) {
     isLikelyTrackerHost: function isLikelyTrackerHost(hostName) {
       return urlForensicsPipelineUrlIsLikelyTrackerHost(resolverContext, hostName);
     },
+    isKnownTrackingParameter: function isKnownTrackingParameter(parameterName) {
+      return urlForensicsPipelineUrlIsKnownTrackingParameter(resolverContext, parameterName);
+    },
     isValidURL: urlForensicsPipelineUrlIsValidURL,
     peel: function peel(urlValue, options) {
       return urlForensicsPipelineUrlPeel(resolverContext, urlValue, options);
+    },
+    stripKnownTrackingParameters: function stripKnownTrackingParameters(urlValue, options) {
+      return urlForensicsPipelineUrlStripKnownTrackingParameters(resolverContext, urlValue, options);
     },
     resolveURL: function resolveURL(urlValue) {
       return urlForensicsPipelineUrlResolveURL(resolverContext, urlValue);

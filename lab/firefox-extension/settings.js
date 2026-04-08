@@ -17,6 +17,7 @@
   const normalizeSenderEmailAddress = storageModel.normalizeSenderEmailAddress;
   const sanitizeSenderEmailList = storageModel.sanitizeSenderEmailList;
   const resolveStoredAutoApplyConfiguredSendersValue = storageModel.resolveStoredAutoApplyConfiguredSendersValue;
+  const applyStoredBooleanSettingToControl = storageModel.applyStoredBooleanSettingToControl;
   const settingsState = {
     manifest: null,
     storageSnapshot: null,
@@ -24,6 +25,7 @@
   };
   const DOM = {
     enableUrlNormalizationRepair: document.getElementById("enableUrlNormalizationRepair"),
+    stripKnownTrackingParameters: document.getElementById("stripKnownTrackingParameters"),
     replaceEmailBodyWithMirrorContent: document.getElementById("replaceEmailBodyWithMirrorContent"),
     autoApplyMirrorForConfiguredSenders: document.getElementById("autoApplyMirrorForConfiguredSenders"),
     autoApplySenderListSummary: document.getElementById("autoApplySenderListSummary"),
@@ -203,6 +205,10 @@
       DOM.enableUrlNormalizationRepair.checked = defaults.enableUrlNormalizationRepair;
     }
 
+    if (DOM.stripKnownTrackingParameters) {
+      DOM.stripKnownTrackingParameters.checked = defaults.stripKnownTrackingParameters;
+    }
+
     if (DOM.replaceEmailBodyWithMirrorContent) {
       DOM.replaceEmailBodyWithMirrorContent.checked = defaults.replaceEmailBodyWithMirrorContent;
     }
@@ -218,6 +224,7 @@
   function getNextSettingsPayload() {
     return {
       [storageKeys.enableUrlNormalizationRepair]: !!(DOM.enableUrlNormalizationRepair && DOM.enableUrlNormalizationRepair.checked),
+      [storageKeys.stripKnownTrackingParameters]: !!(DOM.stripKnownTrackingParameters && DOM.stripKnownTrackingParameters.checked),
       [storageKeys.replaceEmailBodyWithMirrorContent]: !!(DOM.replaceEmailBodyWithMirrorContent && DOM.replaceEmailBodyWithMirrorContent.checked),
       [storageKeys.autoApplyMirrorForConfiguredSenders]:
         !!(DOM.autoApplyMirrorForConfiguredSenders && DOM.autoApplyMirrorForConfiguredSenders.checked)
@@ -230,6 +237,12 @@
       return isEnabled
         ? "Saved. Replacing the opened email body with mirror content is enabled."
         : "Saved. Replacing the opened email body with mirror content is disabled.";
+    }
+
+    if (changedControlId === "stripKnownTrackingParameters") {
+      return isEnabled
+        ? "Saved. Known tracking parameters will be stripped from workflow URLs."
+        : "Saved. Known tracking parameters will be retained in workflow URLs.";
     }
 
     if (changedControlId === "autoApplyMirrorForConfiguredSenders") {
@@ -333,6 +346,7 @@
     return !!(
       DOM.enableUrlNormalizationRepair ||
       DOM.replaceEmailBodyWithMirrorContent ||
+      DOM.stripKnownTrackingParameters ||
       DOM.autoApplyMirrorForConfiguredSenders ||
       DOM.senderAddressList
     );
@@ -359,13 +373,24 @@
 
   // Function: apply stored checkbox values.
   function applyStoredCheckboxValues(storedSettings) {
-    if (DOM.enableUrlNormalizationRepair) {
-      DOM.enableUrlNormalizationRepair.checked = storedSettings[storageKeys.enableUrlNormalizationRepair] === true;
-    }
-
-    if (DOM.replaceEmailBodyWithMirrorContent) {
-      DOM.replaceEmailBodyWithMirrorContent.checked = storedSettings[storageKeys.replaceEmailBodyWithMirrorContent] === true;
-    }
+    applyStoredBooleanSettingToControl(
+      DOM.enableUrlNormalizationRepair,
+      storedSettings,
+      storageKeys.enableUrlNormalizationRepair,
+      defaults.enableUrlNormalizationRepair
+    );
+    applyStoredBooleanSettingToControl(
+      DOM.stripKnownTrackingParameters,
+      storedSettings,
+      storageKeys.stripKnownTrackingParameters,
+      defaults.stripKnownTrackingParameters
+    );
+    applyStoredBooleanSettingToControl(
+      DOM.replaceEmailBodyWithMirrorContent,
+      storedSettings,
+      storageKeys.replaceEmailBodyWithMirrorContent,
+      defaults.replaceEmailBodyWithMirrorContent
+    );
 
     if (DOM.autoApplyMirrorForConfiguredSenders) {
       const resolvedAutoApplyValue = resolveStoredAutoApplyConfiguredSendersValue(storedSettings);
@@ -398,6 +423,7 @@
     debugApi.storage("settings loaded", {
       senderEmailCount: settingsState.senderEmailList.length,
       enableUrlNormalizationRepair: !!(DOM.enableUrlNormalizationRepair && DOM.enableUrlNormalizationRepair.checked),
+      stripKnownTrackingParameters: !!(DOM.stripKnownTrackingParameters && DOM.stripKnownTrackingParameters.checked),
       replaceEmailBodyWithMirrorContent: !!(DOM.replaceEmailBodyWithMirrorContent && DOM.replaceEmailBodyWithMirrorContent.checked),
       autoApplyMirrorForConfiguredSenders: !!(DOM.autoApplyMirrorForConfiguredSenders && DOM.autoApplyMirrorForConfiguredSenders.checked)
     });
@@ -500,7 +526,12 @@
 
     // Branch: follow this path only when the current condition passes.
     if (
-      (!DOM.enableUrlNormalizationRepair && !DOM.replaceEmailBodyWithMirrorContent && !DOM.autoApplyMirrorForConfiguredSenders) ||
+      (
+        !DOM.enableUrlNormalizationRepair &&
+        !DOM.stripKnownTrackingParameters &&
+        !DOM.replaceEmailBodyWithMirrorContent &&
+        !DOM.autoApplyMirrorForConfiguredSenders
+      ) ||
       !extensionApi ||
       !extensionApi.storage ||
       !extensionApi.storage.local ||
@@ -600,7 +631,20 @@
 
     if (Object.prototype.hasOwnProperty.call(changes, storageKeys.enableUrlNormalizationRepair)) {
       if (DOM.enableUrlNormalizationRepair) {
-        DOM.enableUrlNormalizationRepair.checked = changes[storageKeys.enableUrlNormalizationRepair].newValue === true;
+        DOM.enableUrlNormalizationRepair.checked =
+          changes[storageKeys.enableUrlNormalizationRepair].newValue === undefined
+            ? defaults.enableUrlNormalizationRepair
+            : changes[storageKeys.enableUrlNormalizationRepair].newValue === true;
+      }
+      didUpdate = true;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(changes, storageKeys.stripKnownTrackingParameters)) {
+      if (DOM.stripKnownTrackingParameters) {
+        DOM.stripKnownTrackingParameters.checked =
+          changes[storageKeys.stripKnownTrackingParameters].newValue === undefined
+            ? defaults.stripKnownTrackingParameters
+            : changes[storageKeys.stripKnownTrackingParameters].newValue === true;
       }
       didUpdate = true;
     }
@@ -660,13 +704,17 @@
   }
 
   // Branch: follow this path only when the current condition passes.
-  if (DOM.enableUrlNormalizationRepair) {
-    DOM.enableUrlNormalizationRepair.addEventListener("change", saveSettings);
-  }
+    if (DOM.enableUrlNormalizationRepair) {
+      DOM.enableUrlNormalizationRepair.addEventListener("change", saveSettings);
+    }
 
-  if (DOM.replaceEmailBodyWithMirrorContent) {
-    DOM.replaceEmailBodyWithMirrorContent.addEventListener("change", saveSettings);
-  }
+    if (DOM.stripKnownTrackingParameters) {
+      DOM.stripKnownTrackingParameters.addEventListener("change", saveSettings);
+    }
+
+    if (DOM.replaceEmailBodyWithMirrorContent) {
+      DOM.replaceEmailBodyWithMirrorContent.addEventListener("change", saveSettings);
+    }
 
   if (DOM.autoApplyMirrorForConfiguredSenders) {
     DOM.autoApplyMirrorForConfiguredSenders.addEventListener("change", saveSettings);
