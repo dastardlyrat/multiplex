@@ -35,6 +35,7 @@
     closeRewrittenBtn: document.getElementById("closeRewrittenBtn"),
     detectedPane: document.getElementById("detectedPane"),
     resolvedPane: document.getElementById("resolvedPane"),
+    trackerPane: document.getElementById("trackerPane"),
     finalPane: document.getElementById("finalPane"),
     digestPane: document.getElementById("digestPane"),
     rewrittenSidebar: document.getElementById("rewrittenSidebar"),
@@ -44,6 +45,7 @@
     inputSummary: document.getElementById("inputSummary"),
     detectSummary: document.getElementById("detectSummary"),
     resolveSummary: document.getElementById("resolveSummary"),
+    trackerSummary: document.getElementById("trackerSummary"),
     finalSummary: document.getElementById("finalSummary"),
     digestSummary: document.getElementById("digestSummary"),
     rewrittenSummary: document.getElementById("rewrittenSummary"),
@@ -557,6 +559,50 @@
     );
   }
 
+  // Function: render tracker cleanup.
+  function renderTrackerCleanup(items, pipelineOptions) {
+    const lines = [];
+    const shouldBypassTrackingParameterStripping = !(pipelineOptions && pipelineOptions.stripKnownTrackingParameters);
+    let cleanedEntryCount = 0;
+
+    if (shouldBypassTrackingParameterStripping) {
+      lines.push("TRACKER REMOVAL STAGE BYPASSED");
+      lines.push("Tracker stripping is off, so tracker parameters are retained.");
+      lines.push("");
+    }
+
+    items.forEach(function addTrackerCleanupLines(item) {
+      const cleanupEntries = item && Array.isArray(item.trackerCleanupEntries) ? item.trackerCleanupEntries : [];
+
+      lines.push("SOURCE " + item.id + ": " + item.original);
+
+      if (!cleanupEntries.length) {
+        lines.push(
+          shouldBypassTrackingParameterStripping
+            ? "RETAINED: no tracker cleanup attempted"
+            : "CLEANUP: no matching tracker parameters removed"
+        );
+        lines.push("");
+        return;
+      }
+
+      cleanupEntries.forEach(function addTrackerCleanupEntry(cleanupEntry) {
+        cleanedEntryCount += 1;
+        lines.push("TRACKER CLEANED HREF: " + cleanupEntry.cleanedUrl);
+        lines.push("FROM: " + cleanupEntry.originalUrl);
+        lines.push("REMOVED TRACKERS: " + cleanupEntry.removedParameterNames.join(", "));
+      });
+      lines.push("");
+    });
+
+    setRichText(DOM.trackerPane, lines.join("\n").trim() || "No tracker cleanup details available.");
+    componentKit.renderCount(
+      DOM.trackerSummary,
+      shouldBypassTrackingParameterStripping ? "TRACKERS BYPASSED" : "TRACKERS CLEANED",
+      cleanedEntryCount
+    );
+  }
+
   // Function: render final.
   function renderFinal(items) {
     const finalUrlEntries = mergedLinkLabPipeline.buildFinalUrlEntries(items);
@@ -714,6 +760,7 @@
 
     renderDetected(items);
     renderResolved(items, pipelineSettings);
+    renderTrackerCleanup(items, pipelineSettings);
 
     const finalUrls = renderFinal(items);
     const digestEntries = mergedLinkLabPipeline.buildDigestEntries(payload.cleanedText, items);

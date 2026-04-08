@@ -25,6 +25,7 @@
     trackingParameterFilters: normalizeTrackingParameterFilters(defaultSettings.trackingParameterFilters)
   };
   const DOM = {
+    stripKnownTrackingParameters: document.getElementById("stripKnownTrackingParameters"),
     trackerFilterBadge: document.getElementById("trackerFilterBadge"),
     trackerFilterSummary: document.getElementById("trackerFilterSummary"),
     trackerStripMasterStatus: document.getElementById("trackerStripMasterStatus"),
@@ -76,6 +77,10 @@
       DOM.trackerStripMasterStatus.textContent = trackerState.stripKnownTrackingParameters
         ? "Global tracking-parameter stripping is currently enabled."
         : "Global tracking-parameter stripping is currently disabled. These filters are saved but inactive until the master strip switch is turned on.";
+    }
+
+    if (DOM.stripKnownTrackingParameters) {
+      DOM.stripKnownTrackingParameters.checked = trackerState.stripKnownTrackingParameters === true;
     }
   }
 
@@ -148,6 +153,26 @@
     });
     setTrackerFilters(normalizedFilters);
     setStatus(successMessage, "saved");
+  }
+
+  // Function: save master tracking strip setting.
+  async function saveTrackingStripMasterSetting(isEnabled) {
+    if (!extensionApi || !extensionApi.storage || !extensionApi.storage.local || typeof extensionApi.storage.local.set !== "function") {
+      setStatus("Storage is unavailable in this page.", "error");
+      return;
+    }
+
+    await extensionApi.storage.local.set({
+      [storageKeys.stripKnownTrackingParameters]: isEnabled === true
+    });
+    trackerState.stripKnownTrackingParameters = isEnabled === true;
+    renderTrackerSummary();
+    setStatus(
+      trackerState.stripKnownTrackingParameters
+        ? "Tracker stripping enabled."
+        : "Tracker stripping disabled. Filters remain saved.",
+      "saved"
+    );
   }
 
   // Function: load tracker settings.
@@ -245,6 +270,12 @@
         }, {});
 
         saveTrackerFilters(nextFilters, "Enabled all tracker filters.");
+      });
+    }
+
+    if (DOM.stripKnownTrackingParameters) {
+      DOM.stripKnownTrackingParameters.addEventListener("change", function handleTrackingStripMasterChange(event) {
+        saveTrackingStripMasterSetting(!!(event && event.target && event.target.checked));
       });
     }
 

@@ -113,6 +113,7 @@
     const extractHost = urlResolver.extractHost;
     const extractBaseUrl = urlResolver.extractBaseUrl;
     const extractOriginUrl = urlResolver.extractOriginUrl;
+    const extractKnownTrackingParameterNames = urlResolver.extractKnownTrackingParameterNames;
     const buildFinalUrlDisplayName = urlResolver.buildFinalUrlDisplayName;
     const buildFinalUrlLinkText = urlResolver.buildFinalUrlLinkText;
     const buildFinalUrlEntry = urlResolver.buildFinalUrlEntry;
@@ -398,11 +399,28 @@
       item.notes.push(noteText);
     }
 
+    // Function: get item tracker cleanup entries.
+    function getItemTrackerCleanupEntries(item) {
+      return item && Array.isArray(item.trackerCleanupEntries) ? item.trackerCleanupEntries : [];
+    }
+
+    // Function: check whether item stripped tracker parameters.
+    function didItemStripTrackingParameters(item) {
+      return getItemTrackerCleanupEntries(item).some(function hasTrackerCleanupEntry(cleanupEntry) {
+        return cleanupEntry && Array.isArray(cleanupEntry.removedParameterNames) && cleanupEntry.removedParameterNames.length > 0;
+      });
+    }
+
     // Function: strip tracking parameters from resolved URLs.
     function stripTrackingParametersFromResolvedUrls(item, pipelineSettings) {
       const strippedResolvedUrls = [];
       const seenResolvedUrls = new Set();
       const removedParameterNames = new Set();
+      const trackerCleanupEntries = [];
+
+      if (item) {
+        item.trackerCleanupEntries = trackerCleanupEntries;
+      }
 
       (item && Array.isArray(item.resolved) ? item.resolved : []).forEach(function stripResolvedUrl(resolvedUrl) {
         const strippedUrlResult = stripKnownTrackingParameters(resolvedUrl, pipelineSettings);
@@ -416,6 +434,14 @@
         ).forEach(function rememberRemovedParameterName(parameterName) {
           removedParameterNames.add(parameterName);
         });
+
+        if (strippedUrlResult && Array.isArray(strippedUrlResult.removedParameterNames) && strippedUrlResult.removedParameterNames.length) {
+          trackerCleanupEntries.push({
+            originalUrl: convertValueToString(resolvedUrl).trim(),
+            cleanedUrl: strippedUrlValue,
+            removedParameterNames: strippedUrlResult.removedParameterNames.slice()
+          });
+        }
 
         if (!strippedUrlValue || seenResolvedUrls.has(strippedUrlValue)) {
           return;
@@ -446,6 +472,10 @@
       const originalUrl = convertValueToString(item && item.original).trim();
       const normalizedUrl = convertValueToString(item && item.normalized).trim();
       const preferredUrl = getPreferredReplacementUrl(item);
+
+      if (didItemStripTrackingParameters(item)) {
+        return "tracker cleaned";
+      }
 
       return classifyUrlValue(originalUrl || normalizedUrl || preferredUrl);
     }
@@ -524,6 +554,7 @@
         item.resolved = originalUrl ? [originalUrl] : [];
         item.validResolved = item.resolved.filter(isValidURL);
         item.replacementUrl = originalUrl;
+        item.trackerCleanupEntries = [];
 
         // Branch: follow this path only when the current condition passes.
         if (!item.notes.includes("NORMALIZATION_REPAIR_BYPASSED")) {
@@ -571,6 +602,7 @@
         }
 
         const originalUrl = convertValueToString(item && item.original).trim();
+        item.trackerCleanupEntries = [];
 
         if (shouldBypassNormalizationRepair) {
           item.normalized = originalUrl;
@@ -718,6 +750,7 @@
       extractOriginUrl: extractOriginUrl,
       buildFinalUrlDisplayName: buildFinalUrlDisplayName,
       buildFinalUrlEntry: buildFinalUrlEntry,
+      extractKnownTrackingParameterNames: extractKnownTrackingParameterNames,
       extractTracking: extractTracking,
       extractTrackingCandidates: extractTrackingCandidates,
       findNearbyTitle: findNearbyTitle,

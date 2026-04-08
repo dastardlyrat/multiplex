@@ -2333,6 +2333,7 @@
       subfolder: emptyValue,
       slug: emptyValue,
       parameters: emptyValue,
+      trackerParameters: emptyValue,
       anchor: emptyValue
     };
 
@@ -2381,10 +2382,31 @@
       }
     }
 
-    const parametersValue = String(parsedUrl.search || "").replace(/^\?/, "");
     const anchorValue = String(parsedUrl.hash || "").replace(/^#/, "");
+    const trackerParameterNames = mergedLinkLabPipeline && typeof mergedLinkLabPipeline.extractKnownTrackingParameterNames === "function"
+      ? mergedLinkLabPipeline.extractKnownTrackingParameterNames(parsedUrl.toString())
+      : [];
+    const trackerParameterNameSet = new Set(trackerParameterNames.map(function normalizeTrackerParameterName(parameterName) {
+      return String(parameterName || "").trim().toLowerCase();
+    }));
+    const trackerParameterEntries = [];
+    const otherParameterEntries = [];
 
-    componentValues.parameters = decodeMirrorHoverSegment(parametersValue) || emptyValue;
+    Array.from(parsedUrl.searchParams.entries()).forEach(function classifySearchParameter(entry) {
+      const parameterName = decodeMirrorHoverSegment(entry[0] || "");
+      const parameterValue = decodeMirrorHoverSegment(entry[1] || "");
+      const formattedParameter = parameterValue ? parameterName + "=" + parameterValue : parameterName;
+
+      if (trackerParameterNameSet.has(String(entry[0] || "").trim().toLowerCase())) {
+        trackerParameterEntries.push(formattedParameter);
+        return;
+      }
+
+      otherParameterEntries.push(formattedParameter);
+    });
+
+    componentValues.trackerParameters = trackerParameterEntries.length ? trackerParameterEntries.join("&") : emptyValue;
+    componentValues.parameters = otherParameterEntries.length ? otherParameterEntries.join("&") : emptyValue;
     componentValues.anchor = decodeMirrorHoverSegment(anchorValue) || emptyValue;
 
     return componentValues;
@@ -2415,7 +2437,8 @@
       "Domain: " + urlComponents.domain,
       "Subfolder: " + urlComponents.subfolder,
       "Slug: " + urlComponents.slug,
-      "Parameters: " + urlComponents.parameters,
+      "Tracker Parameters: " + urlComponents.trackerParameters,
+      "Other Parameters: " + urlComponents.parameters,
       "Anchor: " + urlComponents.anchor
     ];
 

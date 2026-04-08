@@ -49,6 +49,19 @@ function runPipelineSmokeTest() {
   ) {
     throw new Error("pipeline per-tracker filter smoke test failed");
   }
+
+  if (pipeline.classifyUrlValue("https://example.com/path?gclid=456&keep=yes") !== "tracker") {
+    throw new Error("pipeline tracker classification smoke test failed");
+  }
+
+  if (
+    !defaultResult.items[0] ||
+    defaultResult.items[0].trackerCleanupEntries.length !== 1 ||
+    defaultResult.items[0].trackerCleanupEntries[0].removedParameterNames.indexOf("hsctatracking") === -1 ||
+    pipeline.getItemDisplayType(defaultResult.items[0]) !== "tracker cleaned"
+  ) {
+    throw new Error("pipeline tracker cleanup labeling smoke test failed");
+  }
 }
 
 // Function: run debug redaction smoke test.

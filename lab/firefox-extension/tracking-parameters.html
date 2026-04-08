@@ -21,15 +21,28 @@
     </nav>
     <h1 class="icon-heading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">filter_alt</span>Tracker Filters</h1>
     <p class="lede">
-      Choose which known tracking query parameters should be removed when global tracking-parameter stripping is enabled.
+      Control tracker-parameter stripping and choose which known tracking query parameters should be removed.
     </p>
+
+    <div class="setting-row">
+      <span class="setting-copy">
+        <strong>Strip known tracking parameters</strong>
+        <span class="setting-note">
+          Global master switch for known tracker removal. When off, the tracker filters below are preserved but bypassed.
+        </span>
+      </span>
+      <span class="switch">
+        <input id="stripKnownTrackingParameters" type="checkbox" aria-label="Strip known tracking parameters">
+        <span class="switch-track" aria-hidden="true"></span>
+      </span>
+    </div>
 
     <div class="sender-list-card" aria-label="Tracker filter summary">
       <div class="section-head">
         <div>
           <h2 class="icon-subheading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">tune</span>Tracker Filter Summary</h2>
           <p class="setting-note">
-            These filters only apply when <strong>Strip known tracking parameters</strong> is enabled on the main Settings or popup page.
+            Each switch below controls one tracker family. Dubious-tracker removal will be added later as a separate stage.
           </p>
         </div>
         <span id="trackerFilterBadge" class="diagnostic-badge">Loading…</span>

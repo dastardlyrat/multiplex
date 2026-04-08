@@ -189,6 +189,32 @@ function urlForensicsPipelineUrlIsKnownTrackingParameter(resolverContext, parame
   );
 }
 
+// Function: extract known tracking parameter names from URL.
+function urlForensicsPipelineUrlExtractKnownTrackingParameterNames(resolverContext, urlValue, trackingParameterFilters) {
+  const trimmedUrlValue = resolverContext.convertValueToString(urlValue).trim();
+  let parsedUrl = null;
+
+  if (!trimmedUrlValue) {
+    return [];
+  }
+
+  try {
+    parsedUrl = new URL(trimmedUrlValue);
+  } catch {
+    return [];
+  }
+
+  return Array.from(new Set(
+    Array.from(parsedUrl.searchParams.keys())
+      .map(function normalizeSearchParameterName(parameterName) {
+        return resolverContext.convertValueToString(parameterName).trim().toLowerCase();
+      })
+      .filter(function keepKnownTrackingParameter(parameterName) {
+        return urlForensicsPipelineUrlIsKnownTrackingParameter(resolverContext, parameterName, trackingParameterFilters);
+      })
+  ));
+}
+
 // Function: format parsed URL value.
 function urlForensicsPipelineUrlFormatParsedValue(parsedUrl) {
   const pathnameValue = parsedUrl && parsedUrl.pathname && parsedUrl.pathname !== "/"
@@ -437,7 +463,8 @@ function urlForensicsPipelineUrlClassifyUrlValue(resolverContext, urlValue) {
 
   if (
     urlForensicsPipelineUrlExtractTrackingCandidates(resolverContext, trimmedUrlValue).length ||
-    urlForensicsPipelineUrlIsLikelyTrackerHost(resolverContext, hostName)
+    urlForensicsPipelineUrlIsLikelyTrackerHost(resolverContext, hostName) ||
+    urlForensicsPipelineUrlExtractKnownTrackingParameterNames(resolverContext, trimmedUrlValue).length
   ) {
     return "tracker";
   }
@@ -472,6 +499,9 @@ function urlForensicsPipelineUrlResolverCreate(pipelineBase) {
       return urlForensicsPipelineUrlExtractFirstAbsoluteUrl(resolverContext, valueToInspect);
     },
     extractHost: urlForensicsPipelineUrlExtractHost,
+    extractKnownTrackingParameterNames: function extractKnownTrackingParameterNames(urlValue, trackingParameterFilters) {
+      return urlForensicsPipelineUrlExtractKnownTrackingParameterNames(resolverContext, urlValue, trackingParameterFilters);
+    },
     extractOriginUrl: urlForensicsPipelineUrlExtractOriginUrl,
     extractTracking: function extractTracking(urlValue) {
       return urlForensicsPipelineUrlExtractTracking(resolverContext, urlValue);
