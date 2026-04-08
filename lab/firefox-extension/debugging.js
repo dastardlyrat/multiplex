@@ -168,6 +168,40 @@
     });
   }
 
+  // Function: clone debug config.
+  function cloneDebugConfig(config) {
+    const safeConfig = config && typeof config === "object" ? config : defaultDebugConfig;
+    const safeCategories = safeConfig.categories && typeof safeConfig.categories === "object"
+      ? safeConfig.categories
+      : defaultDebugConfig.categories;
+
+    return {
+      level: safeConfig.level || defaultDebugConfig.level,
+      categories: Object.assign({}, defaultDebugConfig.categories, safeCategories, { error: true })
+    };
+  }
+
+  // Function: build temporary test debug config.
+  function buildTemporaryTestDebugConfig(originalDebugConfig) {
+    const testDebugConfig = cloneDebugConfig(originalDebugConfig);
+    let didAdjustConfigForTest = false;
+
+    if (testDebugConfig.level === "off") {
+      testDebugConfig.level = "info";
+      didAdjustConfigForTest = true;
+    }
+
+    if (testDebugConfig.categories.runtime !== true) {
+      testDebugConfig.categories.runtime = true;
+      didAdjustConfigForTest = true;
+    }
+
+    return {
+      config: testDebugConfig,
+      didAdjustConfigForTest: didAdjustConfigForTest
+    };
+  }
+
   // Function: render debug controls.
   function renderDebugControls() {
     if (DOM.debugLevelSelect) {
@@ -400,37 +434,43 @@
     }
   }
 
+  // Function: set background debug config.
+  async function setBackgroundDebugConfig(debugConfig) {
+    return sendRuntimeMessage({
+      type: "merged-link-lab:debug:set-config",
+      config: debugConfig,
+      eventLimit: normalizeVisibleRenderLimit(debugState.renderLimit)
+    });
+  }
+
+  // Function: restore debug config after test.
+  async function restoreDebugConfigAfterTest(originalDebugConfig) {
+    const restoreResponse = await setBackgroundDebugConfig(originalDebugConfig);
+
+    if (restoreResponse && restoreResponse.ok) {
+      applyDebugStatePayload(restoreResponse);
+      return true;
+    }
+
+    debugState.config = cloneDebugConfig(originalDebugConfig);
+    renderDebugPage();
+    return false;
+  }
+
   // Function: emit debug test event.
   async function emitDebugTestEvent() {
-    const nextDebugConfig = getDebugConfigFromControls();
-    let didAdjustConfigForTest = false;
-
-    if (nextDebugConfig.level === "off") {
-      nextDebugConfig.level = "info";
-      didAdjustConfigForTest = true;
-      if (DOM.debugLevelSelect) {
-        DOM.debugLevelSelect.value = "info";
-      }
-    }
-
-    if (nextDebugConfig.categories.runtime !== true) {
-      nextDebugConfig.categories.runtime = true;
-      didAdjustConfigForTest = true;
-      document.querySelectorAll('[data-debug-category="runtime"]').forEach(function checkRuntimeCategory(checkbox) {
-        checkbox.checked = true;
-        checkbox.setAttribute("aria-checked", "true");
-      });
-    }
+    const originalDebugConfig = cloneDebugConfig(getDebugConfigFromControls());
+    const testConfigResult = buildTemporaryTestDebugConfig(originalDebugConfig);
+    const testDebugConfig = testConfigResult.config;
+    const didAdjustConfigForTest = testConfigResult.didAdjustConfigForTest;
+    let didApplyTemporaryConfig = false;
 
     try {
-      const configResponse = await sendRuntimeMessage({
-        type: "merged-link-lab:debug:set-config",
-        config: nextDebugConfig,
-        eventLimit: normalizeVisibleRenderLimit(debugState.renderLimit)
-      });
+      const configResponse = await setBackgroundDebugConfig(testDebugConfig);
 
       if (configResponse && configResponse.ok) {
         applyDebugStatePayload(configResponse);
+        didApplyTemporaryConfig = didAdjustConfigForTest;
       }
 
       const testResponse = await sendRuntimeMessage({
@@ -440,19 +480,35 @@
       });
 
       if (!testResponse || !testResponse.ok) {
+        if (didApplyTemporaryConfig) {
+          await restoreDebugConfigAfterTest(originalDebugConfig);
+        }
         setStatus("Program debug test event did not receive a background response.", "error");
         await refreshDebugState({ silentStatus: true });
         return;
       }
 
+      if (didApplyTemporaryConfig) {
+        await restoreDebugConfigAfterTest(originalDebugConfig);
+      }
+
       await refreshDebugState({ silentStatus: true });
       setStatus(
         didAdjustConfigForTest
-          ? "Program debug test event emitted. Runtime debug was enabled and saved."
+          ? "Program debug test event emitted. Runtime debug was restored to its previous setting."
           : "Program debug test event emitted.",
         "saved"
       );
     } catch (error) {
+      if (didApplyTemporaryConfig) {
+        try {
+          await restoreDebugConfigAfterTest(originalDebugConfig);
+        } catch {
+          debugState.config = originalDebugConfig;
+          renderDebugPage();
+        }
+      }
+
       setStatus("Could not emit program debug test event: " + (error && error.message ? error.message : "unknown error"), "error");
       await refreshDebugState({ silentStatus: true });
     }
