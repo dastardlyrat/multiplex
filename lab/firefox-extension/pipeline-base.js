@@ -1,6 +1,26 @@
 // Shared low-level helpers for the URL Forensics pipeline.
 "use strict";
 
+var urlForensicsPipelineBaseTrackingParameterModel = (function resolvePipelineTrackingParameterModel(globalScope) {
+  if (globalScope && globalScope.urlForensicsTrackingParameterModel) {
+    return globalScope.urlForensicsTrackingParameterModel;
+  }
+
+  if (typeof require === "function") {
+    try {
+      return require("./tracking-parameter-model.js");
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}(typeof globalThis !== "undefined" ? globalThis : this));
+
+if (!urlForensicsPipelineBaseTrackingParameterModel) {
+  throw new Error("URL Forensics tracking parameter model is unavailable.");
+}
+
 var urlForensicsPipelineBaseRegularExpressions = Object.freeze({
   urlToken: /https?:\/\/[^\s<>"']+/gi,
   trailingUrlPunctuation: /[)\]\.,>]+$/,
@@ -41,27 +61,10 @@ var urlForensicsPipelineBaseTrackingHostKeywords = Object.freeze([
   "click"
 ]);
 
-var urlForensicsPipelineBaseKnownTrackingParameterNames = Object.freeze([
-  "fbclid",
-  "gclid",
-  "gclsrc",
-  "dclid",
-  "mc_cid",
-  "mc_eid",
-  "mkt_tok",
-  "igshid",
-  "twclid",
-  "li_fat_id"
-]);
-
-var urlForensicsPipelineBaseKnownTrackingParameterPrefixes = Object.freeze([
-  "utm_",
-  "hsa_"
-]);
-
 var urlForensicsPipelineBaseDefaultSettings = Object.freeze({
   enableUrlNormalizationRepair: false,
-  stripKnownTrackingParameters: true
+  stripKnownTrackingParameters: true,
+  trackingParameterFilters: urlForensicsPipelineBaseTrackingParameterModel.defaultTrackingParameterFilters
 });
 
 // Function: convert pipeline value to string.
@@ -80,7 +83,10 @@ function urlForensicsPipelineBaseResolveSettings(options) {
       : urlForensicsPipelineBaseDefaultSettings.enableUrlNormalizationRepair,
     stripKnownTrackingParameters: hasOwn.call(optionBag, "stripKnownTrackingParameters")
       ? optionBag.stripKnownTrackingParameters === true
-      : urlForensicsPipelineBaseDefaultSettings.stripKnownTrackingParameters
+      : urlForensicsPipelineBaseDefaultSettings.stripKnownTrackingParameters,
+    trackingParameterFilters: hasOwn.call(optionBag, "trackingParameterFilters")
+      ? urlForensicsPipelineBaseTrackingParameterModel.normalizeTrackingParameterFilters(optionBag.trackingParameterFilters)
+      : urlForensicsPipelineBaseTrackingParameterModel.defaultTrackingParameterFilters
   };
 }
 
@@ -185,8 +191,7 @@ function urlForensicsPipelineBaseCreateDetectedUrlRecord(originalUrl, recordId) 
     regularExpressions: urlForensicsPipelineBaseRegularExpressions,
     preferredTrackingParameterNames: urlForensicsPipelineBasePreferredTrackingParameterNames,
     trackingHostKeywords: urlForensicsPipelineBaseTrackingHostKeywords,
-    knownTrackingParameterNames: urlForensicsPipelineBaseKnownTrackingParameterNames,
-    knownTrackingParameterPrefixes: urlForensicsPipelineBaseKnownTrackingParameterPrefixes,
+    trackingParameterModel: urlForensicsPipelineBaseTrackingParameterModel,
     defaultPipelineSettings: urlForensicsPipelineBaseDefaultSettings,
     convertValueToString: urlForensicsPipelineBaseConvertValueToString,
     resolvePipelineSettings: urlForensicsPipelineBaseResolveSettings,

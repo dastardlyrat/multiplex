@@ -7,13 +7,21 @@ const settingsOpener = require("../lab/firefox-extension/settings-opener.js");
 // Function: run pipeline smoke test.
 function runPipelineSmokeTest() {
   const defaultResult = pipeline.analyzeInput({
-    rawText: "Visit https://example.com/path?utm_source=newsletter&fbclid=123&keep=yes",
+    rawText: "Visit https://example.com/path?utm_source=newsletter&fbclid=123&hsCtaTracking=abc&keep=yes",
     options: {}
   });
   const bypassedResult = pipeline.analyzeInput({
     rawText: "Visit https://example.com/path?utm_source=newsletter&fbclid=123&keep=yes",
     options: {
       stripKnownTrackingParameters: false
+    }
+  });
+  const selectiveBypassResult = pipeline.analyzeInput({
+    rawText: "Visit https://example.com/path?fbclid=123&gclid=456&keep=yes",
+    options: {
+      trackingParameterFilters: {
+        fbclid: false
+      }
     }
   });
 
@@ -32,6 +40,14 @@ function runPipelineSmokeTest() {
     bypassedResult.finalUrls[0] !== "https://example.com/path?utm_source=newsletter&fbclid=123&keep=yes"
   ) {
     throw new Error("pipeline tracking parameter bypass smoke test failed");
+  }
+
+  if (
+    !selectiveBypassResult ||
+    selectiveBypassResult.finalUrls.length !== 1 ||
+    selectiveBypassResult.finalUrls[0] !== "https://example.com/path?fbclid=123&keep=yes"
+  ) {
+    throw new Error("pipeline per-tracker filter smoke test failed");
   }
 }
 

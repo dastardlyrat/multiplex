@@ -12,6 +12,7 @@
   <section class="settings-card">
     <p class="eyebrow">URL Forensics Workbench</p>
     <nav class="page-nav" aria-label="Extension pages">
+      <button class="page-link" type="button" data-page-href="./tracking-parameters.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">filter_alt</span>Trackers</button>
       <button class="page-link" type="button" data-page-href="./diagnostics.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">analytics</span>Diagnostics</button>
       <button class="page-link" type="button" data-page-href="./debugging.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">bug_report</span>Debugging</button>
       <button class="page-link" type="button" data-page-href="./storage.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">storage</span>Storage</button>
@@ -57,7 +58,10 @@
         <span class="setting-copy">
           <strong>Strip known tracking parameters</strong>
           <span class="setting-note">
-            When on, known marketing click IDs such as <code>utm_*</code>, <code>fbclid</code>, <code>gclid</code>, <code>mc_*</code>, and <code>hsa_*</code> are removed from final workflow URLs. Default: on.
+            When on, the enabled tracker filters on the Trackers page are removed from final workflow URLs. Default: on.
+          </span>
+          <span class="setting-note">
+            Use the Trackers page to choose specific parameters such as <code>utm_*</code>, <code>gclid</code>, <code>fbclid</code>, <code>mc_cid</code>, and HubSpot tracking values.
           </span>
         </span>
         <span class="switch">
@@ -125,6 +129,7 @@
 <script src="./debug.js"></script>
 <script src="./page-navigation.js"></script>
 <script src="./page-ui.js"></script>
+<script src="./tracking-parameter-model.js"></script>
 <script src="./storage-model.js"></script>
 <script src="./settings.js"></script>
 </body>

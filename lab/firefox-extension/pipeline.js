@@ -95,6 +95,7 @@
     const validateTitle = pipelineBase.validateTitle;
     const normalizeTitle = pipelineBase.normalizeTitle;
     const createDetectedUrlRecord = pipelineBase.createDetectedUrlRecord;
+    const trackingParameterModel = pipelineBase.trackingParameterModel || null;
     const urlResolver = pipelineUrlResolverFactory.create(pipelineBase);
     const peel = urlResolver.peel;
     const decodeValue = urlResolver.decodeValue;
@@ -489,6 +490,11 @@
         "NORMALIZATION STAGE: " + (pipelineSettings.enableUrlNormalizationRepair ? "EXECUTED" : "BYPASSED"),
         "KNOWN TRACKING PARAMETER STRIPPING: " + (pipelineSettings.stripKnownTrackingParameters ? "ON" : "OFF"),
         "TRACKING STRIP STAGE: " + (pipelineSettings.stripKnownTrackingParameters ? "EXECUTED" : "BYPASSED"),
+        "TRACKING FILTERS: " + (
+          trackingParameterModel && typeof trackingParameterModel.formatTrackingParameterFilterSummary === "function"
+            ? trackingParameterModel.formatTrackingParameterFilterSummary(pipelineSettings.trackingParameterFilters, { maxVisibleLabels: 3 })
+            : "unavailable"
+        ),
         "TRACKING STRIP COUNT: " + strippedTrackingUrlCount,
         "INVALID RESOLVED URLS: " + invalidResolvedUrlCount
       ];

@@ -13,6 +13,7 @@
     <p class="eyebrow">URL Forensics Workbench</p>
     <nav class="page-nav" aria-label="Extension pages">
       <button class="page-link" type="button" data-page-href="./settings.html" data-page-target="_blank"><span class="material-symbols-outlined link-icon" aria-hidden="true">settings</span>Settings</button>
+      <button class="page-link" type="button" data-page-href="./tracking-parameters.html" data-page-target="_blank"><span class="material-symbols-outlined link-icon" aria-hidden="true">filter_alt</span>Trackers</button>
       <button class="page-link" type="button" data-page-href="./diagnostics.html" data-page-target="_blank"><span class="material-symbols-outlined link-icon" aria-hidden="true">analytics</span>Diagnostics</button>
       <button class="page-link" type="button" data-page-href="./debugging.html" data-page-target="_blank"><span class="material-symbols-outlined link-icon" aria-hidden="true">bug_report</span>Debugging</button>
       <button class="page-link" type="button" data-page-href="./storage.html" data-page-target="_blank"><span class="material-symbols-outlined link-icon" aria-hidden="true">storage</span>Storage</button>
@@ -67,7 +68,7 @@
     <div class="switch-row">
       <span class="setting-copy">
         <strong>Strip tracking parameters</strong>
-        <span>Removes known click-tracking query parameters such as <code>utm_*</code>, <code>fbclid</code>, and <code>gclid</code>. Default: on.</span>
+        <span>Removes known click-tracking query parameters from workflow URLs. Use the Trackers page for per-parameter control. Default: on.</span>
       </span>
       <span class="switch">
         <input id="stripKnownTrackingParameters" type="checkbox" aria-label="Strip tracking parameters">
@@ -83,6 +84,7 @@
 <script src="./debug.js"></script>
 <script src="./page-navigation.js"></script>
 <script src="./page-ui.js"></script>
+<script src="./tracking-parameter-model.js"></script>
 <script src="./storage-model.js"></script>
 <script src="./popup.js"></script>
 </body>

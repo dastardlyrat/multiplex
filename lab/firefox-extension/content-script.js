@@ -150,6 +150,7 @@
   let latestDetectedMirrorHoverInfoText = "";
   const urlNormalizationRepairStorageKey = storageModel.storageKeys.enableUrlNormalizationRepair;
   const trackingParameterStripStorageKey = storageModel.storageKeys.stripKnownTrackingParameters;
+  const trackingParameterFiltersStorageKey = storageModel.storageKeys.trackingParameterFilters;
   const replaceEmailBodyWithMirrorContentStorageKey = storageModel.storageKeys.replaceEmailBodyWithMirrorContent;
   const autoApplyMirrorForConfiguredSendersStorageKey = storageModel.storageKeys.autoApplyMirrorForConfiguredSenders;
   const autoApplyMirrorSenderEmailListStorageKey = storageModel.storageKeys.autoApplyMirrorSenderEmailList;
@@ -158,9 +159,11 @@
   const sanitizeSenderEmailList = storageModel.sanitizeSenderEmailList;
   const resolveStoredAutoApplyConfiguredSendersValue = storageModel.resolveStoredAutoApplyConfiguredSendersValue;
   const buildStorageBooleanSnapshotEntry = storageModel.buildStorageBooleanEntry;
+  const buildTrackingParameterFilterSnapshotEntry = storageModel.buildTrackingParameterFilterEntry;
   const buildStorageEmailListSnapshotEntry = storageModel.buildStorageEmailListEntry;
   const formatStorageSnapshotSourceLabel = storageModel.getStorageSourceLabel;
   const formatStorageSnapshotEntry = storageModel.formatStorageBooleanEntry;
+  const formatTrackingParameterFilterSnapshotEntry = storageModel.formatTrackingParameterFilterEntry;
   const formatStorageEmailListSnapshotEntry = storageModel.formatStorageEmailListEntry;
   let autoApplyMirrorSenderSelector = "";
   let autoApplyMirrorSenderEmailPattern = null;
@@ -176,6 +179,7 @@
         : false
     ),
     stripKnownTrackingParameters: storageModel.defaultSettings.stripKnownTrackingParameters,
+    trackingParameterFilters: storageModel.defaultSettings.trackingParameterFilters,
     replaceEmailBodyWithMirrorContent: false,
     autoApplyMirrorForConfiguredSenders: false,
     autoApplyMirrorSenderEmailList: defaultAutoApplyMirrorSenderEmails.slice()
@@ -194,6 +198,11 @@
         hasStoredValue: false,
         rawValue: undefined,
         effectiveValue: extensionSettings.stripKnownTrackingParameters
+      },
+      trackingParameterFilters: {
+        hasStoredValue: false,
+        rawValue: undefined,
+        effectiveValue: extensionSettings.trackingParameterFilters
       },
       replaceEmailBodyWithMirrorContent: {
         hasStoredValue: false,
@@ -256,7 +265,8 @@
   function getPipelineSettings() {
     return {
       enableUrlNormalizationRepair: !!extensionSettings.enableUrlNormalizationRepair,
-      stripKnownTrackingParameters: !!extensionSettings.stripKnownTrackingParameters
+      stripKnownTrackingParameters: !!extensionSettings.stripKnownTrackingParameters,
+      trackingParameterFilters: storageModel.normalizeTrackingParameterFilters(extensionSettings.trackingParameterFilters)
     };
   }
 
@@ -343,6 +353,11 @@
         normalizedStoredSettings,
         trackingParameterStripStorageKey,
         extensionSettings.stripKnownTrackingParameters
+      ),
+      trackingParameterFilters: buildTrackingParameterFilterSnapshotEntry(
+        normalizedStoredSettings,
+        trackingParameterFiltersStorageKey,
+        extensionSettings.trackingParameterFilters
       ),
       replaceEmailBodyWithMirrorContent: buildStorageBooleanSnapshotEntry(
         normalizedStoredSettings,
@@ -497,6 +512,11 @@
     extensionSettings.stripKnownTrackingParameters = storageModel.defaultSettings.stripKnownTrackingParameters;
   }
 
+  // Function: apply stored tracking-parameter filters.
+  function applyStoredTrackingParameterFiltersSetting(nextValue) {
+    extensionSettings.trackingParameterFilters = storageModel.normalizeTrackingParameterFilters(nextValue);
+  }
+
   // Function: apply stored replace-email-body setting.
   function applyStoredReplaceEmailBodySetting(nextValue) {
     extensionSettings.replaceEmailBodyWithMirrorContent = nextValue === true;
@@ -559,6 +579,13 @@
           storageModel.defaultSettings.stripKnownTrackingParameters
         )
       );
+      applyStoredTrackingParameterFiltersSetting(
+        storageModel.getEffectiveTrackingParameterFilters(
+          storedSettings,
+          trackingParameterFiltersStorageKey,
+          storageModel.defaultSettings.trackingParameterFilters
+        )
+      );
       applyStoredReplaceEmailBodySetting(storedSettings[replaceEmailBodyWithMirrorContentStorageKey]);
       applyStoredAutoApplyMirrorForConfiguredSendersSetting(resolveStoredAutoApplyConfiguredSendersValue(storedSettings));
       applyStoredAutoApplyMirrorSenderEmailList(storedSettings[autoApplyMirrorSenderEmailListStorageKey], { useDefaultList: true });
@@ -567,6 +594,7 @@
         debugApi.storage("content settings loaded", {
           enableUrlNormalizationRepair: extensionSettings.enableUrlNormalizationRepair,
           stripKnownTrackingParameters: extensionSettings.stripKnownTrackingParameters,
+          trackingParameterFilters: extensionSettings.trackingParameterFilters,
           replaceEmailBodyWithMirrorContent: extensionSettings.replaceEmailBodyWithMirrorContent,
           autoApplyMirrorForConfiguredSenders: extensionSettings.autoApplyMirrorForConfiguredSenders,
           autoApplyMirrorSenderEmailCount: extensionSettings.autoApplyMirrorSenderEmailList.length
@@ -2534,6 +2562,7 @@
         "Version: " + (extensionManifest.version || "0.0.0"),
         "URL Normalization + Repair: " + (pipelineSettings.enableUrlNormalizationRepair ? "enabled" : "disabled"),
         "Tracking Parameter Stripping: " + (pipelineSettings.stripKnownTrackingParameters ? "enabled" : "disabled"),
+        "Tracker Filters: " + formatTrackingParameterFilterSnapshotEntry(extensionStorageSnapshot.values.trackingParameterFilters),
         "Replace Email Body With Mirror: " + (extensionSettings.replaceEmailBodyWithMirrorContent ? "enabled" : "disabled"),
         "Auto-Apply Mirror For Configured Senders: " + (extensionSettings.autoApplyMirrorForConfiguredSenders ? "enabled" : "disabled"),
         "Configured Auto-Apply Sender Count: " + String(extensionSettings.autoApplyMirrorSenderEmailList.length),
@@ -3248,6 +3277,11 @@
       didUpdateSettings = true;
     }
 
+    if (changes[trackingParameterFiltersStorageKey]) {
+      applyStoredTrackingParameterFiltersSetting(changes[trackingParameterFiltersStorageKey].newValue);
+      didUpdateSettings = true;
+    }
+
     if (changes[replaceEmailBodyWithMirrorContentStorageKey]) {
       applyStoredReplaceEmailBodySetting(changes[replaceEmailBodyWithMirrorContentStorageKey].newValue);
       didUpdateSettings = true;
@@ -3272,6 +3306,7 @@
         {
           [urlNormalizationRepairStorageKey]: extensionSettings.enableUrlNormalizationRepair,
           [trackingParameterStripStorageKey]: extensionSettings.stripKnownTrackingParameters,
+          [trackingParameterFiltersStorageKey]: extensionSettings.trackingParameterFilters,
           [replaceEmailBodyWithMirrorContentStorageKey]: extensionSettings.replaceEmailBodyWithMirrorContent,
           [autoApplyMirrorForConfiguredSendersStorageKey]: extensionSettings.autoApplyMirrorForConfiguredSenders,
           [autoApplyMirrorSenderEmailListStorageKey]: extensionSettings.autoApplyMirrorSenderEmailList.slice()

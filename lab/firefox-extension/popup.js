@@ -16,6 +16,7 @@
   const applyStoredBooleanSettingToControl = storageModel.applyStoredBooleanSettingToControl;
   const formatStorageBooleanEntry = storageModel.formatStorageBooleanEntry;
   const formatStorageEmailListEntry = storageModel.formatStorageEmailListEntry;
+  const formatTrackingParameterFilterEntry = storageModel.formatTrackingParameterFilterEntry;
   const getStorageSourceLabel = storageModel.getStorageSourceLabel;
   const popupState = {
     activeTabId: null,
@@ -108,6 +109,10 @@
       {
         label: "Storage Tracking Parameter Stripping",
         value: formatStorageBooleanEntry(storageSnapshot.stripKnownTrackingParameters)
+      },
+      {
+        label: "Storage Tracker Filters",
+        value: formatTrackingParameterFilterEntry(storageSnapshot.trackingParameterFilters)
       },
       {
         label: "Storage Replace Body",

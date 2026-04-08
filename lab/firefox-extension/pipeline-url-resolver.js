@@ -11,8 +11,7 @@ function urlForensicsPipelineUrlCreateResolverContext(pipelineBase) {
     regularExpressions: pipelineBase.regularExpressions,
     preferredTrackingParameterNames: pipelineBase.preferredTrackingParameterNames,
     trackingHostKeywords: pipelineBase.trackingHostKeywords,
-    knownTrackingParameterNames: pipelineBase.knownTrackingParameterNames || [],
-    knownTrackingParameterPrefixes: pipelineBase.knownTrackingParameterPrefixes || [],
+    trackingParameterModel: pipelineBase.trackingParameterModel || null,
     convertValueToString: pipelineBase.convertValueToString,
     resolvePipelineSettings: pipelineBase.resolvePipelineSettings
   });
@@ -177,20 +176,17 @@ function urlForensicsPipelineUrlExtractTracking(resolverContext, urlValue) {
 }
 
 // Function: check whether a parameter name is a known tracking parameter.
-function urlForensicsPipelineUrlIsKnownTrackingParameter(resolverContext, parameterName) {
+function urlForensicsPipelineUrlIsKnownTrackingParameter(resolverContext, parameterName, trackingParameterFilters) {
   const normalizedParameterName = resolverContext.convertValueToString(parameterName).trim().toLowerCase();
 
-  if (!normalizedParameterName) {
+  if (!normalizedParameterName || !resolverContext.trackingParameterModel) {
     return false;
   }
 
-  if (resolverContext.knownTrackingParameterNames.indexOf(normalizedParameterName) !== -1) {
-    return true;
-  }
-
-  return resolverContext.knownTrackingParameterPrefixes.some(function hasTrackingPrefix(prefix) {
-    return normalizedParameterName.indexOf(prefix) === 0;
-  });
+  return resolverContext.trackingParameterModel.matchesTrackingParameterName(
+    trackingParameterFilters,
+    normalizedParameterName
+  );
 }
 
 // Function: format parsed URL value.
@@ -231,7 +227,11 @@ function urlForensicsPipelineUrlStripKnownTrackingParameters(resolverContext, ur
   })));
 
   uniqueParameterNames.forEach(function removeTrackingParameter(parameterName) {
-    if (!urlForensicsPipelineUrlIsKnownTrackingParameter(resolverContext, parameterName)) {
+    if (!urlForensicsPipelineUrlIsKnownTrackingParameter(
+      resolverContext,
+      parameterName,
+      pipelineSettings.trackingParameterFilters
+    )) {
       return;
     }
 

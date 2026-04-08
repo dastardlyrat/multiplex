@@ -52,6 +52,7 @@
       "js": [
         "debug-redaction.js",
         "debug.js",
+        "tracking-parameter-model.js",
         "pipeline-base.js",
         "pipeline-url-resolver.js",
         "pipeline-html-rewriter.js",
@@ -73,6 +74,7 @@
         "app.js",
         "debug-redaction.js",
         "debug.js",
+        "tracking-parameter-model.js",
         "storage-model.js",
         "pipeline-base.js",
         "pipeline-url-resolver.js",

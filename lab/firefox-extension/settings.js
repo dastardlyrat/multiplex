@@ -241,8 +241,8 @@
 
     if (changedControlId === "stripKnownTrackingParameters") {
       return isEnabled
-        ? "Saved. Known tracking parameters will be stripped from workflow URLs."
-        : "Saved. Known tracking parameters will be retained in workflow URLs.";
+        ? "Saved. Enabled tracker filters will be stripped from workflow URLs."
+        : "Saved. Tracker filters are saved but currently bypassed.";
     }
 
     if (changedControlId === "autoApplyMirrorForConfiguredSenders") {

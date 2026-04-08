@@ -2,9 +2,30 @@
 (function initializeUrlForensicsStorageModel() {
   "use strict";
 
+  const trackingParameterModel = (function resolveTrackingParameterModel() {
+    if (typeof globalThis !== "undefined" && globalThis.urlForensicsTrackingParameterModel) {
+      return globalThis.urlForensicsTrackingParameterModel;
+    }
+
+    if (typeof require === "function") {
+      try {
+        return require("./tracking-parameter-model.js");
+      } catch {
+        return null;
+      }
+    }
+
+    return null;
+  }());
+
+  if (!trackingParameterModel) {
+    throw new Error("URL Forensics tracking parameter model is unavailable.");
+  }
+
   const storageKeys = Object.freeze({
     enableUrlNormalizationRepair: "enableUrlNormalizationRepair",
     stripKnownTrackingParameters: "stripKnownTrackingParameters",
+    trackingParameterFilters: "trackingParameterFilters",
     replaceEmailBodyWithMirrorContent: "replaceEmailBodyWithMirrorContent",
     autoApplyMirrorForConfiguredSenders: "autoApplyMirrorForConfiguredSenders",
     autoApplyMirrorSenderEmailList: "autoApplyMirrorSenderEmailList"
@@ -19,6 +40,7 @@
   const defaultSettings = Object.freeze({
     enableUrlNormalizationRepair: false,
     stripKnownTrackingParameters: true,
+    trackingParameterFilters: trackingParameterModel.defaultTrackingParameterFilters,
     replaceEmailBodyWithMirrorContent: false,
     autoApplyMirrorForConfiguredSenders: false,
     autoApplyMirrorSenderEmailList: Object.freeze([])
@@ -152,6 +174,28 @@
     };
   }
 
+  // Function: build tracking-parameter filter entry.
+  function buildTrackingParameterFilterEntry(storedSettings, key, defaultValue) {
+    const hasStoredValue = !!(
+      storedSettings &&
+      typeof storedSettings === "object" &&
+      Object.prototype.hasOwnProperty.call(storedSettings, key)
+    );
+    const rawValue = hasStoredValue ? storedSettings[key] : undefined;
+
+    return {
+      hasStoredValue: hasStoredValue,
+      rawValue: rawValue,
+      effectiveValue: trackingParameterModel.normalizeTrackingParameterFilters(hasStoredValue ? rawValue : defaultValue),
+      differsFromDefault: hasStoredValue && !trackingParameterModel.trackingParameterFiltersMatchDefault(rawValue)
+    };
+  }
+
+  // Function: get effective tracking-parameter filters.
+  function getEffectiveTrackingParameterFilters(storedSettings, key, defaultValue) {
+    return buildTrackingParameterFilterEntry(storedSettings, key, defaultValue).effectiveValue;
+  }
+
   // Function: normalize debug config choices.
   function normalizeDebugConfigChoices(value) {
     const safeValue = value && typeof value === "object" ? value : {};
@@ -273,6 +317,11 @@
         storageKeys.stripKnownTrackingParameters,
         defaultSettings.stripKnownTrackingParameters
       ),
+      trackingParameterFilters: buildTrackingParameterFilterEntry(
+        normalizedStoredSettings,
+        storageKeys.trackingParameterFilters,
+        defaultSettings.trackingParameterFilters
+      ),
       replaceEmailBodyWithMirrorContent: buildStorageBooleanEntry(
         normalizedStoredSettings,
         storageKeys.replaceEmailBodyWithMirrorContent,
@@ -375,6 +424,22 @@
       effectiveValue.slice(0, 3).join(", ") +
       (effectiveValue.length > 3 ? ", +" + String(effectiveValue.length - 3) + " more" : "")
     );
+  }
+
+  // Function: format tracking-parameter filter entry.
+  function formatTrackingParameterFilterEntry(entry) {
+    if (!entry || typeof entry !== "object") {
+      return "Unavailable";
+    }
+
+    const sourceLabel = entry.hasStoredValue
+      ? (entry.differsFromDefault ? "stored custom" : "stored default")
+      : "not stored; using defaults";
+
+    return trackingParameterModel.formatTrackingParameterFilterSummary(entry.effectiveValue, {
+      sourceLabel: sourceLabel,
+      maxVisibleLabels: 4
+    });
   }
 
   // Function: format debug config entry.
@@ -505,6 +570,10 @@
       value: formatStorageBooleanEntry(storageSnapshot.stripKnownTrackingParameters)
     });
     rows.push({
+      label: "Storage Tracker Filters",
+      value: formatTrackingParameterFilterEntry(storageSnapshot.trackingParameterFilters)
+    });
+    rows.push({
       label: "Storage Replace Body",
       value: formatStorageBooleanEntry(storageSnapshot.replaceEmailBodyWithMirrorContent)
     });
@@ -547,6 +616,8 @@
     legacyStorageKeys: legacyStorageKeys,
     debugStorageKeys: debugStorageKeys,
     defaultSettings: defaultSettings,
+    trackingParameterDefinitions: trackingParameterModel.trackingParameterDefinitions,
+    defaultTrackingParameterFilters: trackingParameterModel.defaultTrackingParameterFilters,
     defaultDebugConfig: defaultDebugConfig,
     defaultDebugPageChoices: defaultDebugPageChoices,
     normalizeSenderEmailAddress: normalizeSenderEmailAddress,
@@ -557,6 +628,12 @@
     getEffectiveBooleanSettingValue: getEffectiveBooleanSettingValue,
     applyStoredBooleanSettingToControl: applyStoredBooleanSettingToControl,
     buildStorageEmailListEntry: buildStorageEmailListEntry,
+    buildTrackingParameterFilterEntry: buildTrackingParameterFilterEntry,
+    getEffectiveTrackingParameterFilters: getEffectiveTrackingParameterFilters,
+    normalizeTrackingParameterFilters: trackingParameterModel.normalizeTrackingParameterFilters,
+    trackingParameterFiltersMatchDefault: trackingParameterModel.trackingParameterFiltersMatchDefault,
+    formatTrackingParameterFilterSummary: trackingParameterModel.formatTrackingParameterFilterSummary,
+    formatTrackingParameterFilterEntry: formatTrackingParameterFilterEntry,
     normalizeDebugConfigChoices: normalizeDebugConfigChoices,
     normalizeDebugPageChoices: normalizeDebugPageChoices,
     debugConfigMatchesDefault: debugConfigMatchesDefault,

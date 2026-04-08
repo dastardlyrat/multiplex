@@ -69,13 +69,15 @@
     ? storageModel.storageKeys
     : {
         enableUrlNormalizationRepair: "enableUrlNormalizationRepair",
-        stripKnownTrackingParameters: "stripKnownTrackingParameters"
+        stripKnownTrackingParameters: "stripKnownTrackingParameters",
+        trackingParameterFilters: "trackingParameterFilters"
       };
   const defaultPipelineSettings = storageModel && storageModel.defaultSettings
     ? storageModel.defaultSettings
     : {
         enableUrlNormalizationRepair: false,
-        stripKnownTrackingParameters: true
+        stripKnownTrackingParameters: true,
+        trackingParameterFilters: {}
       };
   const getEffectiveBooleanSettingValue = storageModel && typeof storageModel.getEffectiveBooleanSettingValue === "function"
     ? storageModel.getEffectiveBooleanSettingValue
@@ -84,12 +86,24 @@
           ? storedSettings[key] === true
           : defaultValue === true;
       };
+  const getEffectiveTrackingParameterFilters = storageModel && typeof storageModel.getEffectiveTrackingParameterFilters === "function"
+    ? storageModel.getEffectiveTrackingParameterFilters
+    : function getFallbackEffectiveTrackingParameterFilters(storedSettings, key, defaultValue) {
+        return storedSettings && Object.prototype.hasOwnProperty.call(storedSettings, key)
+          ? Object.assign({}, storedSettings[key])
+          : Object.assign({}, defaultValue);
+      };
   const pipelineState = {
     settings: mergedLinkLabPipeline.resolvePipelineSettings
       ? mergedLinkLabPipeline.resolvePipelineSettings(mergedLinkLabPipeline.defaultPipelineSettings)
       : {
           enableUrlNormalizationRepair: defaultPipelineSettings.enableUrlNormalizationRepair,
-          stripKnownTrackingParameters: defaultPipelineSettings.stripKnownTrackingParameters
+          stripKnownTrackingParameters: defaultPipelineSettings.stripKnownTrackingParameters,
+          trackingParameterFilters: getEffectiveTrackingParameterFilters(
+            null,
+            pipelineStorageKeys.trackingParameterFilters,
+            defaultPipelineSettings.trackingParameterFilters
+          )
         }
   };
 
@@ -97,7 +111,12 @@
   function getPipelineSettings() {
     return {
       enableUrlNormalizationRepair: !!pipelineState.settings.enableUrlNormalizationRepair,
-      stripKnownTrackingParameters: !!pipelineState.settings.stripKnownTrackingParameters
+      stripKnownTrackingParameters: !!pipelineState.settings.stripKnownTrackingParameters,
+      trackingParameterFilters: getEffectiveTrackingParameterFilters(
+        pipelineState.settings,
+        "trackingParameterFilters",
+        defaultPipelineSettings.trackingParameterFilters
+      )
     };
   }
 
@@ -112,6 +131,11 @@
       storedSettings,
       pipelineStorageKeys.stripKnownTrackingParameters,
       defaultPipelineSettings.stripKnownTrackingParameters
+    );
+    pipelineState.settings.trackingParameterFilters = getEffectiveTrackingParameterFilters(
+      storedSettings,
+      pipelineStorageKeys.trackingParameterFilters,
+      defaultPipelineSettings.trackingParameterFilters
     );
   }
 
@@ -134,7 +158,8 @@
     try {
       const storedSettings = await extensionApi.storage.local.get([
         pipelineStorageKeys.enableUrlNormalizationRepair,
-        pipelineStorageKeys.stripKnownTrackingParameters
+        pipelineStorageKeys.stripKnownTrackingParameters,
+        pipelineStorageKeys.trackingParameterFilters
       ]);
       applyStoredPipelineSettings(storedSettings);
       if (debugApi) {
@@ -161,7 +186,11 @@
     if (
       areaName !== "local" ||
       !changes ||
-      (!changes[pipelineStorageKeys.enableUrlNormalizationRepair] && !changes[pipelineStorageKeys.stripKnownTrackingParameters])
+      (
+        !changes[pipelineStorageKeys.enableUrlNormalizationRepair] &&
+        !changes[pipelineStorageKeys.stripKnownTrackingParameters] &&
+        !changes[pipelineStorageKeys.trackingParameterFilters]
+      )
     ) {
       return;
     }
@@ -180,7 +209,14 @@
               ? defaultPipelineSettings.stripKnownTrackingParameters
               : changes[pipelineStorageKeys.stripKnownTrackingParameters].newValue
           )
-        : pipelineState.settings.stripKnownTrackingParameters
+        : pipelineState.settings.stripKnownTrackingParameters,
+      [pipelineStorageKeys.trackingParameterFilters]: changes[pipelineStorageKeys.trackingParameterFilters]
+        ? (
+            changes[pipelineStorageKeys.trackingParameterFilters].newValue === undefined
+              ? defaultPipelineSettings.trackingParameterFilters
+              : changes[pipelineStorageKeys.trackingParameterFilters].newValue
+          )
+        : pipelineState.settings.trackingParameterFilters
     });
 
     // Branch: follow this path only when the current condition passes.

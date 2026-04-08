@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>URL Forensics Workbench Trackers</title>
+<link rel="stylesheet" href="./icons.css">
+<link rel="stylesheet" href="./settings.css">
+</head>
+<body>
+<main class="settings-shell">
+  <section class="settings-card">
+    <p class="eyebrow">URL Forensics Workbench</p>
+    <nav class="page-nav" aria-label="Extension pages">
+      <button class="page-link" type="button" data-page-href="./settings.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">settings</span>Settings</button>
+      <button class="page-link" type="button" data-page-href="./diagnostics.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">analytics</span>Diagnostics</button>
+      <button class="page-link" type="button" data-page-href="./debugging.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">bug_report</span>Debugging</button>
+      <button class="page-link" type="button" data-page-href="./storage.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">storage</span>Storage</button>
+      <button class="page-link" type="button" data-page-href="./help.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">help</span>Help</button>
+      <button class="page-link" type="button" data-page-href="./about.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">info</span>About</button>
+    </nav>
+    <h1 class="icon-heading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">filter_alt</span>Tracker Filters</h1>
+    <p class="lede">
+      Choose which known tracking query parameters should be removed when global tracking-parameter stripping is enabled.
+    </p>
+
+    <div class="sender-list-card" aria-label="Tracker filter summary">
+      <div class="section-head">
+        <div>
+          <h2 class="icon-subheading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">tune</span>Tracker Filter Summary</h2>
+          <p class="setting-note">
+            These filters only apply when <strong>Strip known tracking parameters</strong> is enabled on the main Settings or popup page.
+          </p>
+        </div>
+        <span id="trackerFilterBadge" class="diagnostic-badge">Loading…</span>
+      </div>
+      <div class="page-actions">
+        <button id="enableAllTrackersButton" class="primary-button" type="button"><span class="material-symbols-outlined button-icon" aria-hidden="true">done_all</span>Enable All</button>
+        <button id="disableAllTrackersButton" class="ghost-button" type="button"><span class="material-symbols-outlined button-icon" aria-hidden="true">block</span>Disable All</button>
+        <button id="restoreDefaultTrackersButton" class="ghost-button" type="button"><span class="material-symbols-outlined button-icon" aria-hidden="true">restart_alt</span>Restore Defaults</button>
+      </div>
+      <p id="trackerFilterSummary" class="setting-note">Loading tracker filters…</p>
+      <p id="trackerStripMasterStatus" class="setting-note">Checking global tracking-parameter stripping…</p>
+    </div>
+
+    <div id="trackingParameterList" class="settings-list" aria-label="Tracker filter settings">
+      <div class="setting-row">
+        <span class="setting-copy">
+          <strong>Loading tracker filters…</strong>
+        </span>
+      </div>
+    </div>
+
+    <p id="statusMessage" class="status-message" aria-live="polite">Loading tracker filters...</p>
+  </section>
+</main>
+
+<script src="./debug-redaction.js"></script>
+<script src="./debug.js"></script>
+<script src="./page-navigation.js"></script>
+<script src="./page-ui.js"></script>
+<script src="./tracking-parameter-model.js"></script>
+<script src="./storage-model.js"></script>
+<script src="./tracking-parameters.js"></script>
+</body>
+</html>
