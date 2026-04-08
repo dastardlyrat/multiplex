@@ -35,6 +35,8 @@
     maxEvents: 0,
     renderLimit: 750,
     autoRefresh: false,
+    typeFilter: "all",
+    returnedEventCount: 0,
     isRefreshing: false
   };
   const DOM = {
@@ -49,6 +51,7 @@
     openHelpPageButton: document.getElementById("openHelpPageButton"),
     debugBadge: document.getElementById("debugBadge"),
     debugLevelSelect: document.getElementById("debugLevelSelect"),
+    debugTypeFilterSelect: document.getElementById("debugTypeFilterSelect"),
     renderLimitSelect: document.getElementById("renderLimitSelect"),
     autoRefreshDebugOutput: document.getElementById("autoRefreshDebugOutput"),
     traceSummary: document.getElementById("traceSummary"),
@@ -114,6 +117,10 @@
       if (pageChoices.autoRefresh === true || pageChoices.autoRefresh === false) {
         debugState.autoRefresh = pageChoices.autoRefresh;
       }
+
+      if (isKnownDebugTypeFilter(pageChoices.typeFilter)) {
+        debugState.typeFilter = pageChoices.typeFilter;
+      }
     } catch (error) {
       setStatus("Could not load debug page choices: " + (error && error.message ? error.message : "unknown error"), "error");
     }
@@ -129,7 +136,8 @@
       await extensionApi.storage.local.set({
         [pageChoicesStorageKey]: {
           renderLimit: debugState.renderLimit,
-          autoRefresh: debugState.autoRefresh
+          autoRefresh: debugState.autoRefresh,
+          typeFilter: debugState.typeFilter
         }
       });
     } catch (error) {
@@ -152,6 +160,7 @@
     debugState.config.categories.error = true;
     debugState.events = Array.isArray(safePayload.events) ? safePayload.events : [];
     debugState.eventCount = Number.isFinite(safePayload.eventCount) ? safePayload.eventCount : debugState.events.length;
+    debugState.returnedEventCount = Number.isFinite(safePayload.returnedEventCount) ? safePayload.returnedEventCount : debugState.events.length;
     debugState.isTruncated = safePayload.isTruncated === true || debugState.events.length < debugState.eventCount;
     debugState.isPoolFull = safePayload.isPoolFull === true;
     debugState.droppedEventCount = Number.isFinite(safePayload.droppedEventCount) ? safePayload.droppedEventCount : 0;
@@ -166,6 +175,36 @@
     return Object.keys(safeConfig.categories).filter(function keepEnabledCategory(categoryName) {
       return safeConfig.categories[categoryName] === true;
     });
+  }
+
+  // Function: check known debug type filter.
+  function isKnownDebugTypeFilter(value) {
+    return value === "all" || Object.prototype.hasOwnProperty.call(defaultDebugConfig.categories, value);
+  }
+
+  // Function: normalize debug type filter.
+  function normalizeDebugTypeFilter(value) {
+    return isKnownDebugTypeFilter(value) ? value : "all";
+  }
+
+  // Function: format debug type filter label.
+  function formatDebugTypeFilterLabel(value) {
+    const normalizedTypeFilter = normalizeDebugTypeFilter(value);
+    const labels = {
+      all: "All types",
+      error: "Errors",
+      runtime: "Runtime",
+      storage: "Storage",
+      messaging: "Messaging",
+      ui: "UI",
+      pipeline: "Pipeline",
+      function: "Function In/Out",
+      conditional: "Conditional",
+      loop: "Looping",
+      variable: "Variable Assignment"
+    };
+
+    return labels[normalizedTypeFilter] || labels.all;
   }
 
   // Function: clone debug config.
@@ -206,6 +245,10 @@
   function renderDebugControls() {
     if (DOM.debugLevelSelect) {
       DOM.debugLevelSelect.value = debugState.config.level;
+    }
+
+    if (DOM.debugTypeFilterSelect) {
+      DOM.debugTypeFilterSelect.value = normalizeDebugTypeFilter(debugState.typeFilter);
     }
 
     document.querySelectorAll("[data-debug-category]").forEach(function renderDebugCategoryCheckbox(checkbox) {
@@ -268,6 +311,28 @@
     return rowElement;
   }
 
+  // Function: get filtered debug events.
+  function getFilteredDebugEvents(events) {
+    const normalizedTypeFilter = normalizeDebugTypeFilter(debugState.typeFilter);
+
+    if (normalizedTypeFilter === "all") {
+      return events;
+    }
+
+    return events.filter(function keepMatchingDebugType(event) {
+      return event && event.category === normalizedTypeFilter;
+    });
+  }
+
+  // Function: get debug state request event limit.
+  function getDebugStateRequestEventLimit() {
+    const visibleRenderLimit = normalizeVisibleRenderLimit(debugState.renderLimit);
+
+    return normalizeDebugTypeFilter(debugState.typeFilter) === "all"
+      ? visibleRenderLimit
+      : maxVisibleRenderLimit;
+  }
+
   // Function: render trace output.
   function renderTraceOutput() {
     if (!DOM.debugTrace) {
@@ -275,8 +340,10 @@
     }
 
     const events = Array.isArray(debugState.events) ? debugState.events : [];
+    const filteredEvents = getFilteredDebugEvents(events);
     const renderLimit = normalizeVisibleRenderLimit(debugState.renderLimit);
-    const renderedEvents = events.slice(Math.max(0, events.length - renderLimit));
+    const renderedEvents = filteredEvents.slice(Math.max(0, filteredEvents.length - renderLimit));
+    const isFilteringByType = normalizeDebugTypeFilter(debugState.typeFilter) !== "all";
     const wasPinnedToBottom =
       DOM.debugTrace.scrollTop + DOM.debugTrace.clientHeight >= DOM.debugTrace.scrollHeight - 24;
 
@@ -289,6 +356,11 @@
       const emptyElement = document.createElement("div");
       emptyElement.className = "debug-empty";
       emptyElement.textContent = "No debug events have been collected for the selected level and categories yet.";
+      DOM.debugTrace.replaceChildren(emptyElement);
+    } else if (!filteredEvents.length) {
+      const emptyElement = document.createElement("div");
+      emptyElement.className = "debug-empty";
+      emptyElement.textContent = "No debug events match the current type filter: " + formatDebugTypeFilterLabel(debugState.typeFilter) + ".";
       DOM.debugTrace.replaceChildren(emptyElement);
     } else {
       const fragment = document.createDocumentFragment();
@@ -303,10 +375,17 @@
     }
 
     const traceSummaryParts = [
-      debugState.isTruncated || renderedEvents.length < debugState.eventCount
-        ? "Showing latest " + String(renderedEvents.length) + " of " + String(debugState.eventCount)
-        : String(debugState.eventCount) + " event" + (debugState.eventCount === 1 ? "" : "s")
+      isFilteringByType
+        ? "Showing " + String(renderedEvents.length) + " " + formatDebugTypeFilterLabel(debugState.typeFilter) + " event" + (renderedEvents.length === 1 ? "" : "s")
+        : debugState.isTruncated || renderedEvents.length < debugState.eventCount
+          ? "Showing latest " + String(renderedEvents.length) + " of " + String(debugState.eventCount)
+          : String(debugState.eventCount) + " event" + (debugState.eventCount === 1 ? "" : "s")
     ];
+
+    if (isFilteringByType) {
+      traceSummaryParts.push("filter active");
+      traceSummaryParts.push("searched latest " + String(debugState.returnedEventCount || events.length));
+    }
 
     if (debugState.droppedEventCount > 0) {
       traceSummaryParts.push(String(debugState.droppedEventCount) + " dropped");
@@ -353,7 +432,7 @@
     try {
       const response = await sendRuntimeMessage({
         type: "merged-link-lab:debug:get-state",
-        eventLimit: normalizeVisibleRenderLimit(debugState.renderLimit)
+        eventLimit: getDebugStateRequestEventLimit()
       });
 
       if (response && response.ok) {
@@ -371,6 +450,7 @@
           ? debugApi.getLocalEvents()
           : [];
       debugState.eventCount = debugState.events.length;
+      debugState.returnedEventCount = debugState.events.length;
       debugState.isTruncated = false;
       debugState.isPoolFull = false;
       debugState.droppedEventCount = 0;
@@ -415,7 +495,7 @@
       const response = await sendRuntimeMessage({
         type: "merged-link-lab:debug:set-config",
         config: nextDebugConfig,
-        eventLimit: normalizeVisibleRenderLimit(debugState.renderLimit)
+        eventLimit: getDebugStateRequestEventLimit()
       });
 
       if (response && response.ok) {
@@ -439,7 +519,7 @@
     return sendRuntimeMessage({
       type: "merged-link-lab:debug:set-config",
       config: debugConfig,
-      eventLimit: normalizeVisibleRenderLimit(debugState.renderLimit)
+      eventLimit: getDebugStateRequestEventLimit()
     });
   }
 
@@ -537,6 +617,7 @@
 
     debugState.events = [];
     debugState.eventCount = 0;
+    debugState.returnedEventCount = 0;
     debugState.isTruncated = false;
     debugState.isPoolFull = false;
     debugState.droppedEventCount = 0;
@@ -634,6 +715,14 @@
     setStatus(debugState.autoRefresh ? "Live refresh enabled." : "Live refresh paused.", "");
   }
 
+  // Function: update debug type filter.
+  async function updateDebugTypeFilter() {
+    debugState.typeFilter = normalizeDebugTypeFilter(DOM.debugTypeFilterSelect ? DOM.debugTypeFilterSelect.value : debugState.typeFilter);
+    await refreshDebugState({ silentStatus: true });
+    persistDebugPageChoices();
+    setStatus("Debug trace filter set to " + formatDebugTypeFilterLabel(debugState.typeFilter) + ".", "");
+  }
+
   // Function: bind UI.
   function bindUi() {
     if (DOM.refreshDebugButton) {
@@ -678,6 +767,10 @@
 
     if (DOM.debugLevelSelect) {
       DOM.debugLevelSelect.addEventListener("change", saveDebugConfig);
+    }
+
+    if (DOM.debugTypeFilterSelect) {
+      DOM.debugTypeFilterSelect.addEventListener("change", updateDebugTypeFilter);
     }
 
     document.querySelectorAll("[data-debug-category]").forEach(function bindDebugCategorySwitch(checkbox) {

@@ -38,7 +38,8 @@
   });
   const defaultDebugPageChoices = Object.freeze({
     renderLimit: 750,
-    autoRefresh: true
+    autoRefresh: false,
+    typeFilter: "all"
   });
 
   // Function: normalize sender email address.
@@ -165,6 +166,7 @@
   function normalizeDebugPageChoices(value) {
     const safeValue = value && typeof value === "object" ? value : {};
     const parsedRenderLimit = Number(safeValue.renderLimit);
+    const allowedTypeFilters = Object.assign({ all: true }, defaultDebugConfig.categories);
 
     return {
       renderLimit: Number.isFinite(parsedRenderLimit) && parsedRenderLimit > 0
@@ -172,7 +174,8 @@
         : defaultDebugPageChoices.renderLimit,
       autoRefresh: safeValue.autoRefresh === true || safeValue.autoRefresh === false
         ? safeValue.autoRefresh
-        : defaultDebugPageChoices.autoRefresh
+        : defaultDebugPageChoices.autoRefresh,
+      typeFilter: allowedTypeFilters[safeValue.typeFilter] ? safeValue.typeFilter : defaultDebugPageChoices.typeFilter
     };
   }
 
@@ -195,7 +198,8 @@
 
     return (
       normalizedChoices.renderLimit === defaultDebugPageChoices.renderLimit &&
-      normalizedChoices.autoRefresh === defaultDebugPageChoices.autoRefresh
+      normalizedChoices.autoRefresh === defaultDebugPageChoices.autoRefresh &&
+      normalizedChoices.typeFilter === defaultDebugPageChoices.typeFilter
     );
   }
 
@@ -395,7 +399,9 @@
       "; renderLimit=" +
       String(effectiveValue.renderLimit) +
       "; liveRefresh=" +
-      (effectiveValue.autoRefresh ? "on" : "off")
+      (effectiveValue.autoRefresh ? "on" : "off") +
+      "; typeFilter=" +
+      effectiveValue.typeFilter
     );
   }
 

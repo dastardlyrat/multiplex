@@ -68,6 +68,26 @@
         </select>
       </label>
 
+      <label class="field-row" for="debugTypeFilterSelect">
+        <span class="setting-copy">
+          <strong>Debug type filter</strong>
+          <span class="setting-note">Filter the visible trace by event category without changing what is collected.</span>
+        </span>
+        <select id="debugTypeFilterSelect" class="debug-select">
+          <option value="all" selected>All types</option>
+          <option value="error">Errors</option>
+          <option value="runtime">Runtime</option>
+          <option value="storage">Storage</option>
+          <option value="messaging">Messaging</option>
+          <option value="ui">UI</option>
+          <option value="pipeline">Pipeline</option>
+          <option value="function">Function In/Out</option>
+          <option value="conditional">Conditional</option>
+          <option value="loop">Looping</option>
+          <option value="variable">Variable Assignment</option>
+        </select>
+      </label>
+
       <fieldset class="debug-category-fieldset">
         <legend>Debug categories</legend>
         <label class="debug-category-toggle">
