@@ -54,6 +54,19 @@ function runPipelineSmokeTest() {
     throw new Error("pipeline tracker classification smoke test failed");
   }
 
+  if (pipeline.classifyUrlValue("https://example.com/path?email=name@example.com&keep=yes") !== "destination") {
+    throw new Error("pipeline email parameter classification smoke test failed");
+  }
+
+  const trackedFinalEntries = pipeline.buildFinalUrlEntries(bypassedResult.items);
+  if (
+    !trackedFinalEntries.length ||
+    trackedFinalEntries[0].type !== "tracker" ||
+    pipeline.buildFinalUrlLinkText(trackedFinalEntries[0]).indexOf("(tracker)") === -1
+  ) {
+    throw new Error("pipeline uncleaned tracker href label smoke test failed");
+  }
+
   if (
     !defaultResult.items[0] ||
     defaultResult.items[0].trackerCleanupEntries.length !== 1 ||
@@ -61,6 +74,15 @@ function runPipelineSmokeTest() {
     pipeline.getItemDisplayType(defaultResult.items[0]) !== "tracker cleaned"
   ) {
     throw new Error("pipeline tracker cleanup labeling smoke test failed");
+  }
+
+  const cleanedFinalEntries = pipeline.buildFinalUrlEntries(defaultResult.items);
+  if (
+    !cleanedFinalEntries.length ||
+    cleanedFinalEntries[0].type !== "tracker cleaned" ||
+    pipeline.buildFinalUrlLinkText(cleanedFinalEntries[0]).indexOf("(tracker cleaned)") === -1
+  ) {
+    throw new Error("pipeline cleaned tracker href label smoke test failed");
   }
 }
 
