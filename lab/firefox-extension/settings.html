@@ -24,7 +24,7 @@
     </p>
 
     <div class="settings-list">
-      <label class="setting-row" for="enableUrlNormalizationRepair">
+      <div class="setting-row">
         <span class="setting-copy">
           <strong>URL normalization and repair</strong>
           <span class="setting-note">
@@ -35,12 +35,12 @@
           </span>
         </span>
         <span class="switch">
-          <input id="enableUrlNormalizationRepair" type="checkbox">
+          <input id="enableUrlNormalizationRepair" type="checkbox" aria-label="URL normalization and repair">
           <span class="switch-track" aria-hidden="true"></span>
         </span>
-      </label>
+      </div>
 
-      <label class="setting-row" for="replaceEmailBodyWithMirrorContent">
+      <div class="setting-row">
         <span class="setting-copy">
           <strong>Replace opened email body with mirror content</strong>
           <span class="setting-note">
@@ -48,12 +48,12 @@
           </span>
         </span>
         <span class="switch">
-          <input id="replaceEmailBodyWithMirrorContent" type="checkbox">
+          <input id="replaceEmailBodyWithMirrorContent" type="checkbox" aria-label="Replace opened email body with mirror content">
           <span class="switch-track" aria-hidden="true"></span>
         </span>
-      </label>
+      </div>
 
-      <label class="setting-row" for="autoApplyMirrorForConfiguredSenders">
+      <div class="setting-row">
         <span class="setting-copy">
           <strong>Auto-apply mirror for configured sender addresses</strong>
           <span class="setting-note">
@@ -64,10 +64,10 @@
           </span>
         </span>
         <span class="switch">
-          <input id="autoApplyMirrorForConfiguredSenders" type="checkbox">
+          <input id="autoApplyMirrorForConfiguredSenders" type="checkbox" aria-label="Auto-apply mirror for configured sender addresses">
           <span class="switch-track" aria-hidden="true"></span>
         </span>
-      </label>
+      </div>
     </div>
 
     <section class="sender-list-card" aria-label="Configured sender addresses">

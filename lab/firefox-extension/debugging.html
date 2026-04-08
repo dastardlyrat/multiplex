@@ -43,16 +43,16 @@
         <span id="debugBadge" class="debug-badge">Off</span>
       </div>
 
-      <label class="field-row" for="autoRefreshDebugOutput">
+      <div class="field-row">
         <span class="setting-copy">
           <strong>Live refresh</strong>
           <span class="setting-note">Refresh the in-memory trace every second while this page is open.</span>
         </span>
         <span class="switch">
-          <input id="autoRefreshDebugOutput" type="checkbox" role="switch" aria-checked="false">
+          <input id="autoRefreshDebugOutput" type="checkbox" role="switch" aria-checked="false" aria-label="Live refresh">
           <span class="switch-track" aria-hidden="true"></span>
         </span>
-      </label>
+      </div>
 
       <label class="field-row" for="debugLevelSelect">
         <span class="setting-copy">
@@ -70,76 +70,76 @@
 
       <fieldset class="debug-category-fieldset">
         <legend>Debug categories</legend>
-        <label class="debug-category-toggle">
+        <div class="debug-category-toggle">
           <span class="debug-category-label">Errors</span>
           <span class="switch">
-            <input type="checkbox" data-debug-category="error" role="switch" aria-checked="true" checked disabled>
+            <input type="checkbox" data-debug-category="error" role="switch" aria-checked="true" checked disabled aria-label="Errors">
             <span class="switch-track" aria-hidden="true"></span>
           </span>
-        </label>
-        <label class="debug-category-toggle">
+        </div>
+        <div class="debug-category-toggle">
           <span class="debug-category-label">Runtime</span>
           <span class="switch">
-            <input type="checkbox" data-debug-category="runtime" role="switch" aria-checked="true" checked>
+            <input type="checkbox" data-debug-category="runtime" role="switch" aria-checked="true" checked aria-label="Runtime">
             <span class="switch-track" aria-hidden="true"></span>
           </span>
-        </label>
-        <label class="debug-category-toggle">
+        </div>
+        <div class="debug-category-toggle">
           <span class="debug-category-label">Storage</span>
           <span class="switch">
-            <input type="checkbox" data-debug-category="storage" role="switch" aria-checked="true" checked>
+            <input type="checkbox" data-debug-category="storage" role="switch" aria-checked="true" checked aria-label="Storage">
             <span class="switch-track" aria-hidden="true"></span>
           </span>
-        </label>
-        <label class="debug-category-toggle">
+        </div>
+        <div class="debug-category-toggle">
           <span class="debug-category-label">Messaging</span>
           <span class="switch">
-            <input type="checkbox" data-debug-category="messaging" role="switch" aria-checked="true" checked>
+            <input type="checkbox" data-debug-category="messaging" role="switch" aria-checked="true" checked aria-label="Messaging">
             <span class="switch-track" aria-hidden="true"></span>
           </span>
-        </label>
-        <label class="debug-category-toggle">
+        </div>
+        <div class="debug-category-toggle">
           <span class="debug-category-label">UI</span>
           <span class="switch">
-            <input type="checkbox" data-debug-category="ui" role="switch" aria-checked="true" checked>
+            <input type="checkbox" data-debug-category="ui" role="switch" aria-checked="true" checked aria-label="UI">
             <span class="switch-track" aria-hidden="true"></span>
           </span>
-        </label>
-        <label class="debug-category-toggle">
+        </div>
+        <div class="debug-category-toggle">
           <span class="debug-category-label">Pipeline</span>
           <span class="switch">
-            <input type="checkbox" data-debug-category="pipeline" role="switch" aria-checked="true" checked>
+            <input type="checkbox" data-debug-category="pipeline" role="switch" aria-checked="true" checked aria-label="Pipeline">
             <span class="switch-track" aria-hidden="true"></span>
           </span>
-        </label>
-        <label class="debug-category-toggle">
+        </div>
+        <div class="debug-category-toggle">
           <span class="debug-category-label">Function In/Out</span>
           <span class="switch">
-            <input type="checkbox" data-debug-category="function" role="switch" aria-checked="false">
+            <input type="checkbox" data-debug-category="function" role="switch" aria-checked="false" aria-label="Function In and Out">
             <span class="switch-track" aria-hidden="true"></span>
           </span>
-        </label>
-        <label class="debug-category-toggle">
+        </div>
+        <div class="debug-category-toggle">
           <span class="debug-category-label">Conditional</span>
           <span class="switch">
-            <input type="checkbox" data-debug-category="conditional" role="switch" aria-checked="false">
+            <input type="checkbox" data-debug-category="conditional" role="switch" aria-checked="false" aria-label="Conditional">
             <span class="switch-track" aria-hidden="true"></span>
           </span>
-        </label>
-        <label class="debug-category-toggle">
+        </div>
+        <div class="debug-category-toggle">
           <span class="debug-category-label">Looping</span>
           <span class="switch">
-            <input type="checkbox" data-debug-category="loop" role="switch" aria-checked="false">
+            <input type="checkbox" data-debug-category="loop" role="switch" aria-checked="false" aria-label="Looping">
             <span class="switch-track" aria-hidden="true"></span>
           </span>
-        </label>
-        <label class="debug-category-toggle">
+        </div>
+        <div class="debug-category-toggle">
           <span class="debug-category-label">Variable Assignment</span>
           <span class="switch">
-            <input type="checkbox" data-debug-category="variable" role="switch" aria-checked="false">
+            <input type="checkbox" data-debug-category="variable" role="switch" aria-checked="false" aria-label="Variable Assignment">
             <span class="switch-track" aria-hidden="true"></span>
           </span>
-        </label>
+        </div>
       </fieldset>
 
       <label class="field-row" for="renderLimitSelect">

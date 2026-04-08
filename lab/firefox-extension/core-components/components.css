@@ -59,6 +59,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 10px;
   font-size: 11px;
   font-weight: 700;
   color: #ffffff;
@@ -66,16 +67,25 @@ body {
   padding: 8px 10px;
 }
 
+.pane-title .icon-subheading {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .pane-action {
   cursor: pointer;
-  min-height: 28px;
-  font-size: 11px;
+  flex: 0 0 auto;
+  min-height: 26px;
+  font-size: 10px;
   font-weight: 700;
   border: 1px solid rgba(200, 217, 238, 0.95);
-  border-radius: 10px;
+  border-radius: 8px;
   background: linear-gradient(180deg, #ffffff 0%, var(--surface-soft) 100%);
   color: var(--accent);
-  padding: 5px 10px;
+  padding: 4px 8px;
   box-shadow: 0 6px 12px rgba(30, 93, 168, 0.08);
 }
 

@@ -41,28 +41,28 @@
       </div>
     </div>
 
-    <label class="switch-row" for="enableUrlNormalizationRepair">
+    <div class="switch-row">
       <span class="setting-copy">
         <strong>Normalize and repair URLs</strong>
         <span>Normalizes detected URLs before mirror output. Default: off.</span>
         <span class="setting-warning">Warning: can reactivate broken dangerous links.</span>
       </span>
       <span class="switch">
-        <input id="enableUrlNormalizationRepair" type="checkbox">
+        <input id="enableUrlNormalizationRepair" type="checkbox" aria-label="Normalize and repair URLs">
         <span class="switch-track" aria-hidden="true"></span>
       </span>
-    </label>
+    </div>
 
-    <label class="switch-row" for="replaceEmailBodyWithMirrorContent">
+    <div class="switch-row">
       <span class="setting-copy">
         <strong>Replace email with mirror</strong>
         <span>Replaces the open email body in-page with mirror content. Default: off.</span>
       </span>
       <span class="switch">
-        <input id="replaceEmailBodyWithMirrorContent" type="checkbox">
+        <input id="replaceEmailBodyWithMirrorContent" type="checkbox" aria-label="Replace email with mirror">
         <span class="switch-track" aria-hidden="true"></span>
       </span>
-    </label>
+    </div>
   </section>
 
   <p id="statusMessage" class="status-message" aria-live="polite">Loading…</p>
