@@ -18,7 +18,10 @@
   const normalizeTrackingParameterFilters = storageModel.normalizeTrackingParameterFilters;
   const getEffectiveBooleanSettingValue = storageModel.getEffectiveBooleanSettingValue;
   const getEffectiveTrackingParameterFilters = storageModel.getEffectiveTrackingParameterFilters;
+  const getTrackingParameterDefinitionsByBucket = storageModel.getTrackingParameterDefinitionsByBucket;
+  const setTrackingParameterBucketEnabled = storageModel.setTrackingParameterBucketEnabled;
   const formatTrackingParameterFilterSummary = storageModel.formatTrackingParameterFilterSummary;
+  const safeTrackingParameterDefinitions = getTrackingParameterDefinitionsByBucket("safe");
   const trackerState = {
     manifest: null,
     stripKnownTrackingParameters: defaultSettings.stripKnownTrackingParameters,
@@ -59,24 +62,27 @@
     const summaryText = formatTrackingParameterFilterSummary(trackerState.trackingParameterFilters, {
       maxVisibleLabels: 6
     });
-    const enabledSummary = trackingParameterDefinitions.filter(function keepEnabledTrackingParameter(definition) {
+    const visibleTrackingParameterDefinitions = safeTrackingParameterDefinitions.length
+      ? safeTrackingParameterDefinitions
+      : trackingParameterDefinitions;
+    const enabledSummary = visibleTrackingParameterDefinitions.filter(function keepEnabledTrackingParameter(definition) {
       return trackerState.trackingParameterFilters[definition.key] === true;
     });
 
     pageUi.setBadgeText(
       DOM.trackerFilterBadge,
-      String(enabledSummary.length) + "/" + String(trackingParameterDefinitions.length) + " enabled",
+      String(enabledSummary.length) + "/" + String(visibleTrackingParameterDefinitions.length) + " safe enabled",
       "Unavailable"
     );
 
     if (DOM.trackerFilterSummary) {
-      DOM.trackerFilterSummary.textContent = summaryText + ".";
+      DOM.trackerFilterSummary.textContent = summaryText + ". Safe bucket controls are shown here; dubious tracking removal will be added later.";
     }
 
     if (DOM.trackerStripMasterStatus) {
       DOM.trackerStripMasterStatus.textContent = trackerState.stripKnownTrackingParameters
-        ? "Global tracking-parameter stripping is currently enabled."
-        : "Global tracking-parameter stripping is currently disabled. These filters are saved but inactive until the master strip switch is turned on.";
+        ? "Safe tracker cleaning is currently enabled."
+        : "Safe tracker cleaning is currently disabled. These filters are saved but inactive until the master switch is turned on.";
     }
 
     if (DOM.stripKnownTrackingParameters) {
@@ -124,9 +130,12 @@
     }
 
     const fragment = document.createDocumentFragment();
+    const visibleTrackingParameterDefinitions = safeTrackingParameterDefinitions.length
+      ? safeTrackingParameterDefinitions
+      : trackingParameterDefinitions;
     DOM.trackingParameterList.textContent = "";
 
-    trackingParameterDefinitions.forEach(function appendTrackingParameterRow(definition) {
+    visibleTrackingParameterDefinitions.forEach(function appendTrackingParameterRow(definition) {
       fragment.appendChild(createTrackerSwitchRow(definition));
     });
 
@@ -169,8 +178,8 @@
     renderTrackerSummary();
     setStatus(
       trackerState.stripKnownTrackingParameters
-        ? "Tracker stripping enabled."
-        : "Tracker stripping disabled. Filters remain saved.",
+        ? "Safe tracker cleaning enabled."
+        : "Safe tracker cleaning disabled. Filters remain saved.",
       "saved"
     );
   }
@@ -203,15 +212,15 @@
       );
       renderTrackerFilterRows();
       if (!silentStatus) {
-        setStatus("Tracker filters loaded.", "saved");
+        setStatus("Safe tracker filters loaded.", "saved");
       }
     } catch (error) {
       renderTrackerFilterRows();
       if (!silentStatus) {
-        setStatus(
-          "Could not load tracker filters: " + (error && error.message ? error.message : "unknown error"),
-          "error"
-        );
+      setStatus(
+        "Could not load safe tracker filters: " + (error && error.message ? error.message : "unknown error"),
+        "error"
+      );
       }
     }
   }
@@ -264,12 +273,8 @@
 
     if (DOM.enableAllTrackersButton) {
       DOM.enableAllTrackersButton.addEventListener("click", function enableAllTrackerFilters() {
-        const nextFilters = trackingParameterDefinitions.reduce(function enableAllFilters(result, definition) {
-          result[definition.key] = true;
-          return result;
-        }, {});
-
-        saveTrackerFilters(nextFilters, "Enabled all tracker filters.");
+        const nextFilters = setTrackingParameterBucketEnabled(trackerState.trackingParameterFilters, "safe", true);
+        saveTrackerFilters(nextFilters, "Enabled all safe tracker filters.");
       });
     }
 
@@ -281,18 +286,14 @@
 
     if (DOM.disableAllTrackersButton) {
       DOM.disableAllTrackersButton.addEventListener("click", function disableAllTrackerFilters() {
-        const nextFilters = trackingParameterDefinitions.reduce(function disableAllFilters(result, definition) {
-          result[definition.key] = false;
-          return result;
-        }, {});
-
-        saveTrackerFilters(nextFilters, "Disabled all tracker filters.");
+        const nextFilters = setTrackingParameterBucketEnabled(trackerState.trackingParameterFilters, "safe", false);
+        saveTrackerFilters(nextFilters, "Disabled all safe tracker filters.");
       });
     }
 
     if (DOM.restoreDefaultTrackersButton) {
       DOM.restoreDefaultTrackersButton.addEventListener("click", function restoreDefaultTrackerFilters() {
-        saveTrackerFilters(defaultSettings.trackingParameterFilters, "Restored default tracker filters.");
+        saveTrackerFilters(defaultSettings.trackingParameterFilters, "Restored default safe tracker filters.");
       });
     }
 
@@ -306,7 +307,7 @@
     bindUi();
     renderTrackerFilterRows();
     await loadTrackerSettings({ silentStatus: true });
-    setStatus("Tracker filter page ready.", "");
+    setStatus("Safe tracker filter page ready.", "");
   }
 
   initializeTrackingParameterSettingsPage();

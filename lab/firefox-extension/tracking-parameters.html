@@ -13,6 +13,7 @@
     <p class="eyebrow">URL Forensics Workbench</p>
     <nav class="page-nav" aria-label="Extension pages">
       <button class="page-link" type="button" data-page-href="./settings.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">settings</span>Settings</button>
+      <button class="page-link" type="button" data-page-href="./test-suite.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">science</span>Test Suite</button>
       <button class="page-link" type="button" data-page-href="./diagnostics.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">analytics</span>Diagnostics</button>
       <button class="page-link" type="button" data-page-href="./debugging.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">bug_report</span>Debugging</button>
       <button class="page-link" type="button" data-page-href="./storage.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">storage</span>Storage</button>
@@ -21,18 +22,18 @@
     </nav>
     <h1 class="icon-heading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">filter_alt</span>Tracker Filters</h1>
     <p class="lede">
-      Control tracker-parameter stripping and choose which known tracking query parameters should be removed.
+      Control safe tracker cleaning and choose which known tracking query parameters should be removed. Current tracker families are grouped into the safe bucket; dubious-tracker removal will be added later as a separate stage.
     </p>
 
     <div class="setting-row">
       <span class="setting-copy">
-        <strong>Strip known tracking parameters</strong>
+        <strong>Enable safe tracker cleaning</strong>
         <span class="setting-note">
-          Global master switch for known tracker removal. When off, the tracker filters below are preserved but bypassed.
+          Global master switch for the safe tracker-removal bucket. When off, the tracker filters below are preserved but bypassed.
         </span>
       </span>
       <span class="switch">
-        <input id="stripKnownTrackingParameters" type="checkbox" aria-label="Strip known tracking parameters">
+        <input id="stripKnownTrackingParameters" type="checkbox" aria-label="Enable safe tracker cleaning">
         <span class="switch-track" aria-hidden="true"></span>
       </span>
     </div>
@@ -42,15 +43,15 @@
         <div>
           <h2 class="icon-subheading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">tune</span>Tracker Filter Summary</h2>
           <p class="setting-note">
-            Each switch below controls one tracker family. Dubious-tracker removal will be added later as a separate stage.
+            Each switch below controls one tracker family inside the safe bucket. Dubious-tracker removal will be added later as a separate stage.
           </p>
         </div>
         <span id="trackerFilterBadge" class="diagnostic-badge">Loading…</span>
       </div>
       <div class="page-actions">
-        <button id="enableAllTrackersButton" class="primary-button" type="button"><span class="material-symbols-outlined button-icon" aria-hidden="true">done_all</span>Enable All</button>
-        <button id="disableAllTrackersButton" class="ghost-button" type="button"><span class="material-symbols-outlined button-icon" aria-hidden="true">block</span>Disable All</button>
-        <button id="restoreDefaultTrackersButton" class="ghost-button" type="button"><span class="material-symbols-outlined button-icon" aria-hidden="true">restart_alt</span>Restore Defaults</button>
+        <button id="enableAllTrackersButton" class="primary-button" type="button"><span class="material-symbols-outlined button-icon" aria-hidden="true">done_all</span>Enable All Safe</button>
+        <button id="disableAllTrackersButton" class="ghost-button" type="button"><span class="material-symbols-outlined button-icon" aria-hidden="true">block</span>Disable All Safe</button>
+        <button id="restoreDefaultTrackersButton" class="ghost-button" type="button"><span class="material-symbols-outlined button-icon" aria-hidden="true">restart_alt</span>Restore Safe Defaults</button>
       </div>
       <p id="trackerFilterSummary" class="setting-note">Loading tracker filters…</p>
       <p id="trackerStripMasterStatus" class="setting-note">Checking global tracking-parameter stripping…</p>

@@ -18,6 +18,8 @@
   const formatStorageEmailListEntry = storageModel.formatStorageEmailListEntry;
   const formatTrackingParameterFilterEntry = storageModel.formatTrackingParameterFilterEntry;
   const getStorageSourceLabel = storageModel.getStorageSourceLabel;
+  const setTrackingParameterBucketEnabled = storageModel.setTrackingParameterBucketEnabled;
+  const isTrackingParameterBucketFullyEnabled = storageModel.isTrackingParameterBucketFullyEnabled;
   const popupState = {
     activeTabId: null,
     activeTabUrl: "",
@@ -34,6 +36,7 @@
     openDebuggingPageButton: document.getElementById("openDebuggingPageButton"),
     refreshDiagnosticsButton: document.getElementById("refreshDiagnosticsButton"),
     enableUrlNormalizationRepair: document.getElementById("enableUrlNormalizationRepair"),
+    enableSafeTrackerCleaning: document.getElementById("enableSafeTrackerCleaning"),
     replaceEmailBodyWithMirrorContent: document.getElementById("replaceEmailBodyWithMirrorContent"),
     diagnosticBadge: document.getElementById("diagnosticBadge"),
     diagnosticsList: document.getElementById("diagnosticsList"),
@@ -51,17 +54,131 @@
       DOM.enableUrlNormalizationRepair.checked = defaults.enableUrlNormalizationRepair;
     }
 
+    if (DOM.enableSafeTrackerCleaning) {
+      DOM.enableSafeTrackerCleaning.checked = defaults.stripKnownTrackingParameters === true &&
+        isTrackingParameterBucketFullyEnabled(defaults.trackingParameterFilters, "safe");
+    }
+
     if (DOM.replaceEmailBodyWithMirrorContent) {
       DOM.replaceEmailBodyWithMirrorContent.checked = defaults.replaceEmailBodyWithMirrorContent;
     }
   }
 
-  // Function: get settings payload.
-  function getSettingsPayload() {
+  // Function: get popup boolean settings payload.
+  function getPopupBooleanSettingsPayload() {
     return {
       [storageKeys.enableUrlNormalizationRepair]: !!(DOM.enableUrlNormalizationRepair && DOM.enableUrlNormalizationRepair.checked),
       [storageKeys.replaceEmailBodyWithMirrorContent]: !!(DOM.replaceEmailBodyWithMirrorContent && DOM.replaceEmailBodyWithMirrorContent.checked)
     };
+  }
+
+  // Function: check whether safe tracker cleaning is enabled.
+  function isSafeTrackerCleaningEnabled(storedSettings) {
+    const stripKnownTrackingParameters = storageModel.getEffectiveBooleanSettingValue(
+      storedSettings,
+      storageKeys.stripKnownTrackingParameters,
+      defaults.stripKnownTrackingParameters
+    );
+    const effectiveTrackingParameterFilters = storageModel.getEffectiveTrackingParameterFilters(
+      storedSettings,
+      storageKeys.trackingParameterFilters,
+      defaults.trackingParameterFilters
+    );
+
+    return stripKnownTrackingParameters === true &&
+      isTrackingParameterBucketFullyEnabled(effectiveTrackingParameterFilters, "safe");
+  }
+
+  // Function: build safe tracker cleaning payload.
+  function buildSafeTrackerCleaningPayload(isEnabled) {
+    const currentFilters = popupState.storageSnapshot &&
+      popupState.storageSnapshot.trackingParameterFilters &&
+      popupState.storageSnapshot.trackingParameterFilters.effectiveValue
+        ? popupState.storageSnapshot.trackingParameterFilters.effectiveValue
+        : defaults.trackingParameterFilters;
+    const nextPayload = {
+      [storageKeys.stripKnownTrackingParameters]: isEnabled === true
+    };
+
+    if (isEnabled === true) {
+      nextPayload[storageKeys.trackingParameterFilters] = setTrackingParameterBucketEnabled(currentFilters, "safe", true);
+    }
+
+    return nextPayload;
+  }
+
+  // Function: get changed setting id from an event.
+  function getChangedSettingId(event) {
+    return event && event.target ? String(event.target.id || "") : "";
+  }
+
+  // Function: check whether popup storage is available for a method.
+  function isPopupStorageMethodAvailable(methodName) {
+    return !!(
+      extensionApi &&
+      extensionApi.storage &&
+      extensionApi.storage.local &&
+      typeof extensionApi.storage.local[methodName] === "function"
+    );
+  }
+
+  // Function: build save payload for the changed popup setting.
+  function buildPopupSettingsSavePayload(event) {
+    const changedSettingId = getChangedSettingId(event);
+
+    return {
+      changedSettingId: changedSettingId,
+      nextPayload: changedSettingId === "enableSafeTrackerCleaning"
+        ? buildSafeTrackerCleaningPayload(!!(event && event.target && event.target.checked))
+        : getPopupBooleanSettingsPayload()
+    };
+  }
+
+  // Function: update popup save status text.
+  function updatePopupSaveStatus(changedSettingId, nextPayload) {
+    if (changedSettingId === "replaceEmailBodyWithMirrorContent") {
+      setStatus(
+        nextPayload.replaceEmailBodyWithMirrorContent
+          ? "Mirror replace on."
+          : "Mirror replace off.",
+        "saved"
+      );
+      return;
+    }
+
+    if (changedSettingId === "enableSafeTrackerCleaning") {
+      setStatus(
+        nextPayload[storageKeys.stripKnownTrackingParameters]
+          ? "Safe tracker cleaning on."
+          : "Safe tracker cleaning off.",
+        "saved"
+      );
+      return;
+    }
+
+    setStatus(
+      nextPayload.enableUrlNormalizationRepair
+        ? "URL repair on."
+        : "URL repair off.",
+      "saved"
+    );
+  }
+
+  // Function: log saved popup settings.
+  function logSavedPopupSettings(changedSettingId, nextPayload) {
+    if (!debugApi) {
+      return;
+    }
+
+    debugApi.storage("popup settings saved", {
+      changedSettingId: changedSettingId,
+      enableUrlNormalizationRepair: !!(DOM.enableUrlNormalizationRepair && DOM.enableUrlNormalizationRepair.checked),
+      enableSafeTrackerCleaning: changedSettingId === "enableSafeTrackerCleaning"
+        ? nextPayload[storageKeys.stripKnownTrackingParameters] === true
+        : !!(DOM.enableSafeTrackerCleaning && DOM.enableSafeTrackerCleaning.checked),
+      replaceEmailBodyWithMirrorContent: !!(DOM.replaceEmailBodyWithMirrorContent && DOM.replaceEmailBodyWithMirrorContent.checked)
+    });
+    debugApi.functionOut("popup.saveSettings", { saved: true });
   }
 
   // Function: format timestamp.
@@ -230,6 +347,9 @@
         storageKeys.enableUrlNormalizationRepair,
         defaults.enableUrlNormalizationRepair
       );
+      if (DOM.enableSafeTrackerCleaning) {
+        DOM.enableSafeTrackerCleaning.checked = isSafeTrackerCleaningEnabled(storedSettings);
+      }
       applyStoredBooleanSettingToControl(
         DOM.replaceEmailBodyWithMirrorContent,
         storedSettings,
@@ -239,6 +359,7 @@
       if (debugApi) {
         debugApi.storage("popup settings loaded", {
           enableUrlNormalizationRepair: !!(DOM.enableUrlNormalizationRepair && DOM.enableUrlNormalizationRepair.checked),
+          enableSafeTrackerCleaning: !!(DOM.enableSafeTrackerCleaning && DOM.enableSafeTrackerCleaning.checked),
           replaceEmailBodyWithMirrorContent: !!(DOM.replaceEmailBodyWithMirrorContent && DOM.replaceEmailBodyWithMirrorContent.checked)
         });
         debugApi.functionOut("popup.loadSettings", { source: "storage.local" });
@@ -260,18 +381,14 @@
 
   // Function: save settings.
   async function saveSettings(event) {
+    const changedSettingId = getChangedSettingId(event);
     if (debugApi) {
       debugApi.functionIn("popup.saveSettings", {
-        changedSettingId: event && event.target ? event.target.id : ""
+        changedSettingId: changedSettingId
       });
     }
 
-    if (
-      !extensionApi ||
-      !extensionApi.storage ||
-      !extensionApi.storage.local ||
-      typeof extensionApi.storage.local.set !== "function"
-    ) {
+    if (!isPopupStorageMethodAvailable("set")) {
       if (debugApi) {
         debugApi.conditional("popup save skipped because storage is unavailable");
         debugApi.functionOut("popup.saveSettings", { saved: false });
@@ -280,36 +397,14 @@
     }
 
     try {
-      const changedSettingId = event && event.target ? event.target.id : "";
-      const nextPayload = getSettingsPayload();
+      const savePayload = buildPopupSettingsSavePayload(event);
+      const nextPayload = savePayload.nextPayload;
       await extensionApi.storage.local.set(nextPayload);
 
-      if (changedSettingId === "replaceEmailBodyWithMirrorContent") {
-        setStatus(
-          nextPayload.replaceEmailBodyWithMirrorContent
-            ? "Mirror replace on."
-            : "Mirror replace off.",
-          "saved"
-        );
-      } else {
-        setStatus(
-          nextPayload.enableUrlNormalizationRepair
-            ? "URL repair on."
-            : "URL repair off.",
-          "saved"
-        );
-      }
-
+      updatePopupSaveStatus(savePayload.changedSettingId, nextPayload);
       await loadSettings();
       renderDiagnostics(popupState.snapshot);
-      if (debugApi) {
-        debugApi.storage("popup settings saved", {
-          changedSettingId: changedSettingId,
-          enableUrlNormalizationRepair: nextPayload.enableUrlNormalizationRepair,
-          replaceEmailBodyWithMirrorContent: nextPayload.replaceEmailBodyWithMirrorContent
-        });
-        debugApi.functionOut("popup.saveSettings", { saved: true });
-      }
+      logSavedPopupSettings(savePayload.changedSettingId, nextPayload);
     } catch (error) {
       setStatus("Save failed: " + (error && error.message ? error.message : "unknown error"), "error");
       if (debugApi) {
@@ -493,6 +588,10 @@
 
     if (DOM.enableUrlNormalizationRepair) {
       DOM.enableUrlNormalizationRepair.addEventListener("change", saveSettings);
+    }
+
+    if (DOM.enableSafeTrackerCleaning) {
+      DOM.enableSafeTrackerCleaning.addEventListener("change", saveSettings);
     }
 
     if (DOM.replaceEmailBodyWithMirrorContent) {

@@ -5,6 +5,7 @@
   const trackingParameterDefinitions = Object.freeze([
     Object.freeze({
       key: "utmPrefix",
+      bucket: "safe",
       label: "utm_*",
       parameterName: "utm_",
       matchMode: "prefix",
@@ -12,6 +13,7 @@
     }),
     Object.freeze({
       key: "gclid",
+      bucket: "safe",
       label: "gclid",
       parameterName: "gclid",
       matchMode: "exact",
@@ -19,6 +21,7 @@
     }),
     Object.freeze({
       key: "dclid",
+      bucket: "safe",
       label: "dclid",
       parameterName: "dclid",
       matchMode: "exact",
@@ -26,6 +29,7 @@
     }),
     Object.freeze({
       key: "gbraid",
+      bucket: "safe",
       label: "gbraid",
       parameterName: "gbraid",
       matchMode: "exact",
@@ -33,6 +37,7 @@
     }),
     Object.freeze({
       key: "wbraid",
+      bucket: "safe",
       label: "wbraid",
       parameterName: "wbraid",
       matchMode: "exact",
@@ -40,6 +45,7 @@
     }),
     Object.freeze({
       key: "msclkid",
+      bucket: "safe",
       label: "msclkid",
       parameterName: "msclkid",
       matchMode: "exact",
@@ -47,6 +53,7 @@
     }),
     Object.freeze({
       key: "ttclid",
+      bucket: "safe",
       label: "ttclid",
       parameterName: "ttclid",
       matchMode: "exact",
@@ -54,6 +61,7 @@
     }),
     Object.freeze({
       key: "liFatId",
+      bucket: "safe",
       label: "li_fat_id",
       parameterName: "li_fat_id",
       matchMode: "exact",
@@ -61,6 +69,7 @@
     }),
     Object.freeze({
       key: "fbclid",
+      bucket: "safe",
       label: "fbclid",
       parameterName: "fbclid",
       matchMode: "exact",
@@ -68,6 +77,7 @@
     }),
     Object.freeze({
       key: "mcCid",
+      bucket: "safe",
       label: "mc_cid",
       parameterName: "mc_cid",
       matchMode: "exact",
@@ -75,6 +85,7 @@
     }),
     Object.freeze({
       key: "mcEid",
+      bucket: "safe",
       label: "mc_eid",
       parameterName: "mc_eid",
       matchMode: "exact",
@@ -82,6 +93,7 @@
     }),
     Object.freeze({
       key: "mcTc",
+      bucket: "safe",
       label: "mc_tc",
       parameterName: "mc_tc",
       matchMode: "exact",
@@ -89,6 +101,7 @@
     }),
     Object.freeze({
       key: "hsenc",
+      bucket: "safe",
       label: "hsenc",
       parameterName: "hsenc",
       matchMode: "exact",
@@ -96,6 +109,7 @@
     }),
     Object.freeze({
       key: "hsmi",
+      bucket: "safe",
       label: "_hsmi",
       parameterName: "_hsmi",
       matchMode: "exact",
@@ -103,6 +117,7 @@
     }),
     Object.freeze({
       key: "hsCtaTracking",
+      bucket: "safe",
       label: "hsCtaTracking",
       parameterName: "hsctatracking",
       matchMode: "exact",
@@ -143,6 +158,49 @@
     const normalizedFilters = normalizeTrackingParameterFilters(value);
 
     return trackingParameterDefinitions.filter(function keepEnabledTrackingDefinition(definition) {
+      return normalizedFilters[definition.key] === true;
+    });
+  }
+
+  // Function: get tracker definitions by bucket.
+  function getTrackingParameterDefinitionsByBucket(bucketName) {
+    const normalizedBucketName = String(bucketName || "").trim().toLowerCase();
+
+    if (!normalizedBucketName) {
+      return [];
+    }
+
+    return trackingParameterDefinitions.filter(function keepMatchingBucket(definition) {
+      return String(definition.bucket || "").trim().toLowerCase() === normalizedBucketName;
+    });
+  }
+
+  // Function: set tracker bucket enabled state.
+  function setTrackingParameterBucketEnabled(value, bucketName, isEnabled) {
+    const normalizedFilters = normalizeTrackingParameterFilters(value);
+    const bucketDefinitions = getTrackingParameterDefinitionsByBucket(bucketName);
+
+    if (!bucketDefinitions.length) {
+      return normalizedFilters;
+    }
+
+    bucketDefinitions.forEach(function setBucketFilterState(definition) {
+      normalizedFilters[definition.key] = isEnabled === true;
+    });
+
+    return normalizedFilters;
+  }
+
+  // Function: check whether every tracker in a bucket is enabled.
+  function isTrackingParameterBucketFullyEnabled(value, bucketName) {
+    const normalizedFilters = normalizeTrackingParameterFilters(value);
+    const bucketDefinitions = getTrackingParameterDefinitionsByBucket(bucketName);
+
+    if (!bucketDefinitions.length) {
+      return false;
+    }
+
+    return bucketDefinitions.every(function isBucketFilterEnabled(definition) {
       return normalizedFilters[definition.key] === true;
     });
   }
@@ -215,6 +273,9 @@
     normalizeTrackingParameterFilters: normalizeTrackingParameterFilters,
     trackingParameterFiltersMatchDefault: trackingParameterFiltersMatchDefault,
     getEnabledTrackingParameterDefinitions: getEnabledTrackingParameterDefinitions,
+    getTrackingParameterDefinitionsByBucket: getTrackingParameterDefinitionsByBucket,
+    setTrackingParameterBucketEnabled: setTrackingParameterBucketEnabled,
+    isTrackingParameterBucketFullyEnabled: isTrackingParameterBucketFullyEnabled,
     getTrackingParameterFilterSummary: getTrackingParameterFilterSummary,
     formatTrackingParameterFilterSummary: formatTrackingParameterFilterSummary,
     matchesTrackingParameterName: matchesTrackingParameterName

@@ -15,6 +15,7 @@
     <nav class="page-nav" aria-label="Extension pages">
       <button class="page-link" type="button" data-page-href="./settings.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">settings</span>Settings</button>
       <button class="page-link" type="button" data-page-href="./tracking-parameters.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">filter_alt</span>Trackers</button>
+      <button class="page-link" type="button" data-page-href="./test-suite.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">science</span>Test Suite</button>
       <button class="page-link" type="button" data-page-href="./diagnostics.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">analytics</span>Diagnostics</button>
       <button class="page-link" type="button" data-page-href="./debugging.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">bug_report</span>Debugging</button>
       <button class="page-link" type="button" data-page-href="./storage.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">storage</span>Storage</button>
@@ -420,7 +421,7 @@
                 <code>https:/example.com/path?keep=yes</code>
               </td>
               <td class="suite-expected-cell">
-                <p>Current behavior: not detected at all by the tokenizer.</p>
+                <p>Current expected output: empty.</p>
                 <p>Future rebuild target: detect and repair to <code>https://example.com/path?keep=yes</code>.</p>
               </td>
             </tr>
@@ -430,7 +431,7 @@
                 <code>https//example.com/path?keep=yes</code>
               </td>
               <td class="suite-expected-cell">
-                <p>Current behavior: not detected at all by the tokenizer.</p>
+                <p>Current expected output: empty.</p>
                 <p>Future rebuild target: reconstruct a valid absolute URL before pipeline classification.</p>
               </td>
             </tr>
@@ -440,7 +441,7 @@
                 <code>ttps://example.com/path?keep=yes</code>
               </td>
               <td class="suite-expected-cell">
-                <p>Current behavior: not detected at all by the tokenizer.</p>
+                <p>Current expected output: empty.</p>
                 <p>Future rebuild target: recover the intended scheme and continue through the normal pipeline.</p>
               </td>
             </tr>
@@ -450,7 +451,7 @@
                 <code>https:// example.com/path?keep=yes</code>
               </td>
               <td class="suite-expected-cell">
-                <p>Current behavior: tokenization breaks at the inserted whitespace.</p>
+                <p>Current expected output: empty.</p>
                 <p>Future rebuild target: collapse the damaged space and treat the result as one URL token.</p>
               </td>
             </tr>
