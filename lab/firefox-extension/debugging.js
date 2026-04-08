@@ -34,7 +34,7 @@
     lastCollectorError: "",
     maxEvents: 0,
     renderLimit: 750,
-    autoRefresh: true,
+    autoRefresh: false,
     isRefreshing: false
   };
   const DOM = {
@@ -280,10 +280,10 @@
     const wasPinnedToBottom =
       DOM.debugTrace.scrollTop + DOM.debugTrace.clientHeight >= DOM.debugTrace.scrollHeight - 24;
 
-    if (debugState.config.level === "off") {
+    if (debugState.config.level === "off" && !events.length) {
       const emptyElement = document.createElement("div");
       emptyElement.className = "debug-empty";
-      emptyElement.textContent = "Program debugging is off. Select a debug level or click Test Event to enable Runtime logging for this session.";
+      emptyElement.textContent = "Program debugging is off. Select a debug level or click Test Event to briefly enable Runtime logging for a test event.";
       DOM.debugTrace.replaceChildren(emptyElement);
     } else if (!events.length) {
       const emptyElement = document.createElement("div");
@@ -330,7 +330,7 @@
     setBadgeText(
       DOM.debugBadge,
       debugState.config.level === "off"
-        ? "Off"
+        ? "Off" + (debugState.eventCount ? " | " + String(debugState.eventCount) + " event" + (debugState.eventCount === 1 ? "" : "s") : "")
         : String(debugState.eventCount) + " event" + (debugState.eventCount === 1 ? "" : "s") +
           (debugState.isPoolFull ? " | pool full" : "")
     );
