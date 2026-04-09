@@ -2,10 +2,30 @@
 (function initializeTrackingParameterSettingsPage() {
   "use strict";
 
-  const extensionApi = typeof browser !== "undefined" ? browser : (typeof chrome !== "undefined" ? chrome : null);
-  const pageUi = globalThis.urlForensicsPageUi;
-  const storageModel = globalThis.urlForensicsStorageModel;
-  const debugApi = typeof globalThis !== "undefined" ? globalThis.mergedLinkLabDebug : null;
+  const globalScope = typeof globalThis !== "undefined" ? globalThis : null;
+  const pageRuntimeFactory = globalScope ? globalScope.urlForensicsPageRuntime : null;
+  const pageDependenciesFactory = globalScope ? globalScope.urlForensicsPageDependencies : null;
+
+  if (!pageRuntimeFactory || typeof pageRuntimeFactory.create !== "function") {
+    throw new Error("URL Forensics page runtime helpers are unavailable.");
+  }
+
+  if (!pageDependenciesFactory || typeof pageDependenciesFactory.create !== "function") {
+    throw new Error("URL Forensics page dependency helpers are unavailable.");
+  }
+
+  const pageRuntime = pageRuntimeFactory.create({
+    globalScope: globalScope,
+    requirePageUi: true
+  });
+  const pageDependencies = pageDependenciesFactory.create({
+    globalScope: globalScope,
+    required: ["storageModel"]
+  });
+  const extensionApi = pageRuntime.extensionApi;
+  const pageUi = pageRuntime.pageUi;
+  const storageModel = pageDependencies.storageModel;
+  const debugApi = pageRuntime.debugApi;
 
   if (debugApi && typeof debugApi.configure === "function") {
     debugApi.configure({ context: "tracking-parameters-page", module: "tracking-parameters" });

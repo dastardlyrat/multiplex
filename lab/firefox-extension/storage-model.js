@@ -27,6 +27,7 @@
     stripKnownTrackingParameters: "stripKnownTrackingParameters",
     trackingParameterFilters: "trackingParameterFilters",
     replaceEmailBodyWithMirrorContent: "replaceEmailBodyWithMirrorContent",
+    allowHelperOpenWithoutDetectedEmailBody: "allowHelperOpenWithoutDetectedEmailBody",
     autoApplyMirrorForConfiguredSenders: "autoApplyMirrorForConfiguredSenders",
     autoApplyMirrorSenderEmailList: "autoApplyMirrorSenderEmailList"
   });
@@ -42,6 +43,7 @@
     stripKnownTrackingParameters: true,
     trackingParameterFilters: trackingParameterModel.defaultTrackingParameterFilters,
     replaceEmailBodyWithMirrorContent: false,
+    allowHelperOpenWithoutDetectedEmailBody: false,
     autoApplyMirrorForConfiguredSenders: false,
     autoApplyMirrorSenderEmailList: Object.freeze([])
   });
@@ -327,6 +329,11 @@
         storageKeys.replaceEmailBodyWithMirrorContent,
         defaultSettings.replaceEmailBodyWithMirrorContent
       ),
+      allowHelperOpenWithoutDetectedEmailBody: buildStorageBooleanEntry(
+        normalizedStoredSettings,
+        storageKeys.allowHelperOpenWithoutDetectedEmailBody,
+        defaultSettings.allowHelperOpenWithoutDetectedEmailBody
+      ),
       autoApplyMirrorForConfiguredSenders: buildStorageBooleanEntry(
         normalizedStoredSettings,
         storageKeys.autoApplyMirrorForConfiguredSenders,
@@ -576,6 +583,10 @@
     rows.push({
       label: "Storage Replace Body",
       value: formatStorageBooleanEntry(storageSnapshot.replaceEmailBodyWithMirrorContent)
+    });
+    rows.push({
+      label: "Storage Helper Open Before Detection",
+      value: formatStorageBooleanEntry(storageSnapshot.allowHelperOpenWithoutDetectedEmailBody)
     });
     rows.push({
       label: "Storage Auto-Apply Toggle",

@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="./page-pane.css">
 <link rel="stylesheet" href="./test-suite.css">
 </head>
-<body data-url-forensics-test-page="true">
+<body>
 <main class="test-suite-shell">
   <section class="test-suite-card">
     <p class="eyebrow">URL Forensics Workbench</p>
@@ -16,6 +16,7 @@
       <button class="page-link" type="button" data-page-href="./settings.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">settings</span>Settings</button>
       <button class="page-link" type="button" data-page-href="./tracking-parameters.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">filter_alt</span>Trackers</button>
       <button class="page-link" type="button" data-page-href="./test-suite.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">science</span>Test Suite</button>
+      <button class="page-link" type="button" data-page-href="./sample-review.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">preview</span>Samples</button>
       <button class="page-link" type="button" data-page-href="./diagnostics.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">analytics</span>Diagnostics</button>
       <button class="page-link" type="button" data-page-href="./debugging.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">bug_report</span>Debugging</button>
       <button class="page-link" type="button" data-page-href="./storage.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">storage</span>Storage</button>
@@ -25,393 +26,1228 @@
 
     <div class="hero-row">
       <div>
-        <h1 class="icon-heading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">science</span>Built-In Test Suite</h1>
+        <h1 class="icon-heading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">science</span>Generated Test Matrix</h1>
         <p class="lede">
-          This page is a two-column test matrix. The left column holds the URL under test and the right column states the expected
-          output so the workflow pane, tracker pane, and href labels can be checked quickly against the real sidepanel logic.
+          This page is rebuilt from the same case catalog used by the Node smoke runner. That keeps the visible matrix, the automated
+          assertions, and the rebuild-target list synchronized instead of maintaining duplicate test fixtures by hand.
         </p>
       </div>
-      <span class="test-badge">Live detector target</span>
+      <span id="testRunBadge" class="test-badge">Running in-page checks…</span>
+    </div>
+
+    <div class="page-actions">
+      <div class="action-row" aria-label="Test suite actions">
+        <button id="saveTestResultsButton" class="primary-button" type="button"><span class="material-symbols-outlined button-icon" aria-hidden="true">download</span>Save Test Results</button>
+      </div>
     </div>
 
     <section class="info-card">
       <h2 class="icon-subheading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">rule</span>How To Use It</h2>
       <ul class="info-list">
-        <li>The sidepanel should detect this page automatically and expand once so the full workflow is visible.</li>
-        <li>Use the Workflow tab to inspect rewritten links, tracker cleanup, and final href labels.</li>
-        <li>Use the Sidepanel Diagnostics tab to confirm snapshot mode, counts, and storage-driven settings.</li>
-        <li>Use the Debugging page in another tab if you want to watch live runtime or pipeline traces while refreshing this page.</li>
-        <li>Plain-text and broken-URL cases are rendered as normal text nodes, not code blocks, because the pipeline intentionally ignores text inside <code>code</code> and <code>pre</code> tags.</li>
+        <li>Active automated cases on this page: <code>79</code>.</li>
+        <li>Future rebuild targets tracked by the runner: <code>0</code>.</li>
+        <li><strong>Assertions run in memory.</strong> The URLs listed below stay static; pass counts come from pipeline comparisons behind the scenes.</li>
+        <li>In-page checks run in memory so the badge reflects current results, but nothing is written to disk until you click <code>Save Test Results</code>.</li>
+        <li>In-page checks also exercise the real browser DOM HTML-detection path so DOM execution is validated separately from the Node fallback parser.</li>
+        <li>In-page checks also mount the real sidepanel shell in a hidden browser sandbox and assert mirror rendering, hover inspection, and diagnostics output end to end.</li>
+        <li>In-page checks also run saved Gmail, Outlook, Yahoo, Proton, HEY, and Fastmail inbox fixtures through browser-side candidate detection and snapshot summarization.</li>
+        <li>Run <code>npm run smoke</code> to execute the Node suite without writing report files.</li>
+        <li>Run <code>npm run smoke:save</code> only when you explicitly want JSON and Markdown artifacts under <code>test-results</code>.</li>
+        <li>Run <code>npm run rebuild:test-suite</code> to regenerate this page and its shared in-page data from the central case catalog.</li>
       </ul>
     </section>
 
-    <article class="test-email" data-email-body data-message-body aria-label="Built-in test email body">
+    <article class="test-email" aria-label="Built-in test email body">
       <header class="message-header">
         <div><strong>From:</strong> URL Forensics QA &lt;qa@example.com&gt;</div>
         <div><strong>To:</strong> Debug Session &lt;debugger@example.com&gt;</div>
-        <div><strong>Subject:</strong> Built-in tracker and redirect regression suite</div>
+        <div><strong>Subject:</strong> Generated tracker, wrapper, and rebuild regression suite</div>
         <div><strong>Date:</strong> April 8, 2026 9:00 AM</div>
       </header>
 
       <section class="message-copy">
         <p>
-          The matrix below covers direct destinations, known tracker families, wrapper chains, plain-text extraction, repair-sensitive
-          URLs, and malformed protocol examples reserved for future rebuild work.
+          Generated from <code>tools/pipeline-test-cases.js</code>. The rows below deliberately include repeated examples for every known
+          tracker family so the UI and any manually saved test report can be compared against identical fixture definitions.
         </p>
       </section>
 
       <section class="suite-section">
-        <h2>Anchor Matrix: Direct, Safe, And Tracked URLs</h2>
-        <table class="suite-table" aria-label="Direct and tracked anchor matrix">
+        <h2>Tracker Family: utm_*</h2>
+        <p>Remove any UTM campaign parameter whose name starts with utm_.</p>
+        <p>Each family includes cleaned, wrapper, global bypass, and per-tracker bypass coverage.</p>
+        <div class="suite-table-wrap">
+        <table class="suite-table" aria-label="Tracker Family: utm_*">
+          <colgroup>
+            <col class="suite-table__input-column">
+            <col class="suite-table__expected-column">
+          </colgroup>
           <thead>
             <tr>
-              <th scope="col">URL Under Test</th>
+              <th scope="col">Input</th>
               <th scope="col">Expected Output</th>
             </tr>
           </thead>
           <tbody>
             <tr>
               <td class="suite-url-cell">
-                <span class="suite-case-label">Direct destination</span>
-                <a href="https://example.com/articles/clean-destination?keep=yes">https://example.com/articles/clean-destination?keep=yes</a>
+                <span class="suite-case-label">Direct cleaned</span>
+                <a href="https://example.com/trackers/utm/cleaned?utm_source=newsletter_1&amp;utm_medium=email_1&amp;keep=yes">https://example.com/trackers/utm/cleaned?utm_source=newsletter_1&amp;utm_medium=email_1&amp;keep=yes</a>
               </td>
               <td class="suite-expected-cell">
-                <p>Final href label: <code>destination</code>.</p>
-                <p>Tracker pane: no removed parameters.</p>
+                <p>Tracker stripping on: final href label <code>tracker cleaned</code>.</p>
+                <p>Final URL keeps only <code>keep=yes</code> after removing <code>utm_medium</code>, <code>utm_source</code>.</p>
               </td>
             </tr>
             <tr>
               <td class="suite-url-cell">
-                <span class="suite-case-label">UTM family</span>
-                <a href="https://example.com/articles/utm-suite?utm_source=newsletter&utm_medium=email&utm_campaign=april_release&keep=yes">https://example.com/articles/utm-suite?utm_source=newsletter&utm_medium=email&utm_campaign=april_release&keep=yes</a>
+                <span class="suite-case-label">Global bypass retained</span>
+                <div class="suite-raw-url">https://example.com/trackers/utm/retained?utm_campaign=campaign_1&amp;utm_content=hero_1&amp;keep=yes</div>
               </td>
               <td class="suite-expected-cell">
-                <p>Tracker stripping on: final href label <code>tracker cleaned</code>, final URL keeps only <code>keep=yes</code>.</p>
-                <p>Tracker stripping off: final href label <code>tracker</code>, UTM parameters remain visible.</p>
+                <p>Tracker stripping off: final href label <code>tracker</code>.</p>
+                <p>The destination keeps <code>utm_campaign</code>, <code>utm_content</code> because the global strip stage is bypassed.</p>
               </td>
             </tr>
             <tr>
               <td class="suite-url-cell">
-                <span class="suite-case-label">Google click IDs</span>
-                <a href="https://example.com/articles/google-suite?gclid=AAA111&dclid=BBB222&gbraid=CCC333&wbraid=DDD444&keep=yes">https://example.com/articles/google-suite?gclid=AAA111&dclid=BBB222&gbraid=CCC333&wbraid=DDD444&keep=yes</a>
+                <span class="suite-case-label">Wrapped cleaned</span>
+                <a href="https://tracker.example.net/click?url=https%3A%2F%2Fexample.com%2Ftrackers%2Futm%2Fwrapped%3Futm_term%3Dkeyword_1%26utm_id%3Dsuite_1%26keep%3Dyes">https://tracker.example.net/click?url=https%3A%2F%2Fexample.com%2Ftrackers%2Futm%2Fwrapped%3Futm_term%3Dkeyword_1%26utm_id%3Dsuite_1%26keep%3Dyes</a>
               </td>
               <td class="suite-expected-cell">
-                <p>Detected tracker families: <code>gclid</code>, <code>dclid</code>, <code>gbraid</code>, <code>wbraid</code>.</p>
-                <p>Final href label should be <code>tracker</code> or <code>tracker cleaned</code> depending on stripping state.</p>
+                <p>Must unwrap the <code>url</code> destination before classification.</p>
+                <p>Final href label should still become <code>tracker cleaned</code> after removing <code>utm_id</code>, <code>utm_term</code>.</p>
               </td>
             </tr>
             <tr>
               <td class="suite-url-cell">
-                <span class="suite-case-label">Microsoft and TikTok click IDs</span>
-                <a href="https://example.com/articles/ad-suite?msclkid=EEE555&ttclid=FFF666&keep=yes">https://example.com/articles/ad-suite?msclkid=EEE555&ttclid=FFF666&keep=yes</a>
+                <span class="suite-case-label">Selective bypass retained</span>
+                <div class="suite-raw-url">https://example.com/trackers/utm/selective-bypass?utm_source=selective_1&amp;utm_campaign=bypass_1&amp;keep=yes</div>
               </td>
               <td class="suite-expected-cell">
-                <p>Detected tracker families: <code>msclkid</code> and <code>ttclid</code>.</p>
-                <p>Final href label should reflect retained versus cleaned tracker state.</p>
-              </td>
-            </tr>
-            <tr>
-              <td class="suite-url-cell">
-                <span class="suite-case-label">Social and CRM mix</span>
-                <a href="https://example.com/articles/social-suite?li_fat_id=GGG777&fbclid=HHH888&mc_cid=III999&mc_eid=JJJ000&mc_tc=KKK111&keep=yes">https://example.com/articles/social-suite?li_fat_id=GGG777&fbclid=HHH888&mc_cid=III999&mc_eid=JJJ000&mc_tc=KKK111&keep=yes</a>
-              </td>
-              <td class="suite-expected-cell">
-                <p>Detected tracker families: LinkedIn, Meta, and Mailchimp parameters.</p>
-                <p>Tracker pane should show each removed parameter name when stripping is enabled.</p>
-              </td>
-            </tr>
-            <tr>
-              <td class="suite-url-cell">
-                <span class="suite-case-label">HubSpot family</span>
-                <a href="https://example.com/articles/hubspot-suite?hsenc=LLL222&_hsmi=MMM333&hsCtaTracking=NNN444&keep=yes">https://example.com/articles/hubspot-suite?hsenc=LLL222&_hsmi=MMM333&hsCtaTracking=NNN444&keep=yes</a>
-              </td>
-              <td class="suite-expected-cell">
-                <p>Detected tracker families: <code>hsenc</code>, <code>_hsmi</code>, and <code>hsCtaTracking</code>.</p>
-                <p>Final href label should become <code>tracker cleaned</code> when those parameters are stripped.</p>
-              </td>
-            </tr>
-            <tr>
-              <td class="suite-url-cell">
-                <span class="suite-case-label">Mixed tracker families</span>
-                <a href="https://example.com/articles/mixed-suite?utm_source=release_notes&gclid=OOO555&msclkid=PPP666&ttclid=QQQ777&fbclid=RRR888&keep=yes">https://example.com/articles/mixed-suite?utm_source=release_notes&gclid=OOO555&msclkid=PPP666&ttclid=QQQ777&fbclid=RRR888&keep=yes</a>
-              </td>
-              <td class="suite-expected-cell">
-                <p>Tracker pane should report multiple removed names in one cleanup entry.</p>
-                <p>Final href label should still collapse to a single <code>tracker</code> or <code>tracker cleaned</code> state.</p>
-              </td>
-            </tr>
-            <tr>
-              <td class="suite-url-cell">
-                <span class="suite-case-label">Safe email parameter</span>
-                <a href="https://example.com/articles/email-parameter?email=debugger@example.com&keep=yes">https://example.com/articles/email-parameter?email=debugger@example.com&keep=yes</a>
-              </td>
-              <td class="suite-expected-cell">
-                <p>Should remain <code>destination</code>.</p>
-                <p>Email addresses must not be counted as trackers.</p>
-              </td>
-            </tr>
-            <tr>
-              <td class="suite-url-cell">
-                <span class="suite-case-label">Safe marketing parameter</span>
-                <a href="https://example.com/articles/campaign-summary?campaign=april&keep=yes">https://example.com/articles/campaign-summary?campaign=april&keep=yes</a>
-              </td>
-              <td class="suite-expected-cell">
-                <p>Should remain <code>destination</code>.</p>
-                <p>The word <code>campaign</code> alone must not trigger tracker classification.</p>
+                <p>With only <code>utm_*</code> disabled, final href label stays <code>tracker</code>.</p>
+                <p>The destination keeps <code>utm_campaign</code>, <code>utm_source</code> while every other tracker family remains enabled.</p>
               </td>
             </tr>
           </tbody>
         </table>
+        </div>
       </section>
 
       <section class="suite-section">
-        <h2>Anchor Matrix: Wrapper Resolution</h2>
-        <table class="suite-table" aria-label="Wrapper resolution matrix">
+        <h2>Tracker Family: gclid</h2>
+        <p>Google Ads click identifier.</p>
+        <p>Each family includes cleaned, wrapper, global bypass, and per-tracker bypass coverage.</p>
+        <div class="suite-table-wrap">
+        <table class="suite-table" aria-label="Tracker Family: gclid">
+          <colgroup>
+            <col class="suite-table__input-column">
+            <col class="suite-table__expected-column">
+          </colgroup>
           <thead>
             <tr>
-              <th scope="col">URL Under Test</th>
+              <th scope="col">Input</th>
               <th scope="col">Expected Output</th>
             </tr>
           </thead>
           <tbody>
             <tr>
               <td class="suite-url-cell">
-                <span class="suite-case-label">Wrapper with <code>url</code></span>
-                <a href="https://tracker.example.net/click?url=https%3A%2F%2Fexample.com%2Farticles%2Fwrapped-suite%3Futm_source%3Ddigest%26fbclid%3DQQQ777%26keep%3Dyes">https://tracker.example.net/click?url=https%3A%2F%2Fexample.com%2Farticles%2Fwrapped-suite%3Futm_source%3Ddigest%26fbclid%3DQQQ777%26keep%3Dyes</a>
+                <span class="suite-case-label">Direct cleaned</span>
+                <a href="https://example.com/trackers/gclid/cleaned?gclid=gclid_cleaned_2&amp;keep=yes">https://example.com/trackers/gclid/cleaned?gclid=gclid_cleaned_2&amp;keep=yes</a>
               </td>
               <td class="suite-expected-cell">
-                <p>Must unwrap to the final <code>example.com</code> destination before classification.</p>
-                <p>Final href label should be <code>tracker</code> or <code>tracker cleaned</code>, never just the wrapper host.</p>
+                <p>Tracker stripping on: final href label <code>tracker cleaned</code>.</p>
+                <p>Final URL keeps only <code>keep=yes</code> after removing <code>gclid</code>.</p>
               </td>
             </tr>
             <tr>
               <td class="suite-url-cell">
-                <span class="suite-case-label">Wrapper with <code>target</code></span>
-                <a href="https://redirect.example.org/?target=https%3A%2F%2Fexample.com%2Farticles%2Ftarget-wrapper%3Futm_medium%3Demail%26keep%3Dyes">https://redirect.example.org/?target=https%3A%2F%2Fexample.com%2Farticles%2Ftarget-wrapper%3Futm_medium%3Demail%26keep%3Dyes</a>
+                <span class="suite-case-label">Global bypass retained</span>
+                <div class="suite-raw-url">https://example.com/trackers/gclid/retained?gclid=gclid_retained_2&amp;keep=yes</div>
               </td>
               <td class="suite-expected-cell">
-                <p>Must peel the <code>target</code> destination and preserve <code>keep=yes</code>.</p>
-                <p>UTM medium must be reported as a tracker when present.</p>
+                <p>Tracker stripping off: final href label <code>tracker</code>.</p>
+                <p>The destination keeps <code>gclid</code> because the global strip stage is bypassed.</p>
               </td>
             </tr>
             <tr>
               <td class="suite-url-cell">
-                <span class="suite-case-label">Wrapper with <code>redirect_url</code></span>
-                <a href="https://mailer.example.net/exit?redirect_url=https%3A%2F%2Fexample.com%2Farticles%2Fredirect-url-wrapper%3Ffbclid%3DSSS999%26keep%3Dyes">https://mailer.example.net/exit?redirect_url=https%3A%2F%2Fexample.com%2Farticles%2Fredirect-url-wrapper%3Ffbclid%3DSSS999%26keep%3Dyes</a>
+                <span class="suite-case-label">Wrapped cleaned</span>
+                <a href="https://redirect.example.org/?target=https%3A%2F%2Fexample.com%2Ftrackers%2Fgclid%2Fwrapped%3Fgclid%3Dgclid_wrapped_2%26keep%3Dyes">https://redirect.example.org/?target=https%3A%2F%2Fexample.com%2Ftrackers%2Fgclid%2Fwrapped%3Fgclid%3Dgclid_wrapped_2%26keep%3Dyes</a>
               </td>
               <td class="suite-expected-cell">
-                <p>Must peel the final destination and classify the embedded <code>fbclid</code> parameter correctly.</p>
-                <p>Final href label should be based on the peeled destination.</p>
+                <p>Must unwrap the <code>target</code> destination before classification.</p>
+                <p>Final href label should still become <code>tracker cleaned</code> after removing <code>gclid</code>.</p>
               </td>
             </tr>
             <tr>
               <td class="suite-url-cell">
-                <span class="suite-case-label">Wrapper with <code>continue</code></span>
-                <a href="https://continue.example.com/?continue=https%3A%2F%2Fexample.com%2Farticles%2Fcontinue-wrapper%3Fmc_eid%3DTTT000%26keep%3Dyes">https://continue.example.com/?continue=https%3A%2F%2Fexample.com%2Farticles%2Fcontinue-wrapper%3Fmc_eid%3DTTT000%26keep%3Dyes</a>
+                <span class="suite-case-label">Selective bypass retained</span>
+                <div class="suite-raw-url">https://example.com/trackers/gclid/selective-bypass?gclid=gclid_selective_2&amp;keep=yes</div>
               </td>
               <td class="suite-expected-cell">
-                <p>Must unwrap through <code>continue</code> and keep the non-tracker parameter.</p>
-                <p>Mailchimp tracker handling should still produce <code>tracker</code> or <code>tracker cleaned</code>.</p>
+                <p>With only <code>gclid</code> disabled, final href label stays <code>tracker</code>.</p>
+                <p>The destination keeps <code>gclid</code> while every other tracker family remains enabled.</p>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+      </section>
+
+      <section class="suite-section">
+        <h2>Tracker Family: dclid</h2>
+        <p>Google display click identifier.</p>
+        <p>Each family includes cleaned, wrapper, global bypass, and per-tracker bypass coverage.</p>
+        <div class="suite-table-wrap">
+        <table class="suite-table" aria-label="Tracker Family: dclid">
+          <colgroup>
+            <col class="suite-table__input-column">
+            <col class="suite-table__expected-column">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">Input</th>
+              <th scope="col">Expected Output</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Direct cleaned</span>
+                <a href="https://example.com/trackers/dclid/cleaned?dclid=dclid_cleaned_3&amp;keep=yes">https://example.com/trackers/dclid/cleaned?dclid=dclid_cleaned_3&amp;keep=yes</a>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Tracker stripping on: final href label <code>tracker cleaned</code>.</p>
+                <p>Final URL keeps only <code>keep=yes</code> after removing <code>dclid</code>.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Global bypass retained</span>
+                <div class="suite-raw-url">https://example.com/trackers/dclid/retained?dclid=dclid_retained_3&amp;keep=yes</div>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Tracker stripping off: final href label <code>tracker</code>.</p>
+                <p>The destination keeps <code>dclid</code> because the global strip stage is bypassed.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Wrapped cleaned</span>
+                <a href="https://mailer.example.net/exit?redirect_url=https%3A%2F%2Fexample.com%2Ftrackers%2Fdclid%2Fwrapped%3Fdclid%3Ddclid_wrapped_3%26keep%3Dyes">https://mailer.example.net/exit?redirect_url=https%3A%2F%2Fexample.com%2Ftrackers%2Fdclid%2Fwrapped%3Fdclid%3Ddclid_wrapped_3%26keep%3Dyes</a>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Must unwrap the <code>redirect_url</code> destination before classification.</p>
+                <p>Final href label should still become <code>tracker cleaned</code> after removing <code>dclid</code>.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Selective bypass retained</span>
+                <div class="suite-raw-url">https://example.com/trackers/dclid/selective-bypass?dclid=dclid_selective_3&amp;keep=yes</div>
+              </td>
+              <td class="suite-expected-cell">
+                <p>With only <code>dclid</code> disabled, final href label stays <code>tracker</code>.</p>
+                <p>The destination keeps <code>dclid</code> while every other tracker family remains enabled.</p>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+      </section>
+
+      <section class="suite-section">
+        <h2>Tracker Family: gbraid</h2>
+        <p>Google app-to-web attribution parameter.</p>
+        <p>Each family includes cleaned, wrapper, global bypass, and per-tracker bypass coverage.</p>
+        <div class="suite-table-wrap">
+        <table class="suite-table" aria-label="Tracker Family: gbraid">
+          <colgroup>
+            <col class="suite-table__input-column">
+            <col class="suite-table__expected-column">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">Input</th>
+              <th scope="col">Expected Output</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Direct cleaned</span>
+                <a href="https://example.com/trackers/gbraid/cleaned?gbraid=gbraid_cleaned_4&amp;keep=yes">https://example.com/trackers/gbraid/cleaned?gbraid=gbraid_cleaned_4&amp;keep=yes</a>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Tracker stripping on: final href label <code>tracker cleaned</code>.</p>
+                <p>Final URL keeps only <code>keep=yes</code> after removing <code>gbraid</code>.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Global bypass retained</span>
+                <div class="suite-raw-url">https://example.com/trackers/gbraid/retained?gbraid=gbraid_retained_4&amp;keep=yes</div>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Tracker stripping off: final href label <code>tracker</code>.</p>
+                <p>The destination keeps <code>gbraid</code> because the global strip stage is bypassed.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Wrapped cleaned</span>
+                <a href="https://continue.example.com/?continue=https%3A%2F%2Fexample.com%2Ftrackers%2Fgbraid%2Fwrapped%3Fgbraid%3Dgbraid_wrapped_4%26keep%3Dyes">https://continue.example.com/?continue=https%3A%2F%2Fexample.com%2Ftrackers%2Fgbraid%2Fwrapped%3Fgbraid%3Dgbraid_wrapped_4%26keep%3Dyes</a>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Must unwrap the <code>continue</code> destination before classification.</p>
+                <p>Final href label should still become <code>tracker cleaned</code> after removing <code>gbraid</code>.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Selective bypass retained</span>
+                <div class="suite-raw-url">https://example.com/trackers/gbraid/selective-bypass?gbraid=gbraid_selective_4&amp;keep=yes</div>
+              </td>
+              <td class="suite-expected-cell">
+                <p>With only <code>gbraid</code> disabled, final href label stays <code>tracker</code>.</p>
+                <p>The destination keeps <code>gbraid</code> while every other tracker family remains enabled.</p>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+      </section>
+
+      <section class="suite-section">
+        <h2>Tracker Family: wbraid</h2>
+        <p>Google web-to-app attribution parameter.</p>
+        <p>Each family includes cleaned, wrapper, global bypass, and per-tracker bypass coverage.</p>
+        <div class="suite-table-wrap">
+        <table class="suite-table" aria-label="Tracker Family: wbraid">
+          <colgroup>
+            <col class="suite-table__input-column">
+            <col class="suite-table__expected-column">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">Input</th>
+              <th scope="col">Expected Output</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Direct cleaned</span>
+                <a href="https://example.com/trackers/wbraid/cleaned?wbraid=wbraid_cleaned_5&amp;keep=yes">https://example.com/trackers/wbraid/cleaned?wbraid=wbraid_cleaned_5&amp;keep=yes</a>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Tracker stripping on: final href label <code>tracker cleaned</code>.</p>
+                <p>Final URL keeps only <code>keep=yes</code> after removing <code>wbraid</code>.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Global bypass retained</span>
+                <div class="suite-raw-url">https://example.com/trackers/wbraid/retained?wbraid=wbraid_retained_5&amp;keep=yes</div>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Tracker stripping off: final href label <code>tracker</code>.</p>
+                <p>The destination keeps <code>wbraid</code> because the global strip stage is bypassed.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Wrapped cleaned</span>
+                <a href="https://tracker.example.net/click?url=https%3A%2F%2Fexample.com%2Ftrackers%2Fwbraid%2Fwrapped%3Fwbraid%3Dwbraid_wrapped_5%26keep%3Dyes">https://tracker.example.net/click?url=https%3A%2F%2Fexample.com%2Ftrackers%2Fwbraid%2Fwrapped%3Fwbraid%3Dwbraid_wrapped_5%26keep%3Dyes</a>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Must unwrap the <code>url</code> destination before classification.</p>
+                <p>Final href label should still become <code>tracker cleaned</code> after removing <code>wbraid</code>.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Selective bypass retained</span>
+                <div class="suite-raw-url">https://example.com/trackers/wbraid/selective-bypass?wbraid=wbraid_selective_5&amp;keep=yes</div>
+              </td>
+              <td class="suite-expected-cell">
+                <p>With only <code>wbraid</code> disabled, final href label stays <code>tracker</code>.</p>
+                <p>The destination keeps <code>wbraid</code> while every other tracker family remains enabled.</p>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+      </section>
+
+      <section class="suite-section">
+        <h2>Tracker Family: msclkid</h2>
+        <p>Microsoft Ads click identifier.</p>
+        <p>Each family includes cleaned, wrapper, global bypass, and per-tracker bypass coverage.</p>
+        <div class="suite-table-wrap">
+        <table class="suite-table" aria-label="Tracker Family: msclkid">
+          <colgroup>
+            <col class="suite-table__input-column">
+            <col class="suite-table__expected-column">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">Input</th>
+              <th scope="col">Expected Output</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Direct cleaned</span>
+                <a href="https://example.com/trackers/msclkid/cleaned?msclkid=msclkid_cleaned_6&amp;keep=yes">https://example.com/trackers/msclkid/cleaned?msclkid=msclkid_cleaned_6&amp;keep=yes</a>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Tracker stripping on: final href label <code>tracker cleaned</code>.</p>
+                <p>Final URL keeps only <code>keep=yes</code> after removing <code>msclkid</code>.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Global bypass retained</span>
+                <div class="suite-raw-url">https://example.com/trackers/msclkid/retained?msclkid=msclkid_retained_6&amp;keep=yes</div>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Tracker stripping off: final href label <code>tracker</code>.</p>
+                <p>The destination keeps <code>msclkid</code> because the global strip stage is bypassed.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Wrapped cleaned</span>
+                <a href="https://redirect.example.org/?target=https%3A%2F%2Fexample.com%2Ftrackers%2Fmsclkid%2Fwrapped%3Fmsclkid%3Dmsclkid_wrapped_6%26keep%3Dyes">https://redirect.example.org/?target=https%3A%2F%2Fexample.com%2Ftrackers%2Fmsclkid%2Fwrapped%3Fmsclkid%3Dmsclkid_wrapped_6%26keep%3Dyes</a>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Must unwrap the <code>target</code> destination before classification.</p>
+                <p>Final href label should still become <code>tracker cleaned</code> after removing <code>msclkid</code>.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Selective bypass retained</span>
+                <div class="suite-raw-url">https://example.com/trackers/msclkid/selective-bypass?msclkid=msclkid_selective_6&amp;keep=yes</div>
+              </td>
+              <td class="suite-expected-cell">
+                <p>With only <code>msclkid</code> disabled, final href label stays <code>tracker</code>.</p>
+                <p>The destination keeps <code>msclkid</code> while every other tracker family remains enabled.</p>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+      </section>
+
+      <section class="suite-section">
+        <h2>Tracker Family: ttclid</h2>
+        <p>TikTok click identifier.</p>
+        <p>Each family includes cleaned, wrapper, global bypass, and per-tracker bypass coverage.</p>
+        <div class="suite-table-wrap">
+        <table class="suite-table" aria-label="Tracker Family: ttclid">
+          <colgroup>
+            <col class="suite-table__input-column">
+            <col class="suite-table__expected-column">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">Input</th>
+              <th scope="col">Expected Output</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Direct cleaned</span>
+                <a href="https://example.com/trackers/ttclid/cleaned?ttclid=ttclid_cleaned_7&amp;keep=yes">https://example.com/trackers/ttclid/cleaned?ttclid=ttclid_cleaned_7&amp;keep=yes</a>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Tracker stripping on: final href label <code>tracker cleaned</code>.</p>
+                <p>Final URL keeps only <code>keep=yes</code> after removing <code>ttclid</code>.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Global bypass retained</span>
+                <div class="suite-raw-url">https://example.com/trackers/ttclid/retained?ttclid=ttclid_retained_7&amp;keep=yes</div>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Tracker stripping off: final href label <code>tracker</code>.</p>
+                <p>The destination keeps <code>ttclid</code> because the global strip stage is bypassed.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Wrapped cleaned</span>
+                <a href="https://mailer.example.net/exit?redirect_url=https%3A%2F%2Fexample.com%2Ftrackers%2Fttclid%2Fwrapped%3Fttclid%3Dttclid_wrapped_7%26keep%3Dyes">https://mailer.example.net/exit?redirect_url=https%3A%2F%2Fexample.com%2Ftrackers%2Fttclid%2Fwrapped%3Fttclid%3Dttclid_wrapped_7%26keep%3Dyes</a>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Must unwrap the <code>redirect_url</code> destination before classification.</p>
+                <p>Final href label should still become <code>tracker cleaned</code> after removing <code>ttclid</code>.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Selective bypass retained</span>
+                <div class="suite-raw-url">https://example.com/trackers/ttclid/selective-bypass?ttclid=ttclid_selective_7&amp;keep=yes</div>
+              </td>
+              <td class="suite-expected-cell">
+                <p>With only <code>ttclid</code> disabled, final href label stays <code>tracker</code>.</p>
+                <p>The destination keeps <code>ttclid</code> while every other tracker family remains enabled.</p>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+      </section>
+
+      <section class="suite-section">
+        <h2>Tracker Family: li_fat_id</h2>
+        <p>LinkedIn ad attribution identifier.</p>
+        <p>Each family includes cleaned, wrapper, global bypass, and per-tracker bypass coverage.</p>
+        <div class="suite-table-wrap">
+        <table class="suite-table" aria-label="Tracker Family: li_fat_id">
+          <colgroup>
+            <col class="suite-table__input-column">
+            <col class="suite-table__expected-column">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">Input</th>
+              <th scope="col">Expected Output</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Direct cleaned</span>
+                <a href="https://example.com/trackers/li-fat-id/cleaned?li_fat_id=lifatid_cleaned_8&amp;keep=yes">https://example.com/trackers/li-fat-id/cleaned?li_fat_id=lifatid_cleaned_8&amp;keep=yes</a>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Tracker stripping on: final href label <code>tracker cleaned</code>.</p>
+                <p>Final URL keeps only <code>keep=yes</code> after removing <code>li_fat_id</code>.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Global bypass retained</span>
+                <div class="suite-raw-url">https://example.com/trackers/li-fat-id/retained?li_fat_id=lifatid_retained_8&amp;keep=yes</div>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Tracker stripping off: final href label <code>tracker</code>.</p>
+                <p>The destination keeps <code>li_fat_id</code> because the global strip stage is bypassed.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Wrapped cleaned</span>
+                <a href="https://continue.example.com/?continue=https%3A%2F%2Fexample.com%2Ftrackers%2Fli-fat-id%2Fwrapped%3Fli_fat_id%3Dlifatid_wrapped_8%26keep%3Dyes">https://continue.example.com/?continue=https%3A%2F%2Fexample.com%2Ftrackers%2Fli-fat-id%2Fwrapped%3Fli_fat_id%3Dlifatid_wrapped_8%26keep%3Dyes</a>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Must unwrap the <code>continue</code> destination before classification.</p>
+                <p>Final href label should still become <code>tracker cleaned</code> after removing <code>li_fat_id</code>.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Selective bypass retained</span>
+                <div class="suite-raw-url">https://example.com/trackers/li-fat-id/selective-bypass?li_fat_id=lifatid_selective_8&amp;keep=yes</div>
+              </td>
+              <td class="suite-expected-cell">
+                <p>With only <code>li_fat_id</code> disabled, final href label stays <code>tracker</code>.</p>
+                <p>The destination keeps <code>li_fat_id</code> while every other tracker family remains enabled.</p>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+      </section>
+
+      <section class="suite-section">
+        <h2>Tracker Family: fbclid</h2>
+        <p>Facebook click identifier.</p>
+        <p>Each family includes cleaned, wrapper, global bypass, and per-tracker bypass coverage.</p>
+        <div class="suite-table-wrap">
+        <table class="suite-table" aria-label="Tracker Family: fbclid">
+          <colgroup>
+            <col class="suite-table__input-column">
+            <col class="suite-table__expected-column">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">Input</th>
+              <th scope="col">Expected Output</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Direct cleaned</span>
+                <a href="https://example.com/trackers/fbclid/cleaned?fbclid=fbclid_cleaned_9&amp;keep=yes">https://example.com/trackers/fbclid/cleaned?fbclid=fbclid_cleaned_9&amp;keep=yes</a>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Tracker stripping on: final href label <code>tracker cleaned</code>.</p>
+                <p>Final URL keeps only <code>keep=yes</code> after removing <code>fbclid</code>.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Global bypass retained</span>
+                <div class="suite-raw-url">https://example.com/trackers/fbclid/retained?fbclid=fbclid_retained_9&amp;keep=yes</div>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Tracker stripping off: final href label <code>tracker</code>.</p>
+                <p>The destination keeps <code>fbclid</code> because the global strip stage is bypassed.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Wrapped cleaned</span>
+                <a href="https://tracker.example.net/click?url=https%3A%2F%2Fexample.com%2Ftrackers%2Ffbclid%2Fwrapped%3Ffbclid%3Dfbclid_wrapped_9%26keep%3Dyes">https://tracker.example.net/click?url=https%3A%2F%2Fexample.com%2Ftrackers%2Ffbclid%2Fwrapped%3Ffbclid%3Dfbclid_wrapped_9%26keep%3Dyes</a>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Must unwrap the <code>url</code> destination before classification.</p>
+                <p>Final href label should still become <code>tracker cleaned</code> after removing <code>fbclid</code>.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Selective bypass retained</span>
+                <div class="suite-raw-url">https://example.com/trackers/fbclid/selective-bypass?fbclid=fbclid_selective_9&amp;keep=yes</div>
+              </td>
+              <td class="suite-expected-cell">
+                <p>With only <code>fbclid</code> disabled, final href label stays <code>tracker</code>.</p>
+                <p>The destination keeps <code>fbclid</code> while every other tracker family remains enabled.</p>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+      </section>
+
+      <section class="suite-section">
+        <h2>Tracker Family: mc_cid</h2>
+        <p>Mailchimp campaign identifier.</p>
+        <p>Each family includes cleaned, wrapper, global bypass, and per-tracker bypass coverage.</p>
+        <div class="suite-table-wrap">
+        <table class="suite-table" aria-label="Tracker Family: mc_cid">
+          <colgroup>
+            <col class="suite-table__input-column">
+            <col class="suite-table__expected-column">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">Input</th>
+              <th scope="col">Expected Output</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Direct cleaned</span>
+                <a href="https://example.com/trackers/mc-cid/cleaned?mc_cid=mccid_cleaned_10&amp;keep=yes">https://example.com/trackers/mc-cid/cleaned?mc_cid=mccid_cleaned_10&amp;keep=yes</a>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Tracker stripping on: final href label <code>tracker cleaned</code>.</p>
+                <p>Final URL keeps only <code>keep=yes</code> after removing <code>mc_cid</code>.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Global bypass retained</span>
+                <div class="suite-raw-url">https://example.com/trackers/mc-cid/retained?mc_cid=mccid_retained_10&amp;keep=yes</div>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Tracker stripping off: final href label <code>tracker</code>.</p>
+                <p>The destination keeps <code>mc_cid</code> because the global strip stage is bypassed.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Wrapped cleaned</span>
+                <a href="https://redirect.example.org/?target=https%3A%2F%2Fexample.com%2Ftrackers%2Fmc-cid%2Fwrapped%3Fmc_cid%3Dmccid_wrapped_10%26keep%3Dyes">https://redirect.example.org/?target=https%3A%2F%2Fexample.com%2Ftrackers%2Fmc-cid%2Fwrapped%3Fmc_cid%3Dmccid_wrapped_10%26keep%3Dyes</a>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Must unwrap the <code>target</code> destination before classification.</p>
+                <p>Final href label should still become <code>tracker cleaned</code> after removing <code>mc_cid</code>.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Selective bypass retained</span>
+                <div class="suite-raw-url">https://example.com/trackers/mc-cid/selective-bypass?mc_cid=mccid_selective_10&amp;keep=yes</div>
+              </td>
+              <td class="suite-expected-cell">
+                <p>With only <code>mc_cid</code> disabled, final href label stays <code>tracker</code>.</p>
+                <p>The destination keeps <code>mc_cid</code> while every other tracker family remains enabled.</p>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+      </section>
+
+      <section class="suite-section">
+        <h2>Tracker Family: mc_eid</h2>
+        <p>Mailchimp email identifier.</p>
+        <p>Each family includes cleaned, wrapper, global bypass, and per-tracker bypass coverage.</p>
+        <div class="suite-table-wrap">
+        <table class="suite-table" aria-label="Tracker Family: mc_eid">
+          <colgroup>
+            <col class="suite-table__input-column">
+            <col class="suite-table__expected-column">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">Input</th>
+              <th scope="col">Expected Output</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Direct cleaned</span>
+                <a href="https://example.com/trackers/mc-eid/cleaned?mc_eid=mceid_cleaned_11&amp;keep=yes">https://example.com/trackers/mc-eid/cleaned?mc_eid=mceid_cleaned_11&amp;keep=yes</a>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Tracker stripping on: final href label <code>tracker cleaned</code>.</p>
+                <p>Final URL keeps only <code>keep=yes</code> after removing <code>mc_eid</code>.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Global bypass retained</span>
+                <div class="suite-raw-url">https://example.com/trackers/mc-eid/retained?mc_eid=mceid_retained_11&amp;keep=yes</div>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Tracker stripping off: final href label <code>tracker</code>.</p>
+                <p>The destination keeps <code>mc_eid</code> because the global strip stage is bypassed.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Wrapped cleaned</span>
+                <a href="https://mailer.example.net/exit?redirect_url=https%3A%2F%2Fexample.com%2Ftrackers%2Fmc-eid%2Fwrapped%3Fmc_eid%3Dmceid_wrapped_11%26keep%3Dyes">https://mailer.example.net/exit?redirect_url=https%3A%2F%2Fexample.com%2Ftrackers%2Fmc-eid%2Fwrapped%3Fmc_eid%3Dmceid_wrapped_11%26keep%3Dyes</a>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Must unwrap the <code>redirect_url</code> destination before classification.</p>
+                <p>Final href label should still become <code>tracker cleaned</code> after removing <code>mc_eid</code>.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Selective bypass retained</span>
+                <div class="suite-raw-url">https://example.com/trackers/mc-eid/selective-bypass?mc_eid=mceid_selective_11&amp;keep=yes</div>
+              </td>
+              <td class="suite-expected-cell">
+                <p>With only <code>mc_eid</code> disabled, final href label stays <code>tracker</code>.</p>
+                <p>The destination keeps <code>mc_eid</code> while every other tracker family remains enabled.</p>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+      </section>
+
+      <section class="suite-section">
+        <h2>Tracker Family: mc_tc</h2>
+        <p>Mailchimp tracking code parameter.</p>
+        <p>Each family includes cleaned, wrapper, global bypass, and per-tracker bypass coverage.</p>
+        <div class="suite-table-wrap">
+        <table class="suite-table" aria-label="Tracker Family: mc_tc">
+          <colgroup>
+            <col class="suite-table__input-column">
+            <col class="suite-table__expected-column">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">Input</th>
+              <th scope="col">Expected Output</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Direct cleaned</span>
+                <a href="https://example.com/trackers/mc-tc/cleaned?mc_tc=mctc_cleaned_12&amp;keep=yes">https://example.com/trackers/mc-tc/cleaned?mc_tc=mctc_cleaned_12&amp;keep=yes</a>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Tracker stripping on: final href label <code>tracker cleaned</code>.</p>
+                <p>Final URL keeps only <code>keep=yes</code> after removing <code>mc_tc</code>.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Global bypass retained</span>
+                <div class="suite-raw-url">https://example.com/trackers/mc-tc/retained?mc_tc=mctc_retained_12&amp;keep=yes</div>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Tracker stripping off: final href label <code>tracker</code>.</p>
+                <p>The destination keeps <code>mc_tc</code> because the global strip stage is bypassed.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Wrapped cleaned</span>
+                <a href="https://continue.example.com/?continue=https%3A%2F%2Fexample.com%2Ftrackers%2Fmc-tc%2Fwrapped%3Fmc_tc%3Dmctc_wrapped_12%26keep%3Dyes">https://continue.example.com/?continue=https%3A%2F%2Fexample.com%2Ftrackers%2Fmc-tc%2Fwrapped%3Fmc_tc%3Dmctc_wrapped_12%26keep%3Dyes</a>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Must unwrap the <code>continue</code> destination before classification.</p>
+                <p>Final href label should still become <code>tracker cleaned</code> after removing <code>mc_tc</code>.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Selective bypass retained</span>
+                <div class="suite-raw-url">https://example.com/trackers/mc-tc/selective-bypass?mc_tc=mctc_selective_12&amp;keep=yes</div>
+              </td>
+              <td class="suite-expected-cell">
+                <p>With only <code>mc_tc</code> disabled, final href label stays <code>tracker</code>.</p>
+                <p>The destination keeps <code>mc_tc</code> while every other tracker family remains enabled.</p>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+      </section>
+
+      <section class="suite-section">
+        <h2>Tracker Family: hsenc</h2>
+        <p>HubSpot email hash parameter.</p>
+        <p>Each family includes cleaned, wrapper, global bypass, and per-tracker bypass coverage.</p>
+        <div class="suite-table-wrap">
+        <table class="suite-table" aria-label="Tracker Family: hsenc">
+          <colgroup>
+            <col class="suite-table__input-column">
+            <col class="suite-table__expected-column">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">Input</th>
+              <th scope="col">Expected Output</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Direct cleaned</span>
+                <a href="https://example.com/trackers/hsenc/cleaned?hsenc=hsenc_cleaned_13&amp;keep=yes">https://example.com/trackers/hsenc/cleaned?hsenc=hsenc_cleaned_13&amp;keep=yes</a>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Tracker stripping on: final href label <code>tracker cleaned</code>.</p>
+                <p>Final URL keeps only <code>keep=yes</code> after removing <code>hsenc</code>.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Global bypass retained</span>
+                <div class="suite-raw-url">https://example.com/trackers/hsenc/retained?hsenc=hsenc_retained_13&amp;keep=yes</div>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Tracker stripping off: final href label <code>tracker</code>.</p>
+                <p>The destination keeps <code>hsenc</code> because the global strip stage is bypassed.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Wrapped cleaned</span>
+                <a href="https://tracker.example.net/click?url=https%3A%2F%2Fexample.com%2Ftrackers%2Fhsenc%2Fwrapped%3Fhsenc%3Dhsenc_wrapped_13%26keep%3Dyes">https://tracker.example.net/click?url=https%3A%2F%2Fexample.com%2Ftrackers%2Fhsenc%2Fwrapped%3Fhsenc%3Dhsenc_wrapped_13%26keep%3Dyes</a>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Must unwrap the <code>url</code> destination before classification.</p>
+                <p>Final href label should still become <code>tracker cleaned</code> after removing <code>hsenc</code>.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Selective bypass retained</span>
+                <div class="suite-raw-url">https://example.com/trackers/hsenc/selective-bypass?hsenc=hsenc_selective_13&amp;keep=yes</div>
+              </td>
+              <td class="suite-expected-cell">
+                <p>With only <code>hsenc</code> disabled, final href label stays <code>tracker</code>.</p>
+                <p>The destination keeps <code>hsenc</code> while every other tracker family remains enabled.</p>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+      </section>
+
+      <section class="suite-section">
+        <h2>Tracker Family: _hsmi</h2>
+        <p>HubSpot message identifier.</p>
+        <p>Each family includes cleaned, wrapper, global bypass, and per-tracker bypass coverage.</p>
+        <div class="suite-table-wrap">
+        <table class="suite-table" aria-label="Tracker Family: _hsmi">
+          <colgroup>
+            <col class="suite-table__input-column">
+            <col class="suite-table__expected-column">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">Input</th>
+              <th scope="col">Expected Output</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Direct cleaned</span>
+                <a href="https://example.com/trackers/hsmi/cleaned?_hsmi=hsmi_cleaned_14&amp;keep=yes">https://example.com/trackers/hsmi/cleaned?_hsmi=hsmi_cleaned_14&amp;keep=yes</a>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Tracker stripping on: final href label <code>tracker cleaned</code>.</p>
+                <p>Final URL keeps only <code>keep=yes</code> after removing <code>_hsmi</code>.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Global bypass retained</span>
+                <div class="suite-raw-url">https://example.com/trackers/hsmi/retained?_hsmi=hsmi_retained_14&amp;keep=yes</div>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Tracker stripping off: final href label <code>tracker</code>.</p>
+                <p>The destination keeps <code>_hsmi</code> because the global strip stage is bypassed.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Wrapped cleaned</span>
+                <a href="https://redirect.example.org/?target=https%3A%2F%2Fexample.com%2Ftrackers%2Fhsmi%2Fwrapped%3F_hsmi%3Dhsmi_wrapped_14%26keep%3Dyes">https://redirect.example.org/?target=https%3A%2F%2Fexample.com%2Ftrackers%2Fhsmi%2Fwrapped%3F_hsmi%3Dhsmi_wrapped_14%26keep%3Dyes</a>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Must unwrap the <code>target</code> destination before classification.</p>
+                <p>Final href label should still become <code>tracker cleaned</code> after removing <code>_hsmi</code>.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Selective bypass retained</span>
+                <div class="suite-raw-url">https://example.com/trackers/hsmi/selective-bypass?_hsmi=hsmi_selective_14&amp;keep=yes</div>
+              </td>
+              <td class="suite-expected-cell">
+                <p>With only <code>_hsmi</code> disabled, final href label stays <code>tracker</code>.</p>
+                <p>The destination keeps <code>_hsmi</code> while every other tracker family remains enabled.</p>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+      </section>
+
+      <section class="suite-section">
+        <h2>Tracker Family: hsCtaTracking</h2>
+        <p>HubSpot CTA tracking parameter.</p>
+        <p>Each family includes cleaned, wrapper, global bypass, and per-tracker bypass coverage.</p>
+        <div class="suite-table-wrap">
+        <table class="suite-table" aria-label="Tracker Family: hsCtaTracking">
+          <colgroup>
+            <col class="suite-table__input-column">
+            <col class="suite-table__expected-column">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">Input</th>
+              <th scope="col">Expected Output</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Direct cleaned</span>
+                <a href="https://example.com/trackers/hsctatracking/cleaned?hsctatracking=hsctatracking_cleaned_15&amp;keep=yes">https://example.com/trackers/hsctatracking/cleaned?hsctatracking=hsctatracking_cleaned_15&amp;keep=yes</a>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Tracker stripping on: final href label <code>tracker cleaned</code>.</p>
+                <p>Final URL keeps only <code>keep=yes</code> after removing <code>hsctatracking</code>.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Global bypass retained</span>
+                <div class="suite-raw-url">https://example.com/trackers/hsctatracking/retained?hsctatracking=hsctatracking_retained_15&amp;keep=yes</div>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Tracker stripping off: final href label <code>tracker</code>.</p>
+                <p>The destination keeps <code>hsctatracking</code> because the global strip stage is bypassed.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Wrapped cleaned</span>
+                <a href="https://mailer.example.net/exit?redirect_url=https%3A%2F%2Fexample.com%2Ftrackers%2Fhsctatracking%2Fwrapped%3FhsCtaTracking%3Dwrapped_15%26keep%3Dyes">https://mailer.example.net/exit?redirect_url=https%3A%2F%2Fexample.com%2Ftrackers%2Fhsctatracking%2Fwrapped%3FhsCtaTracking%3Dwrapped_15%26keep%3Dyes</a>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Must unwrap the <code>redirect_url</code> destination before classification.</p>
+                <p>Final href label should still become <code>tracker cleaned</code> after removing <code>hsctatracking</code>.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Selective bypass retained</span>
+                <div class="suite-raw-url">https://example.com/trackers/hsctatracking/selective-bypass?hsCtaTracking=selective_15&amp;keep=yes</div>
+              </td>
+              <td class="suite-expected-cell">
+                <p>With only <code>hsCtaTracking</code> disabled, final href label stays <code>tracker</code>.</p>
+                <p>The destination keeps <code>hsctatracking</code> while every other tracker family remains enabled.</p>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+      </section>
+
+      <section class="suite-section">
+        <h2>Email Link Coverage</h2>
+        <p>These cases verify that mailto links and standalone email addresses are recognized as email targets.</p>
+        <div class="suite-table-wrap">
+        <table class="suite-table" aria-label="Email Link Coverage">
+          <colgroup>
+            <col class="suite-table__input-column">
+            <col class="suite-table__expected-column">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">Input</th>
+              <th scope="col">Expected Output</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Mailto link</span>
+                <a href="mailto:debugger@example.com">mailto:debugger@example.com</a>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Mailto links should classify as <code>email</code> instead of <code>unknown</code>.</p>
+                <p>The final link label should show the mailbox address rather than a synthetic scheme label.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Bare email</span>
+                <div class="suite-raw-url">debugger@example.com</div>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Standalone email addresses should be detected and promoted to a <code>mailto:</code> target.</p>
+                <p>The displayed type should remain <code>email</code> throughout the pipeline.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Mailto anchor HTML</span>
+                <a href="mailto:debugger@example.com">mailto:debugger@example.com</a>
+              </td>
+              <td class="suite-expected-cell">
+                <p>HTML <code>mailto:</code> anchors should survive HTML-path detection and classify as <code>email</code>.</p>
+                <p>This guards the real mirror path instead of only the plain-text fallback.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Bare email HTML</span>
+                <div class="suite-raw-url">debugger@example.com</div>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Bare email text inside HTML content should be detected, not only bare email in plain text mode.</p>
+                <p>The resulting target should still become <code>mailto:</code> with <code>email</code> typing.</p>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+      </section>
+
+      <section class="suite-section">
+        <h2>Safe Non-Tracker Coverage</h2>
+        <p>These cases guard parameters that should stay visible even when tracker cleaning is enabled.</p>
+        <div class="suite-table-wrap">
+        <table class="suite-table" aria-label="Safe Non-Tracker Coverage">
+          <colgroup>
+            <col class="suite-table__input-column">
+            <col class="suite-table__expected-column">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">Input</th>
+              <th scope="col">Expected Output</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Email parameter</span>
+                <a href="https://example.com/safe/email?email=debugger%40example.com&amp;keep=yes">https://example.com/safe/email?email=debugger%40example.com&amp;keep=yes</a>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Final href label should remain <code>destination</code>.</p>
+                <p>Email-like parameters must not be treated as tracking identifiers.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Campaign parameter</span>
+                <div class="suite-raw-url">https://example.com/safe/campaign?campaign=april&amp;keep=yes</div>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Final href label should remain <code>destination</code>.</p>
+                <p>The plain word <code>campaign</code> must not trigger tracker classification by itself.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">reply_to parameter</span>
+                <div class="suite-raw-url">https://example.com/safe/reply-to?reply_to=debugger%40example.com&amp;keep=yes</div>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Final href label should remain <code>destination</code>.</p>
+                <p>Contact-style parameters such as <code>reply_to</code> must stay in the destination URL.</p>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+      </section>
+
+      <section class="suite-section">
+        <h2>Wrapper And Nested Resolution</h2>
+        <p>These cases focus on multi-hop wrapper peeling beyond the per-tracker family coverage.</p>
+        <div class="suite-table-wrap">
+        <table class="suite-table" aria-label="Wrapper And Nested Resolution">
+          <colgroup>
+            <col class="suite-table__input-column">
+            <col class="suite-table__expected-column">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">Input</th>
+              <th scope="col">Expected Output</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="suite-url-cell">
+                <span class="suite-case-label">Nested wrapper chain</span>
+                <a href="https://redirect.example.org/?target=https%3A%2F%2Ftracker.example.net%2Fclick%3Furl%3Dhttps%253A%252F%252Fexample.com%252Fwrappers%252Fnested-cleaned%253Fttclid%253Dnested_chain%2526keep%253Dyes">https://redirect.example.org/?target=https%3A%2F%2Ftracker.example.net%2Fclick%3Furl%3Dhttps%253A%252F%252Fexample.com%252Fwrappers%252Fnested-cleaned%253Fttclid%253Dnested_chain%2526keep%253Dyes</a>
+              </td>
+              <td class="suite-expected-cell">
+                <p>Must unwrap through more than one wrapper layer before classification.</p>
+                <p>Final href label should become <code>tracker cleaned</code> after removing <code>ttclid</code>.</p>
               </td>
             </tr>
             <tr>
               <td class="suite-url-cell">
                 <span class="suite-case-label">Double-encoded wrapper</span>
-                <a href="https://edge.example.org/click?url=https%253A%252F%252Fexample.com%252Farticles%252Fdouble-encoded%253Fhsenc%253DUUU111%2526keep%253Dyes">https://edge.example.org/click?url=https%253A%252F%252Fexample.com%252Farticles%252Fdouble-encoded%253Fhsenc%253DUUU111%2526keep%253Dyes</a>
+                <a href="https://edge.example.org/click?url=https%253A%252F%252Fexample.com%252Fwrappers%252Fdouble-encoded%253Fhsenc%253Ddouble_encoded%2526keep%253Dyes">https://edge.example.org/click?url=https%253A%252F%252Fexample.com%252Fwrappers%252Fdouble-encoded%253Fhsenc%253Ddouble_encoded%2526keep%253Dyes</a>
               </td>
               <td class="suite-expected-cell">
                 <p>Must decode only as far as needed to recover a valid destination.</p>
-                <p>Final href label should still resolve to the <code>example.com</code> destination.</p>
+                <p>Final href label should still be based on the peeled <code>example.com</code> destination.</p>
               </td>
             </tr>
             <tr>
               <td class="suite-url-cell">
-                <span class="suite-case-label">Nested wrapper chain</span>
-                <a href="https://chain.example.com/?target=https%3A%2F%2Fredirect.example.org%2F%3Furl%3Dhttps%253A%252F%252Fexample.com%252Farticles%252Fnested-chain%253Fttclid%253DVVV222%2526keep%253Dyes">https://chain.example.com/?target=https%3A%2F%2Fredirect.example.org%2F%3Furl%3Dhttps%253A%252F%252Fexample.com%252Farticles%252Fnested-chain%253Fttclid%253DVVV222%2526keep%253Dyes</a>
+                <span class="suite-case-label">Safe wrapper final labeling</span>
+                <a href="https://tracker.example.net/click?url=https%3A%2F%2Fexample.com%2Fwrappers%2Fsafe-email%3Femail%3Dqa%2540example.com%26keep%3Dyes">https://tracker.example.net/click?url=https%3A%2F%2Fexample.com%2Fwrappers%2Fsafe-email%3Femail%3Dqa%2540example.com%26keep%3Dyes</a>
               </td>
               <td class="suite-expected-cell">
-                <p>Must unwrap all the way through multiple wrapper layers.</p>
-                <p>The final href label must land on <code>example.com</code>, not the intermediate wrapper.</p>
-              </td>
-            </tr>
-            <tr>
-              <td class="suite-url-cell">
-                <span class="suite-case-label">Nested wrapper with safe final email parameter</span>
-                <a href="https://safe.example.net/?url=https%3A%2F%2Fexample.com%2Farticles%2Fsafe-wrapper%3Femail%3Dqa%2540example.com%26keep%3Dyes">https://safe.example.net/?url=https%3A%2F%2Fexample.com%2Farticles%2Fsafe-wrapper%3Femail%3Dqa%2540example.com%26keep%3Dyes</a>
-              </td>
-              <td class="suite-expected-cell">
-                <p>Must unwrap to the safe destination and keep the <code>email</code> parameter.</p>
-                <p>Email addresses must not promote the final href label to tracker status.</p>
+                <p>A wrapper that peels to a safe destination should finish as <code>destination</code>.</p>
+                <p>The final href label must be based on the peeled <code>example.com</code> URL rather than the wrapper shell.</p>
               </td>
             </tr>
           </tbody>
         </table>
+        </div>
       </section>
 
       <section class="suite-section">
-        <h2>Plain-Text Matrix</h2>
-        <table class="suite-table" aria-label="Plain-text extraction matrix">
+        <h2>Repair-Sensitive Coverage</h2>
+        <p>Normalization repair is off by default, so these cases pin both the bypassed and enabled flows.</p>
+        <div class="suite-table-wrap">
+        <table class="suite-table" aria-label="Repair-Sensitive Coverage">
+          <colgroup>
+            <col class="suite-table__input-column">
+            <col class="suite-table__expected-column">
+          </colgroup>
           <thead>
             <tr>
-              <th scope="col">URL Under Test</th>
+              <th scope="col">Input</th>
               <th scope="col">Expected Output</th>
             </tr>
           </thead>
           <tbody>
             <tr>
               <td class="suite-url-cell">
-                <span class="suite-case-label">Plain text UTM case</span>
-                <div class="suite-raw-url">https://example.com/plain/utm-case?utm_source=plain_text&utm_content=footer&keep=yes</div>
+                <span class="suite-case-label">Trailing punctuation, repair off</span>
+                <div class="suite-raw-url">https://example.com/repair/off?keep=yes).</div>
               </td>
               <td class="suite-expected-cell">
-                <p>Should be extracted from visible text and classified as <code>tracker</code> or <code>tracker cleaned</code>.</p>
-                <p>Final destination should stay on <code>example.com</code>.</p>
+                <p>Normalization repair off: the damaged tail stays in the final URL.</p>
+                <p>The href label should still read <code>destination</code>.</p>
               </td>
             </tr>
             <tr>
               <td class="suite-url-cell">
-                <span class="suite-case-label">Plain text ad-click case</span>
-                <div class="suite-raw-url">https://example.com/plain/ad-case?gclid=OOO555&msclkid=PPP666&keep=yes</div>
+                <span class="suite-case-label">Trailing punctuation, repair on</span>
+                <div class="suite-raw-url">https://example.com/repair/on?keep=yes).</div>
               </td>
               <td class="suite-expected-cell">
-                <p>Should show known tracker detection for ad-click IDs in plain text.</p>
-                <p>Tracker pane should list removed names when stripping is enabled.</p>
+                <p>Normalization repair on: trim the trailing punctuation before pipeline classification.</p>
+                <p>The final destination should become <code>https://example.com/repair/on?keep=yes</code>.</p>
               </td>
             </tr>
             <tr>
               <td class="suite-url-cell">
-                <span class="suite-case-label">Plain text safe email parameter</span>
-                <div class="suite-raw-url">https://example.com/plain/email-case?email=tester@example.com&keep=yes</div>
+                <span class="suite-case-label">Tracked punctuation, repair off</span>
+                <div class="suite-raw-url">https://example.com/repair/tracked-off?gclid=111&amp;keep=yes).</div>
               </td>
               <td class="suite-expected-cell">
-                <p>Should be extracted and remain <code>destination</code>.</p>
-                <p>The <code>email</code> parameter must not be counted as a tracker.</p>
+                <p>Normalization repair off: the tracker is removed but the damaged tail remains encoded in the kept value.</p>
+                <p>The href label should still read <code>tracker cleaned</code>.</p>
               </td>
             </tr>
             <tr>
               <td class="suite-url-cell">
-                <span class="suite-case-label">Plain text wrapper case</span>
-                <div class="suite-raw-url">https://redirect.example.org/?target=https%3A%2F%2Fexample.com%2Fplain%2Fwrapped%3Ffbclid%3DRRR888%26keep%3Dyes</div>
+                <span class="suite-case-label">Tracked punctuation, repair on</span>
+                <div class="suite-raw-url">https://example.com/repair/tracked-on?gclid=111&amp;keep=yes).</div>
               </td>
               <td class="suite-expected-cell">
-                <p>Must unwrap from plain text and classify the final destination rather than the wrapper.</p>
-                <p>Final href label should show tracker state for the embedded <code>fbclid</code>.</p>
+                <p>Normalization repair on: remove the damaged tail before stripping <code>gclid</code>.</p>
+                <p>The final destination should become <code>https://example.com/repair/tracked-on?keep=yes</code>.</p>
               </td>
             </tr>
             <tr>
               <td class="suite-url-cell">
-                <span class="suite-case-label">Plain text HubSpot case</span>
-                <div class="suite-raw-url">https://example.com/plain/hubspot-case?hsenc=WWW333&_hsmi=XXX444&keep=yes</div>
+                <span class="suite-case-label">Wrapped punctuation, repair on</span>
+                <a href="https://mailer.example.net/exit?redirect_url=https%3A%2F%2Fexample.com%2Frepair%2Fwrapped%3Futm_source%3Drepair%26keep%3Dyes).">https://mailer.example.net/exit?redirect_url=https%3A%2F%2Fexample.com%2Frepair%2Fwrapped%3Futm_source%3Drepair%26keep%3Dyes).</a>
               </td>
               <td class="suite-expected-cell">
-                <p>Should detect HubSpot tracker parameters from raw visible text.</p>
-                <p>Final href label should switch to <code>tracker cleaned</code> when those parameters are removed.</p>
-              </td>
-            </tr>
-            <tr>
-              <td class="suite-url-cell">
-                <span class="suite-case-label">Plain text LinkedIn case</span>
-                <div class="suite-raw-url">https://example.com/plain/linkedin-case?li_fat_id=YYY555&keep=yes</div>
-              </td>
-              <td class="suite-expected-cell">
-                <p>Should classify as a tracker-bearing destination.</p>
-                <p>LinkedIn tracking must appear in the hover breakdown under <code>Tracker Parameters</code>.</p>
-              </td>
-            </tr>
-            <tr>
-              <td class="suite-url-cell">
-                <span class="suite-case-label">Plain text Mailchimp case</span>
-                <div class="suite-raw-url">https://example.com/plain/mailchimp-case?mc_cid=ZZZ666&mc_eid=AAA777&mc_tc=BBB888&keep=yes</div>
-              </td>
-              <td class="suite-expected-cell">
-                <p>Should detect Mailchimp tracker names and classify the final href accordingly.</p>
-                <p>Tracker pane should list all removed Mailchimp parameters when stripping is enabled.</p>
-              </td>
-            </tr>
-            <tr>
-              <td class="suite-url-cell">
-                <span class="suite-case-label">Plain text nested wrapper case</span>
-                <div class="suite-raw-url">https://wrap.example.net/?continue=https%3A%2F%2Fredirect.example.org%2F%3Ftarget%3Dhttps%253A%252F%252Fexample.com%252Fplain%252Fnested-wrapper%253Futm_campaign%253Dplain_suite%2526keep%253Dyes</div>
-              </td>
-              <td class="suite-expected-cell">
-                <p>Must unwrap through all wrapper layers and land on the final <code>example.com</code> destination.</p>
-                <p>Tracker stripping on: final href label <code>tracker cleaned</code>. Tracker stripping off: final href label <code>tracker</code>.</p>
-              </td>
-            </tr>
-            <tr>
-              <td class="suite-url-cell">
-                <span class="suite-case-label">Plain text safe reply-to case</span>
-                <div class="suite-raw-url">https://example.com/plain/contact-case?reply_to=debugger@example.com&keep=yes</div>
-              </td>
-              <td class="suite-expected-cell">
-                <p>Should remain <code>destination</code>.</p>
-                <p>A contact-style <code>reply_to</code> parameter must stay under non-tracker parameters.</p>
+                <p>Must unwrap the destination and then repair trailing punctuation before tracker stripping.</p>
+                <p>The final destination should become <code>https://example.com/repair/wrapped?keep=yes</code>.</p>
               </td>
             </tr>
           </tbody>
         </table>
+        </div>
       </section>
 
       <section class="suite-section">
-        <h2>Repair-Sensitive Matrix</h2>
-        <table class="suite-table" aria-label="Repair-sensitive URL matrix">
+        <h2>Protocol Recovery Coverage</h2>
+        <p>These cases were previously rebuild targets. They now verify malformed protocol recovery as supported behavior when normalization repair is enabled.</p>
+        <div class="suite-table-wrap">
+        <table class="suite-table" aria-label="Protocol Recovery Coverage">
+          <colgroup>
+            <col class="suite-table__input-column">
+            <col class="suite-table__expected-column">
+          </colgroup>
           <thead>
             <tr>
-              <th scope="col">URL Under Test</th>
-              <th scope="col">Expected Output</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td class="suite-url-cell">
-                <span class="suite-case-label">Trailing punctuation destination</span>
-                <div class="suite-raw-url">https://example.com/path?keep=yes).</div>
-              </td>
-              <td class="suite-expected-cell">
-                <p>Normalization repair on: remove trailing punctuation and resolve to <code>https://example.com/path?keep=yes</code>.</p>
-                <p>Normalization repair off: retain the damaged tail, but the href label still reads <code>destination</code>.</p>
-              </td>
-            </tr>
-            <tr>
-              <td class="suite-url-cell">
-                <span class="suite-case-label">Tracked destination with trailing punctuation</span>
-                <div class="suite-raw-url">https://example.com/path?gclid=111&amp;keep=yes).</div>
-              </td>
-              <td class="suite-expected-cell">
-                <p>Normalization repair on: final URL should clean to <code>https://example.com/path?keep=yes</code>.</p>
-                <p>Normalization repair off: tracker stripping still removes <code>gclid</code>, but the damaged tail remains encoded in the kept parameter.</p>
-              </td>
-            </tr>
-            <tr>
-              <td class="suite-url-cell">
-                <span class="suite-case-label">Wrapped destination with trailing punctuation</span>
-                <div class="suite-raw-url">https://redirect.example.org/?target=https%3A%2F%2Fexample.com%2Frepair-wrapper%3Futm_source%3Drepair%26keep%3Dyes).</div>
-              </td>
-              <td class="suite-expected-cell">
-                <p>Normalization repair on: unwrap and clean to <code>https://example.com/repair-wrapper?keep=yes</code>.</p>
-                <p>Normalization repair off: unwrap still works, but the damaged tail remains percent-encoded in the final kept value.</p>
-              </td>
-            </tr>
-            <tr>
-              <td class="suite-url-cell">
-                <span class="suite-case-label">Angle-wrapped destination</span>
-                <div class="suite-raw-url">&lt;https://example.com/path?keep=yes&gt;</div>
-              </td>
-              <td class="suite-expected-cell">
-                <p>Should be detected in both modes because the valid absolute URL token is still present inside the angle brackets.</p>
-                <p>Final href label remains <code>destination</code>.</p>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </section>
-
-      <section class="suite-section">
-        <h2>Future Rebuild-Only Matrix</h2>
-        <table class="suite-table" aria-label="Future malformed URL rebuild matrix">
-          <thead>
-            <tr>
-              <th scope="col">URL Under Test</th>
+              <th scope="col">Input</th>
               <th scope="col">Expected Output</th>
             </tr>
           </thead>
@@ -422,8 +1258,8 @@
                 <div class="suite-raw-url">https:/example.com/path?keep=yes</div>
               </td>
               <td class="suite-expected-cell">
-                <p>Current expected output: empty.</p>
-                <p>Future rebuild target: detect and repair to <code>https://example.com/path?keep=yes</code>.</p>
+                <p>Normalization repair on: recover the missing slash and produce <code>https://example.com/path?keep=yes</code>.</p>
+                <p>The final href label should remain <code>destination</code>.</p>
               </td>
             </tr>
             <tr>
@@ -432,8 +1268,8 @@
                 <div class="suite-raw-url">https//example.com/path?keep=yes</div>
               </td>
               <td class="suite-expected-cell">
-                <p>Current expected output: empty.</p>
-                <p>Future rebuild target: reconstruct a valid absolute URL before pipeline classification.</p>
+                <p>Normalization repair on: reconstruct the missing colon and recover a valid absolute URL.</p>
+                <p>The final href label should remain <code>destination</code>.</p>
               </td>
             </tr>
             <tr>
@@ -442,8 +1278,8 @@
                 <div class="suite-raw-url">ttps://example.com/path?keep=yes</div>
               </td>
               <td class="suite-expected-cell">
-                <p>Current expected output: empty.</p>
-                <p>Future rebuild target: recover the intended scheme and continue through the normal pipeline.</p>
+                <p>Normalization repair on: restore the missing leading character in the scheme.</p>
+                <p>The final href label should remain <code>destination</code>.</p>
               </td>
             </tr>
             <tr>
@@ -452,40 +1288,57 @@
                 <div class="suite-raw-url">https:// example.com/path?keep=yes</div>
               </td>
               <td class="suite-expected-cell">
-                <p>Current expected output: empty.</p>
-                <p>Future rebuild target: collapse the damaged space and treat the result as one URL token.</p>
+                <p>Normalization repair on: collapse the broken whitespace and recover one absolute URL token.</p>
+                <p>The final href label should remain <code>destination</code>.</p>
               </td>
             </tr>
           </tbody>
         </table>
+        </div>
       </section>
 
-      <section class="suite-section">
-        <h2>Expected Debug Signals</h2>
-        <ul class="info-list">
-          <li>Detection mode should read as <code>full-page-read</code>.</li>
-          <li>The workflow tracker pane should show removed parameter names when stripping is enabled.</li>
-          <li>The hover breakdown should place known tracker parameters in <code>Tracker Parameters</code> and non-trackers in <code>Other Parameters</code>.</li>
-          <li>The final href label should show <code>tracker</code> when tracker parameters remain and <code>tracker cleaned</code> when they are stripped.</li>
-          <li>Wrapper cases should demonstrate whether the resolver is peeling <code>url</code>, <code>target</code>, <code>redirect_url</code>, and <code>continue</code> consistently.</li>
-          <li>Repair-sensitive rows should show whether normalization repair changes the final URL while leaving wrapper peeling active.</li>
-        </ul>
-      </section>
+      <p class="status-message"><strong>Assertion model:</strong> this page does not visually rewrite the listed URLs; results are computed in memory and reflected in the badge and saved report.</p>
+      <p id="statusMessage" class="status-message" aria-live="polite">Preparing in-page test checks...</p>
     </article>
   </section>
 </main>
 
+<script src="./page-ui.js"></script>
 <script src="./page-navigation.js"></script>
 <script src="./debug-redaction.js"></script>
 <script src="./debug.js"></script>
+<script src="./page-runtime.js"></script>
+<script src="./page-dependencies.js"></script>
+<script src="./page-pane-shell.js"></script>
+<script src="./page-pane-bootstrap.js"></script>
+<script src="./page-pane-assembly.js"></script>
+<script src="./page-pane-layout.js"></script>
+<script src="./page-pane-mirror.js"></script>
+<script src="./page-pane-diagnostics.js"></script>
+<script src="./page-pane-snapshot.js"></script>
+<script src="./inbox-detector-registry.js"></script>
+<script src="./inbox-detectors.js"></script>
+<script src="./pipeline-default-plugin.js"></script>
+<script src="./pipeline-plugin-registry.js"></script>
 <script src="./tracking-parameter-model.js"></script>
 <script src="./pipeline-base.js"></script>
 <script src="./pipeline-url-resolver.js"></script>
 <script src="./pipeline-html-rewriter.js"></script>
+<script src="./pipeline-detector-registry.js"></script>
+<script src="./pipeline-detection.js"></script>
+<script src="./pipeline-browser-validation.js"></script>
+<script src="./sidepanel-browser-validation.js"></script>
+<script src="./pipeline-resolution.js"></script>
+<script src="./pipeline-assembly.js"></script>
+<script src="./pipeline-diagnostics.js"></script>
+<script src="./pipeline-stage-runner.js"></script>
 <script src="./pipeline.js"></script>
-<script src="./storage-model.js"></script>
-<script src="./inbox-detectors.js"></script>
+<script src="./email-candidate-discovery.js"></script>
+<script src="./email-root-summary.js"></script>
+<script src="./inbox-browser-fixture-validation.js"></script>
 <script src="./settings-opener.js"></script>
-<script src="./content-script.js"></script>
+<script src="./test-suite-data.js"></script>
+<script src="./inbox-browser-fixture-data.js"></script>
+<script src="./test-suite.js"></script>
 </body>
 </html>

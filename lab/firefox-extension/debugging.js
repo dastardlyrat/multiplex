@@ -2,8 +2,19 @@
 (function initializeUrlForensicsDebuggingPage() {
   "use strict";
 
-  const extensionApi = typeof browser !== "undefined" ? browser : (typeof chrome !== "undefined" ? chrome : null);
-  const pageUi = globalThis.urlForensicsPageUi;
+  const globalScope = typeof globalThis !== "undefined" ? globalThis : null;
+  const pageRuntimeFactory = globalScope ? globalScope.urlForensicsPageRuntime : null;
+
+  if (!pageRuntimeFactory || typeof pageRuntimeFactory.create !== "function") {
+    throw new Error("URL Forensics page runtime helpers are unavailable.");
+  }
+
+  const pageRuntime = pageRuntimeFactory.create({
+    globalScope: globalScope,
+    requirePageUi: true
+  });
+  const extensionApi = pageRuntime.extensionApi;
+  const pageUi = pageRuntime.pageUi;
   const defaultDebugConfig = {
     level: "off",
     categories: {
@@ -45,10 +56,6 @@
     emitDebugTestButton: document.getElementById("emitDebugTestButton"),
     clearDebugButton: document.getElementById("clearDebugButton"),
     exportDebugButton: document.getElementById("exportDebugButton"),
-    openDiagnosticsPageButton: document.getElementById("openDiagnosticsPageButton"),
-    openStoragePageButton: document.getElementById("openStoragePageButton"),
-    openSettingsPageButton: document.getElementById("openSettingsPageButton"),
-    openHelpPageButton: document.getElementById("openHelpPageButton"),
     debugBadge: document.getElementById("debugBadge"),
     debugLevelSelect: document.getElementById("debugLevelSelect"),
     debugTypeFilterSelect: document.getElementById("debugTypeFilterSelect"),
@@ -58,7 +65,7 @@
     debugTrace: document.getElementById("debugTrace"),
     statusMessage: document.getElementById("statusMessage")
   };
-  const debugApi = typeof globalThis !== "undefined" ? globalThis.mergedLinkLabDebug : null;
+  const debugApi = pageRuntime.debugApi;
 
   if (debugApi && typeof debugApi.configure === "function") {
     debugApi.configure({ context: "debugging-page", module: "debugging" });
@@ -689,15 +696,6 @@
   }
 
   // Function: open extension page.
-  async function openExtensionPage(pageName, label) {
-    await pageUi.openExtensionPage(extensionApi, pageName, label, setStatus);
-  }
-
-  // Function: open settings page.
-  async function openSettingsPage() {
-    await pageUi.openSettingsPage(extensionApi, setStatus);
-  }
-
   // Function: update render limit.
   function updateRenderLimit() {
     debugState.renderLimit = normalizeVisibleRenderLimit(DOM.renderLimitSelect ? DOM.renderLimitSelect.value : debugState.renderLimit);
@@ -741,28 +739,6 @@
 
     if (DOM.exportDebugButton) {
       DOM.exportDebugButton.addEventListener("click", exportDebugEvents);
-    }
-
-    if (DOM.openDiagnosticsPageButton) {
-      DOM.openDiagnosticsPageButton.addEventListener("click", function openDiagnosticsFromDebugging() {
-        openExtensionPage("diagnostics.html", "Diagnostics");
-      });
-    }
-
-    if (DOM.openStoragePageButton) {
-      DOM.openStoragePageButton.addEventListener("click", function openStorageFromDebugging() {
-        openExtensionPage("storage.html", "Storage");
-      });
-    }
-
-    if (DOM.openSettingsPageButton) {
-      DOM.openSettingsPageButton.addEventListener("click", openSettingsPage);
-    }
-
-    if (DOM.openHelpPageButton) {
-      DOM.openHelpPageButton.addEventListener("click", function openHelpFromDebugging() {
-        openExtensionPage("help.html", "Help");
-      });
     }
 
     if (DOM.debugLevelSelect) {

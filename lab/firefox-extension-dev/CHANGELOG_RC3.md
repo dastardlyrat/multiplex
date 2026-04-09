@@ -3,7 +3,7 @@
 
 - Date: `2026-04-03`
 - Release channel: Firefox AMO Release Candidate (`RC-3`)
-- Version: `0.9.1`
+- Version: `0.3.0`
 
 ## Finalized Manifest Identity
 
@@ -16,7 +16,7 @@
 
 - Locked publish source folder to `lab/firefox-extension` for release packaging and AMO submission.
 - Locked extension identity fields for submission consistency.
-- Bumped manifest version to `0.9.1` for RC-3 packaging.
+- Bumped manifest version to `0.3.0` for RC-3 packaging.
 - Locked Firefox minimum supported version to `142.0`.
 - Added release support policy and minimum-version test gate documentation.
 - Added storage-value visibility in popup diagnostics and in-page diagnostics for troubleshooting.
@@ -44,7 +44,7 @@
 Completed:
 - Publish source folder freeze to `lab/firefox-extension`
 - Manifest identity finalization
-- Version bump to `0.9.1`
+- Version bump to `0.3.0`
 - Minimum Firefox version lock to `142.0`
 - Support policy/test gate write-up
 

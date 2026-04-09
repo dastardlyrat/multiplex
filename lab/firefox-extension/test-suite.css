@@ -30,6 +30,16 @@ body {
   padding: 12px;
 }
 
+.page-actions {
+  margin-top: 16px;
+}
+
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .eyebrow {
   margin: 0 0 8px;
   font-size: 12px;
@@ -78,6 +88,36 @@ h2 {
   font-weight: 700;
 }
 
+.primary-button,
+.ghost-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #b9c2cc;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  background: #fff;
+  color: #111;
+}
+
+.primary-button {
+  background: #0f62fe;
+  border-color: #0f62fe;
+  color: #fff;
+}
+
+.primary-button:disabled,
+.ghost-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.button-icon {
+  font-size: 18px;
+}
+
 .info-list {
   margin: 8px 0 0;
   padding-left: 18px;
@@ -92,15 +132,29 @@ h2 {
   display: block;
 }
 
+.suite-table-wrap {
+  margin-top: 8px;
+  overflow-x: auto;
+}
+
 .suite-table {
   width: 100%;
+  min-width: 720px;
   border-collapse: collapse;
   table-layout: fixed;
-  margin-top: 8px;
+}
+
+.suite-table__input-column {
+  width: 48%;
+}
+
+.suite-table__expected-column {
+  width: 52%;
 }
 
 .suite-table th,
 .suite-table td {
+  display: table-cell;
   border: 1px solid #b9c2cc;
   padding: 8px;
   vertical-align: top;
@@ -114,10 +168,9 @@ h2 {
   text-transform: uppercase;
 }
 
-.suite-url-cell,
-.suite-expected-cell {
-  display: grid;
-  gap: 6px;
+.suite-url-cell > * + *,
+.suite-expected-cell > * + * {
+  margin-top: 6px;
 }
 
 .suite-case-label {
@@ -149,6 +202,20 @@ code {
   margin: 0;
 }
 
+.status-message {
+  margin: 16px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.status-message.is-saved {
+  color: #0b6b3a;
+}
+
+.status-message.is-error {
+  color: #a1260d;
+}
+
 code {
   font-family: Consolas, "Courier New", monospace;
 }
@@ -156,22 +223,5 @@ code {
 @media (max-width: 760px) {
   .hero-row {
     flex-direction: column;
-  }
-
-  .suite-table,
-  .suite-table thead,
-  .suite-table tbody,
-  .suite-table tr,
-  .suite-table th,
-  .suite-table td {
-    display: block;
-  }
-
-  .suite-table thead {
-    display: none;
-  }
-
-  .suite-table tr {
-    margin-bottom: 10px;
   }
 }

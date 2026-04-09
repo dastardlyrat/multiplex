@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>URL Forensics Workbench Sample Review</title>
+<link rel="stylesheet" href="./icons.css">
+<link rel="stylesheet" href="./sample-review.css">
+</head>
+<body>
+<main class="sample-review-shell">
+  <section class="sample-review-card">
+    <p class="eyebrow">URL Forensics Workbench</p>
+    <nav class="page-nav" aria-label="Extension pages">
+      <button class="page-link" type="button" data-page-href="./settings.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">settings</span>Settings</button>
+      <button class="page-link" type="button" data-page-href="./tracking-parameters.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">filter_alt</span>Trackers</button>
+      <button class="page-link" type="button" data-page-href="./test-suite.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">science</span>Test Suite</button>
+      <button class="page-link" type="button" data-page-href="./diagnostics.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">analytics</span>Diagnostics</button>
+      <button class="page-link" type="button" data-page-href="./debugging.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">bug_report</span>Debugging</button>
+      <button class="page-link" type="button" data-page-href="./storage.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">storage</span>Storage</button>
+      <button class="page-link" type="button" data-page-href="./help.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">help</span>Help</button>
+      <button class="page-link" type="button" data-page-href="./about.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">info</span>About</button>
+    </nav>
+    <div class="hero-row">
+      <div>
+        <h1 class="icon-heading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">preview</span>Sample Review</h1>
+        <p class="lede">
+          Review live detector matches against committed curated text samples and the saved inbox fixture set used by the hardening harness.
+        </p>
+      </div>
+      <span id="sampleReviewBadge" class="sample-review-badge">Loading samples</span>
+    </div>
+
+    <div class="page-actions">
+      <div class="action-row" aria-label="Sample review actions">
+        <button id="refreshSampleReviewButton" class="primary-button" type="button"><span class="material-symbols-outlined button-icon" aria-hidden="true">refresh</span>Refresh Review</button>
+      </div>
+    </div>
+
+    <section class="sample-review-summary" aria-label="Sample review summary">
+      <div class="section-head">
+        <h2 class="icon-subheading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">summarize</span>Summary</h2>
+        <span id="extensionVersion" class="sample-review-badge">v0.0.0</span>
+      </div>
+      <div id="sampleReviewSummaryGrid" class="sample-review-summary-grid">
+        <div class="summary-item">
+          <span class="summary-label">Status</span>
+          <span class="summary-value">Loading</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="sample-review-section" aria-label="Curated text samples">
+      <div class="section-head">
+        <h2 class="icon-subheading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">link</span>Curated Text Samples</h2>
+        <span id="textSampleBadge" class="sample-review-badge">Loading text samples</span>
+      </div>
+      <div class="sample-review-table-wrap">
+        <table class="sample-review-table" aria-label="Curated text samples">
+          <thead>
+            <tr>
+              <th scope="col">Sample</th>
+              <th scope="col">Input</th>
+              <th scope="col">Detector Matches</th>
+              <th scope="col">Pipeline Output</th>
+            </tr>
+          </thead>
+          <tbody id="textSampleTableBody">
+            <tr>
+              <td colspan="4">Loading curated text samples...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="sample-review-section" aria-label="Saved inbox fixtures">
+      <div class="section-head">
+        <h2 class="icon-subheading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">mail</span>Saved Inbox Fixtures</h2>
+        <span id="fixtureSampleBadge" class="sample-review-badge">Loading fixtures</span>
+      </div>
+      <div class="sample-review-table-wrap">
+        <table class="sample-review-table" aria-label="Saved inbox fixtures">
+          <thead>
+            <tr>
+              <th scope="col">Fixture</th>
+              <th scope="col">Expected Selectors</th>
+              <th scope="col">Live Detection</th>
+              <th scope="col">Pipeline Output</th>
+            </tr>
+          </thead>
+          <tbody id="fixtureSampleTableBody">
+            <tr>
+              <td colspan="4">Loading saved inbox fixtures...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <p id="statusMessage" class="status-message" aria-live="polite">Loading sample review...</p>
+  </section>
+</main>
+
+<script src="./page-navigation.js"></script>
+<script src="./page-ui.js"></script>
+<script src="./page-runtime.js"></script>
+<script src="./page-dependencies.js"></script>
+<script src="./pipeline-default-plugin.js"></script>
+<script src="./pipeline-plugin-registry.js"></script>
+<script src="./tracking-parameter-model.js"></script>
+<script src="./pipeline-base.js"></script>
+<script src="./pipeline-url-resolver.js"></script>
+<script src="./pipeline-html-rewriter.js"></script>
+<script src="./pipeline-detector-registry.js"></script>
+<script src="./pipeline-detection.js"></script>
+<script src="./pipeline-resolution.js"></script>
+<script src="./pipeline-assembly.js"></script>
+<script src="./pipeline-diagnostics.js"></script>
+<script src="./pipeline-stage-runner.js"></script>
+<script src="./pipeline.js"></script>
+<script src="./inbox-detector-registry.js"></script>
+<script src="./inbox-detectors.js"></script>
+<script src="./email-candidate-discovery.js"></script>
+<script src="./email-root-summary.js"></script>
+<script src="./inbox-browser-fixture-validation.js"></script>
+<script src="./sample-review-data.js"></script>
+<script src="./inbox-browser-fixture-data.js"></script>
+<script src="./sample-review.js"></script>
+</body>
+</html>

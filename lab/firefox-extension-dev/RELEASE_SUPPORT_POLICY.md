@@ -124,4 +124,4 @@ Until a new gate run says otherwise:
 - `name`: `URL Forensics Workbench`
 - `description`: `Turn detected email bodies into a URL forensics side panel.`
 - `browser_specific_settings.gecko.id`: `url-forensics-workbench@urlforensics.local`
-- `version` (RC-3 candidate): `0.9.1`
+- `version` (RC-3 candidate): `0.3.0`

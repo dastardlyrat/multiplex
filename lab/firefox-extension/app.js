@@ -2,12 +2,31 @@
 (function initializeMergedLinkLabFromBaseHtml() {
   "use strict";
 
+  const globalScope = typeof globalThis !== "undefined" ? globalThis : null;
+  const pageRuntimeFactory = globalScope ? globalScope.urlForensicsPageRuntime : null;
+  const pageDependenciesFactory = globalScope ? globalScope.urlForensicsPageDependencies : null;
+
+  if (!pageRuntimeFactory || typeof pageRuntimeFactory.create !== "function") {
+    throw new Error("URL Forensics page runtime helpers are unavailable.");
+  }
+
+  if (!pageDependenciesFactory || typeof pageDependenciesFactory.create !== "function") {
+    throw new Error("URL Forensics page dependency helpers are unavailable.");
+  }
+
+  const pageRuntime = pageRuntimeFactory.create({
+    globalScope: globalScope,
+    requirePageUi: false
+  });
+  const pageDependencies = pageDependenciesFactory.create({
+    globalScope: globalScope
+  });
   const componentKit = typeof ComponentKit !== "undefined" ? ComponentKit : null;
   const mergedLinkLabPipeline = typeof MergedLinkLabPipeline !== "undefined" ? MergedLinkLabPipeline : null;
-  const extensionApi = typeof browser !== "undefined" ? browser : (typeof chrome !== "undefined" ? chrome : null);
-  const storageModel = typeof globalThis !== "undefined" ? globalThis.urlForensicsStorageModel : null;
-  const settingsOpener = typeof globalThis !== "undefined" ? globalThis.urlForensicsSettingsOpener : null;
-  const debugApi = typeof globalThis !== "undefined" ? globalThis.mergedLinkLabDebug : null;
+  const extensionApi = pageRuntime.extensionApi;
+  const storageModel = pageDependencies.storageModel;
+  const settingsOpener = pageDependencies.settingsOpener;
+  const debugApi = pageRuntime.debugApi;
   if (debugApi && typeof debugApi.configure === "function") {
     debugApi.configure({ context: "workbench", module: "app" });
     debugApi.runtime("workbench initialization started");

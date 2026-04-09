@@ -1,4 +1,4 @@
-# AMO Screenshot Captions (RC-3 / v0.9.1)
+# AMO Screenshot Captions (RC-3 / v0.3.0)
 
 Use these captions for AMO listing screenshots. The first 3 are the most important.
 Generated screenshots currently exist in `lab/firefox-extension-dev/amo-assets/screenshots/` using the same filenames below.

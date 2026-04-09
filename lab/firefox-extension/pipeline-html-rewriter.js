@@ -21,6 +21,11 @@ function urlForensicsPipelineHtmlCreateRewriterContext(options) {
     resolvePipelineSettings: pipelineBase.resolvePipelineSettings,
     cleanInputText: pipelineBase.cleanInputText,
     urlResolver: optionBag.urlResolver,
+    detectTokenMatches: typeof optionBag.detectTokenMatches === "function"
+      ? optionBag.detectTokenMatches
+      : function detectNoTokenMatches() {
+        return [];
+      },
     getPreferredReplacementUrl: optionBag.getPreferredReplacementUrl,
     getItemDisplayType: optionBag.getItemDisplayType,
     analyzeInput: optionBag.analyzeInput,
@@ -34,6 +39,34 @@ function urlForensicsPipelineHtmlCreateRewriterContext(options) {
       return pipelineBase.createHtmlParserDocument(optionBag.globalScope, sourceMarkup);
     }
   });
+}
+
+// Function: detect token matches in text.
+function urlForensicsPipelineHtmlDetectTokenMatches(context, textValue, options) {
+  const rawMatches = context.detectTokenMatches(context.convertValueToString(textValue), options || {});
+
+  return Array.isArray(rawMatches)
+    ? rawMatches.map(function mapMatch(rawMatch) {
+      return {
+        index: Number.isFinite(rawMatch && rawMatch.index) ? rawMatch.index : -1,
+        value: context.convertValueToString(rawMatch && rawMatch.value).trim()
+      };
+    }).filter(function keepMatch(matchRecord) {
+      return matchRecord.index >= 0 && !!matchRecord.value;
+    })
+    : [];
+}
+
+// Function: check whether href is a directly detected token.
+function urlForensicsPipelineHtmlIsDirectDetectedHref(context, hrefValue, options) {
+  const trimmedHrefValue = context.convertValueToString(hrefValue).trim();
+  const detectedMatches = urlForensicsPipelineHtmlDetectTokenMatches(context, trimmedHrefValue, options);
+
+  return !!(
+    detectedMatches.length &&
+    detectedMatches[0].index === 0 &&
+    detectedMatches[0].value === trimmedHrefValue
+  );
 }
 
 // Function: normalize anchor text.
@@ -270,7 +303,7 @@ function urlForensicsPipelineHtmlRewriteAnchors(context, rootNode, replacementLo
   Array.from(rootNode.querySelectorAll("a[href]")).forEach(function rewriteAnchor(anchorElement) {
     const originalHref = context.convertValueToString(anchorElement.getAttribute("href")).trim();
 
-    if (!/^https?:\/\//i.test(originalHref)) {
+    if (!urlForensicsPipelineHtmlIsDirectDetectedHref(context, originalHref, options)) {
       return;
     }
 
@@ -296,7 +329,7 @@ function urlForensicsPipelineHtmlRewriteAnchors(context, rootNode, replacementLo
 }
 
 // Function: collect text URL rewrite candidates.
-function urlForensicsPipelineHtmlCollectUrlTextNodes(context, rootNode) {
+function urlForensicsPipelineHtmlCollectUrlTextNodes(context, rootNode, options) {
   const textWalker = rootNode.ownerDocument.createTreeWalker(rootNode, context.getNodeFilterFlag("SHOW_TEXT", 4));
   const candidateTextNodes = [];
   let currentTextNode = textWalker.nextNode();
@@ -305,7 +338,7 @@ function urlForensicsPipelineHtmlCollectUrlTextNodes(context, rootNode) {
     if (
       currentTextNode.parentElement &&
       !context.regularExpressions.protectedMarkupTag.test(currentTextNode.parentElement.tagName) &&
-      /https?:\/\/[^\s<>"']+/i.test(currentTextNode.nodeValue || "")
+      urlForensicsPipelineHtmlDetectTokenMatches(context, currentTextNode.nodeValue || "", options).length
     ) {
       candidateTextNodes.push(currentTextNode);
     }
@@ -334,14 +367,13 @@ function urlForensicsPipelineHtmlAppendFragmentPrefix(documentNode, replacementF
 function urlForensicsPipelineHtmlRewriteTextUrlNode(context, textNode, replacementLookup, typeLookup, options) {
   const rawTextValue = textNode.nodeValue || "";
   const replacementFragment = textNode.ownerDocument.createDocumentFragment();
-  const matchingExpression = new RegExp(context.regularExpressions.urlToken.source, "gi");
+  const detectedMatches = urlForensicsPipelineHtmlDetectTokenMatches(context, rawTextValue, options);
   let nextSearchIndex = 0;
   let nodeWasChanged = false;
-  let currentMatch = null;
 
-  while ((currentMatch = matchingExpression.exec(rawTextValue)) !== null) {
-    const originalUrlToken = currentMatch[0];
-    const matchStartIndex = currentMatch.index;
+  detectedMatches.forEach(function rewriteDetectedMatch(matchRecord) {
+    const originalUrlToken = matchRecord.value;
+    const matchStartIndex = matchRecord.index;
     const matchEndIndex = matchStartIndex + originalUrlToken.length;
     const peeledUrlToken = context.urlResolver.peel(originalUrlToken, options);
     const trailingPunctuationMatch = context.convertValueToString(originalUrlToken).match(context.regularExpressions.trailingUrlPunctuation);
@@ -351,7 +383,7 @@ function urlForensicsPipelineHtmlRewriteTextUrlNode(context, textNode, replaceme
       urlForensicsPipelineHtmlLookupReplacementUrl(context, replacementLookup, peeledUrlToken.value, options);
 
     if (!replacementUrl) {
-      continue;
+      return;
     }
 
     const replacementText = urlForensicsPipelineHtmlBuildReplacementText(originalUrlToken, replacementUrl, trailingPunctuation);
@@ -364,7 +396,7 @@ function urlForensicsPipelineHtmlRewriteTextUrlNode(context, textNode, replaceme
     replacementFragment.appendChild(textNode.ownerDocument.createTextNode(context.urlResolver.buildFinalUrlLinkText(finalUrlEntry)));
     nextSearchIndex = matchEndIndex;
     nodeWasChanged = nodeWasChanged || replacementText !== originalUrlToken;
-  }
+  });
 
   if (!nodeWasChanged) {
     return false;
@@ -385,7 +417,7 @@ function urlForensicsPipelineHtmlRewriteTextUrlNode(context, textNode, replaceme
 function urlForensicsPipelineHtmlReplaceTextUrls(context, rootNode, replacementLookup, typeLookup, options) {
   let rewrittenTextNodeCount = 0;
 
-  urlForensicsPipelineHtmlCollectUrlTextNodes(context, rootNode).forEach(function rewriteTextNode(textNode) {
+  urlForensicsPipelineHtmlCollectUrlTextNodes(context, rootNode, options).forEach(function rewriteTextNode(textNode) {
     if (urlForensicsPipelineHtmlRewriteTextUrlNode(context, textNode, replacementLookup, typeLookup, options)) {
       rewrittenTextNodeCount += 1;
     }
@@ -647,7 +679,7 @@ function urlForensicsPipelineHtmlRewriteStandalonePreviewAnchors(context, parsed
   Array.from(parsedDocument.querySelectorAll("a[href]")).forEach(function rewritePreviewAnchor(anchorElement) {
     const originalHref = context.convertValueToString(anchorElement.getAttribute("href")).trim();
 
-    if (!/^https?:\/\//i.test(originalHref)) {
+    if (!urlForensicsPipelineHtmlIsDirectDetectedHref(context, originalHref, pipelineSettings)) {
       return;
     }
 
@@ -740,7 +772,17 @@ function urlForensicsPipelineHtmlAppendStandalonePreviewTextUrl(context, rewrite
 function urlForensicsPipelineHtmlRewriteStandalonePreviewTextNode(context, rewriteContext, textNode) {
   rewriteContext.rawTextValue = textNode.nodeValue || "";
 
-  if (!rewriteContext.rawTextValue || !/https?:\/\//i.test(rewriteContext.rawTextValue)) {
+  if (!rewriteContext.rawTextValue) {
+    return;
+  }
+
+  rewriteContext.detectedMatches = urlForensicsPipelineHtmlDetectTokenMatches(
+    context,
+    rewriteContext.rawTextValue,
+    rewriteContext.pipelineSettings
+  );
+
+  if (!rewriteContext.detectedMatches.length) {
     return;
   }
 
@@ -748,16 +790,13 @@ function urlForensicsPipelineHtmlRewriteStandalonePreviewTextNode(context, rewri
   rewriteContext.nextSearchIndex = 0;
   rewriteContext.nodeWasChanged = false;
 
-  const matchingExpression = new RegExp(context.regularExpressions.urlToken.source, "gi");
-  let currentMatch = null;
-
-  while ((currentMatch = matchingExpression.exec(rewriteContext.rawTextValue)) !== null) {
-    const originalUrlToken = currentMatch[0];
-    const matchStartIndex = currentMatch.index;
+  rewriteContext.detectedMatches.forEach(function rewriteDetectedMatch(matchRecord) {
+    const originalUrlToken = matchRecord.value;
+    const matchStartIndex = matchRecord.index;
     const matchEndIndex = matchStartIndex + originalUrlToken.length;
 
     urlForensicsPipelineHtmlAppendStandalonePreviewTextUrl(context, rewriteContext, originalUrlToken, matchStartIndex, matchEndIndex);
-  }
+  });
 
   if (!rewriteContext.nodeWasChanged) {
     return;
