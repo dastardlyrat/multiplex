@@ -96,7 +96,7 @@
     );
 
     if (DOM.trackerFilterSummary) {
-      DOM.trackerFilterSummary.textContent = summaryText + ". Safe bucket controls are shown here; dubious tracking removal will be added later.";
+      DOM.trackerFilterSummary.textContent = summaryText + ". Matching details live on Instrumentation.";
     }
 
     if (DOM.trackerStripMasterStatus) {

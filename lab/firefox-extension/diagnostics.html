@@ -14,6 +14,7 @@
     <nav class="page-nav" aria-label="Extension pages">
       <button class="page-link" type="button" data-page-href="./settings.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">settings</span>Settings</button>
       <button class="page-link" type="button" data-page-href="./tracking-parameters.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">filter_alt</span>Trackers</button>
+      <button class="page-link" type="button" data-page-href="./instrumentation.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">rule</span>Instrumentation</button>
       <button class="page-link" type="button" data-page-href="./test-suite.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">science</span>Test Suite</button>
       <button class="page-link" type="button" data-page-href="./sample-review.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">preview</span>Samples</button>
       <button class="page-link" type="button" data-page-href="./debugging.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">bug_report</span>Debugging</button>
@@ -25,7 +26,7 @@
       <div>
         <h1 class="icon-heading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">analytics</span>Diagnostics</h1>
         <p class="lede">
-          Inspect extension health, runtime state, storage usage, memory availability, committed detector parity and selector-health snapshots, and the live detector and rule catalogs that drive URL and inbox analysis.
+          Inspect extension health, runtime state, storage usage, and memory availability. Matcher catalogs and selector validation now live on Instrumentation.
         </p>
       </div>
       <span id="extensionVersion" class="diagnostic-badge">v0.0.0</span>
@@ -61,71 +62,6 @@
       </dl>
     </section>
 
-    <section class="diagnostic-section" aria-label="Detector parity status">
-      <div class="section-head">
-        <h2 class="icon-subheading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">compare_arrows</span>Detector Parity Status</h2>
-        <span id="detectorParityBadge" class="diagnostic-badge">Loading parity</span>
-      </div>
-      <dl id="detectorParityList" class="diagnostic-list">
-        <div class="diagnostic-row">
-          <dt>Status</dt>
-          <dd>Loading committed detector parity snapshot...</dd>
-        </div>
-      </dl>
-    </section>
-
-    <section class="diagnostic-section" aria-label="Selector health status">
-      <div class="section-head">
-        <h2 class="icon-subheading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">health_and_safety</span>Selector Health Status</h2>
-        <span id="selectorHealthBadge" class="diagnostic-badge">Loading selector health</span>
-      </div>
-      <dl id="selectorHealthList" class="diagnostic-list">
-        <div class="diagnostic-row">
-          <dt>Status</dt>
-          <dd>Loading committed selector-health snapshot...</dd>
-        </div>
-      </dl>
-    </section>
-
-    <section class="diagnostic-section" aria-label="URL detector catalog">
-      <div class="section-head">
-        <h2 class="icon-subheading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">link</span>URL Detector Catalog</h2>
-        <span id="urlDetectorCatalogBadge" class="diagnostic-badge">Loading detectors</span>
-      </div>
-      <dl id="urlDetectorCatalogList" class="diagnostic-list">
-        <div class="diagnostic-row">
-          <dt>Status</dt>
-          <dd>Loading URL detector definitions...</dd>
-        </div>
-      </dl>
-    </section>
-
-    <section class="diagnostic-section" aria-label="Inbox detector catalog">
-      <div class="section-head">
-        <h2 class="icon-subheading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">mail</span>Inbox Detector Catalog</h2>
-        <span id="inboxDetectorCatalogBadge" class="diagnostic-badge">Loading providers</span>
-      </div>
-      <dl id="inboxDetectorCatalogList" class="diagnostic-list">
-        <div class="diagnostic-row">
-          <dt>Status</dt>
-          <dd>Loading inbox detector definitions...</dd>
-        </div>
-      </dl>
-    </section>
-
-    <section class="diagnostic-section" aria-label="Pipeline rule catalog">
-      <div class="section-head">
-        <h2 class="icon-subheading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">rule</span>Pipeline Rule Catalog</h2>
-        <span id="pipelineRuleCatalogBadge" class="diagnostic-badge">Loading rules</span>
-      </div>
-      <dl id="pipelineRuleCatalogList" class="diagnostic-list">
-        <div class="diagnostic-row">
-          <dt>Status</dt>
-          <dd>Loading resolved pipeline rule definitions...</dd>
-        </div>
-      </dl>
-    </section>
-
     <p id="statusMessage" class="status-message" aria-live="polite">Loading diagnostics...</p>
   </section>
 </main>
@@ -138,16 +74,8 @@
 <script src="./page-ui.js"></script>
 <script src="./page-runtime.js"></script>
 <script src="./page-dependencies.js"></script>
-<script src="./pipeline-default-plugin.js"></script>
-<script src="./pipeline-plugin-registry.js"></script>
 <script src="./tracking-parameter-model.js"></script>
 <script src="./storage-model.js"></script>
-<script src="./pipeline-base.js"></script>
-<script src="./pipeline-detector-registry.js"></script>
-<script src="./inbox-detector-registry.js"></script>
-<script src="./detector-catalog.js"></script>
-<script src="./diagnostics-catalog-rows.js"></script>
-<script src="./diagnostics-health-data.js"></script>
 <script src="./diagnostics.js"></script>
 </body>
 </html>

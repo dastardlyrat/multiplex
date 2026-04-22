@@ -20,17 +20,11 @@
   });
   const pageDependencies = pageDependenciesFactory.create({
     globalScope: globalScope,
-    required: ["storageModel", "detectorCatalog", "diagnosticsCatalogRows", "diagnosticsHealthData"]
+    required: ["storageModel"]
   });
   const extensionApi = pageRuntime.extensionApi;
   const pageUi = pageRuntime.pageUi;
   const storageModel = pageDependencies.storageModel;
-  const detectorCatalog = pageDependencies.detectorCatalog;
-  const diagnosticsHealthData = pageDependencies.diagnosticsHealthData;
-  const diagnosticsCatalogRows = pageDependencies.diagnosticsCatalogRows.create({
-    formatInlineList: formatInlineList,
-    formatKeyValueSummary: formatKeyValueSummary
-  });
   const debugApi = pageRuntime.debugApi;
   const diagnosticsState = {
     manifest: null,
@@ -40,11 +34,7 @@
     activeTabTitle: "",
     generalDiagnosticsRows: [],
     generalDiagnosticsError: "",
-    storageSnapshot: null,
-    detectorCatalog: null,
-    detectorCatalogError: "",
-    diagnosticsHealthSnapshot: null,
-    diagnosticsHealthError: ""
+    storageSnapshot: null
   };
   const DOM = {
     extensionVersion: document.getElementById("extensionVersion"),
@@ -53,16 +43,6 @@
     generalDiagnosticsList: document.getElementById("generalDiagnosticsList"),
     storageBadge: document.getElementById("storageBadge"),
     storageDiagnosticsList: document.getElementById("storageDiagnosticsList"),
-    detectorParityBadge: document.getElementById("detectorParityBadge"),
-    detectorParityList: document.getElementById("detectorParityList"),
-    selectorHealthBadge: document.getElementById("selectorHealthBadge"),
-    selectorHealthList: document.getElementById("selectorHealthList"),
-    urlDetectorCatalogBadge: document.getElementById("urlDetectorCatalogBadge"),
-    urlDetectorCatalogList: document.getElementById("urlDetectorCatalogList"),
-    inboxDetectorCatalogBadge: document.getElementById("inboxDetectorCatalogBadge"),
-    inboxDetectorCatalogList: document.getElementById("inboxDetectorCatalogList"),
-    pipelineRuleCatalogBadge: document.getElementById("pipelineRuleCatalogBadge"),
-    pipelineRuleCatalogList: document.getElementById("pipelineRuleCatalogList"),
     statusMessage: document.getElementById("statusMessage")
   };
 
@@ -89,10 +69,6 @@
 
   function setBadgeText(element, text) {
     pageUi.setBadgeText(element, text, "Unavailable");
-  }
-
-  function arrayEquals(leftValue, rightValue) {
-    return JSON.stringify(leftValue) === JSON.stringify(rightValue);
   }
 
   function renderDiagnosticList(listElement, rows) {
@@ -160,40 +136,6 @@
     return Array.isArray(permissions) && permissions.length ? permissions.join(", ") : "None listed";
   }
 
-  function formatInlineList(values, options) {
-    const optionBag = options && typeof options === "object" ? options : {};
-    const separator = typeof optionBag.separator === "string" ? optionBag.separator : ", ";
-    const emptyValue = typeof optionBag.emptyValue === "string" ? optionBag.emptyValue : "None";
-    const maxVisibleItems = Number.isFinite(optionBag.maxVisibleItems) && optionBag.maxVisibleItems > 0
-      ? Math.floor(optionBag.maxVisibleItems)
-      : 6;
-    const safeValues = (Array.isArray(values) ? values : []).map(function normalizeListValue(value) {
-      return String(value || "").trim();
-    }).filter(Boolean);
-
-    if (!safeValues.length) {
-      return emptyValue;
-    }
-
-    if (safeValues.length <= maxVisibleItems) {
-      return safeValues.join(separator);
-    }
-
-    return safeValues.slice(0, maxVisibleItems).join(separator) + separator + "+" + String(safeValues.length - maxVisibleItems) + " more";
-  }
-
-  function formatKeyValueSummary(items, formatter) {
-    const safeItems = Array.isArray(items) ? items : [];
-
-    if (!safeItems.length) {
-      return "None";
-    }
-
-    return safeItems.map(function mapSummaryItem(item) {
-      return formatter(item && typeof item === "object" ? item : {});
-    }).filter(Boolean).join("; ");
-  }
-
   function getRequestedTabId() {
     const tabIdValue = new URLSearchParams(window.location.search || "").get("tabId");
     const parsedTabId = Number(tabIdValue);
@@ -208,16 +150,6 @@
       errorMessage: errorMessage,
       includeDebugChoices: true
     });
-  }
-
-  function setDetectorCatalogState(catalog, errorMessage) {
-    diagnosticsState.detectorCatalog = catalog || null;
-    diagnosticsState.detectorCatalogError = String(errorMessage || "").trim();
-  }
-
-  function setDiagnosticsHealthState(snapshot, errorMessage) {
-    diagnosticsState.diagnosticsHealthSnapshot = snapshot || null;
-    diagnosticsState.diagnosticsHealthError = String(errorMessage || "").trim();
   }
 
   function collectStorageUsageDiagnostics() {
@@ -295,7 +227,7 @@
           }
         }
       } catch {
-        // Fall through to other memory APIs.
+        // Continue to browser-specific memory APIs.
       }
 
       if (typeof performance !== "undefined" && performance.memory && typeof performance.memory === "object") {
@@ -434,186 +366,6 @@
     return rows;
   }
 
-  function buildUrlDetectorCatalogRows() {
-    return diagnosticsCatalogRows.buildUrlDetectorCatalogRows(
-      diagnosticsState.detectorCatalog,
-      diagnosticsState.detectorCatalogError
-    );
-  }
-
-  function buildInboxDetectorCatalogRows() {
-    return diagnosticsCatalogRows.buildInboxDetectorCatalogRows(
-      diagnosticsState.detectorCatalog,
-      diagnosticsState.detectorCatalogError
-    );
-  }
-
-  function buildPipelineRuleCatalogRows() {
-    return diagnosticsCatalogRows.buildPipelineRuleCatalogRows(
-      diagnosticsState.detectorCatalog,
-      diagnosticsState.detectorCatalogError
-    );
-  }
-
-  function getDetectorParitySnapshot() {
-    const snapshot = diagnosticsState.diagnosticsHealthSnapshot;
-    return snapshot && typeof snapshot === "object" && snapshot.detectorParity && typeof snapshot.detectorParity === "object"
-      ? snapshot.detectorParity
-      : null;
-  }
-
-  function getSelectorHealthSnapshot() {
-    const snapshot = diagnosticsState.diagnosticsHealthSnapshot;
-    return snapshot && typeof snapshot === "object" && snapshot.selectorHealth && typeof snapshot.selectorHealth === "object"
-      ? snapshot.selectorHealth
-      : null;
-  }
-
-  function getSnapshotStaleReasons(snapshotType) {
-    const snapshot = diagnosticsState.diagnosticsHealthSnapshot;
-    const liveCatalog = diagnosticsState.detectorCatalog;
-    const reasons = [];
-
-    if (!snapshot || !liveCatalog) {
-      return reasons;
-    }
-
-    if (snapshot.extensionVersion && diagnosticsState.manifest && diagnosticsState.manifest.version && snapshot.extensionVersion !== diagnosticsState.manifest.version) {
-      reasons.push(
-        "Snapshot extension version " +
-        String(snapshot.extensionVersion) +
-        " does not match current version " +
-        String(diagnosticsState.manifest.version) +
-        "."
-      );
-    }
-
-    if (snapshotType === "detector-parity") {
-      const liveDetectorIds = (liveCatalog.urlDetectors || []).map(function mapDetector(detectorDefinition) {
-        return detectorDefinition.id;
-      });
-
-      if (!arrayEquals((snapshot.liveCatalog || {}).urlDetectorIds || [], liveDetectorIds)) {
-        reasons.push("Snapshot detector ids do not match the live detector registry.");
-      }
-    }
-
-    if (snapshotType === "selector-health") {
-      const liveProviderIds = (liveCatalog.inboxProviders || []).map(function mapProvider(providerDefinition) {
-        return providerDefinition.id;
-      });
-
-      if (!arrayEquals((snapshot.liveCatalog || {}).inboxProviderIds || [], liveProviderIds)) {
-        reasons.push("Snapshot inbox provider ids do not match the live inbox detector registry.");
-      }
-    }
-
-    return reasons;
-  }
-
-  function buildDiagnosticsHealthBadgeLabel(reportStatus, staleReasons, loadingLabel, healthyLabel, failingLabel) {
-    if (!diagnosticsState.diagnosticsHealthSnapshot) {
-      return diagnosticsState.diagnosticsHealthError ? "Health error" : loadingLabel;
-    }
-
-    if (reportStatus !== "passed") {
-      return failingLabel;
-    }
-
-    if (staleReasons.length) {
-      return "Stale snapshot";
-    }
-
-    return healthyLabel;
-  }
-
-  function buildDetectorParityRows() {
-    const paritySnapshot = getDetectorParitySnapshot();
-    const staleReasons = getSnapshotStaleReasons("detector-parity");
-    const snapshot = diagnosticsState.diagnosticsHealthSnapshot;
-
-    if (!paritySnapshot) {
-      return [
-        { label: "Status", value: diagnosticsState.diagnosticsHealthError || "Loading committed detector parity snapshot..." }
-      ];
-    }
-
-    return [
-      { label: "Snapshot Status", value: String(paritySnapshot.status || "Unavailable") },
-      { label: "Snapshot Generated", value: formatTimestamp(snapshot.generatedAt) },
-      { label: "Snapshot Version", value: String(snapshot.extensionVersion || "Unavailable") },
-      { label: "Detector IDs", value: formatInlineList(paritySnapshot.detectorIds, { maxVisibleItems: 8 }) },
-      { label: "Detector Titles", value: formatInlineList(paritySnapshot.detectorTitles, { maxVisibleItems: 8 }) },
-      { label: "Pipeline Suite Cases", value: String(paritySnapshot.suiteCaseCount || 0) },
-      { label: "Curated Samples", value: String(paritySnapshot.paritySampleCount || 0) },
-      { label: "Suite Mismatches", value: String(paritySnapshot.suiteParityMismatchCount || 0) },
-      { label: "Sample Mismatches", value: String(paritySnapshot.sampleParityMismatchCount || 0) },
-      { label: "Failure Count", value: String(paritySnapshot.failureCount || 0) },
-      { label: "Stale Reasons", value: staleReasons.length ? staleReasons.join(" ") : "None" },
-      {
-        label: "Mismatch Preview",
-        value: formatKeyValueSummary(
-          (paritySnapshot.suiteParityMismatchPreview || []).concat(paritySnapshot.sampleParityMismatchPreview || []).slice(0, 4),
-          function formatParityMismatchPreview(mismatchRecord) {
-            return String(mismatchRecord.id || "unknown") + " -> " + formatInlineList(mismatchRecord.detectorIds, { maxVisibleItems: 4 });
-          }
-        )
-      }
-    ];
-  }
-
-  function buildSelectorHealthRows() {
-    const selectorHealthSnapshot = getSelectorHealthSnapshot();
-    const staleReasons = getSnapshotStaleReasons("selector-health");
-    const snapshot = diagnosticsState.diagnosticsHealthSnapshot;
-
-    if (!selectorHealthSnapshot) {
-      return [
-        { label: "Status", value: diagnosticsState.diagnosticsHealthError || "Loading committed selector-health snapshot..." }
-      ];
-    }
-
-    return [
-      { label: "Snapshot Status", value: String(selectorHealthSnapshot.status || "Unavailable") },
-      { label: "Snapshot Generated", value: formatTimestamp(snapshot.generatedAt) },
-      { label: "Snapshot Version", value: String(snapshot.extensionVersion || "Unavailable") },
-      { label: "Fixture Count", value: String(selectorHealthSnapshot.fixtureCount || 0) },
-      { label: "Provider IDs", value: formatInlineList(selectorHealthSnapshot.providerIds, { maxVisibleItems: 8 }) },
-      { label: "Failing Providers", value: formatInlineList(selectorHealthSnapshot.failingProviderIds, { emptyValue: "None", maxVisibleItems: 8 }) },
-      { label: "Missing Expected Selectors", value: String(selectorHealthSnapshot.missingExpectedSelectorCount || 0) },
-      { label: "Failure Count", value: String(selectorHealthSnapshot.failureCount || 0) },
-      { label: "Stale Reasons", value: staleReasons.length ? staleReasons.join(" ") : "None" },
-      {
-        label: "Provider Summary",
-        value: formatKeyValueSummary(selectorHealthSnapshot.providerStatuses, function formatProviderStatus(providerStatus) {
-          const issueSummary = [];
-
-          if (!providerStatus.hostMatches) {
-            issueSummary.push("host mismatch");
-          }
-
-          if (!providerStatus.pathMatches) {
-            issueSummary.push("path mismatch");
-          }
-
-          if ((providerStatus.missingExpectedSelectors || []).length) {
-            issueSummary.push("missing " + formatInlineList(providerStatus.missingExpectedSelectors, { separator: " | ", maxVisibleItems: 4 }));
-          }
-
-          return (
-            String(providerStatus.providerId || "unknown") +
-            " [" +
-            (issueSummary.length ? issueSummary.join(", ") : "ok") +
-            "] " +
-            String(providerStatus.matchedSelectorCount || 0) +
-            "/" +
-            String(providerStatus.expectedSelectorCount || 0)
-          );
-        })
-      }
-    ];
-  }
-
   function renderStorageDiagnostics() {
     const rows = storageModel.buildStorageDiagnosticsRows({
       manifest: diagnosticsState.manifest,
@@ -645,64 +397,6 @@
 
     setBadgeText(DOM.generalDiagnosticsBadge, diagnosticsState.generalDiagnosticsError ? "General partial" : "General loaded");
     renderDiagnosticList(DOM.generalDiagnosticsList, rows);
-  }
-
-  function renderDetectorCatalog() {
-    const catalog = diagnosticsState.detectorCatalog;
-
-    setBadgeText(
-      DOM.urlDetectorCatalogBadge,
-      catalog
-        ? String((catalog.summary || {}).urlDetectorCount || 0) + " URL detectors"
-        : (diagnosticsState.detectorCatalogError ? "Detector error" : "Loading detectors")
-    );
-    setBadgeText(
-      DOM.inboxDetectorCatalogBadge,
-      catalog
-        ? String((catalog.summary || {}).inboxProviderCount || 0) + " inbox providers"
-        : (diagnosticsState.detectorCatalogError ? "Provider error" : "Loading providers")
-    );
-    setBadgeText(
-      DOM.pipelineRuleCatalogBadge,
-      catalog
-        ? String((catalog.summary || {}).pluginPackCount || 0) + " rule pack(s)"
-        : (diagnosticsState.detectorCatalogError ? "Rule error" : "Loading rules")
-    );
-
-    renderDiagnosticList(DOM.urlDetectorCatalogList, buildUrlDetectorCatalogRows());
-    renderDiagnosticList(DOM.inboxDetectorCatalogList, buildInboxDetectorCatalogRows());
-    renderDiagnosticList(DOM.pipelineRuleCatalogList, buildPipelineRuleCatalogRows());
-  }
-
-  function renderDiagnosticsHealth() {
-    const paritySnapshot = getDetectorParitySnapshot();
-    const selectorHealthSnapshot = getSelectorHealthSnapshot();
-    const parityStaleReasons = getSnapshotStaleReasons("detector-parity");
-    const selectorHealthStaleReasons = getSnapshotStaleReasons("selector-health");
-
-    setBadgeText(
-      DOM.detectorParityBadge,
-      buildDiagnosticsHealthBadgeLabel(
-        paritySnapshot ? paritySnapshot.status : "",
-        parityStaleReasons,
-        "Loading parity",
-        "Parity healthy",
-        "Parity failing"
-      )
-    );
-    setBadgeText(
-      DOM.selectorHealthBadge,
-      buildDiagnosticsHealthBadgeLabel(
-        selectorHealthSnapshot ? selectorHealthSnapshot.status : "",
-        selectorHealthStaleReasons,
-        "Loading selector health",
-        "Selectors healthy",
-        "Selectors failing"
-      )
-    );
-
-    renderDiagnosticList(DOM.detectorParityList, buildDetectorParityRows());
-    renderDiagnosticList(DOM.selectorHealthList, buildSelectorHealthRows());
   }
 
   function getActiveTab() {
@@ -771,27 +465,6 @@
       });
   }
 
-  function loadDetectorCatalog() {
-    try {
-      setDetectorCatalogState(detectorCatalog && typeof detectorCatalog.buildCatalog === "function" ? detectorCatalog.buildCatalog() : null, "");
-    } catch (error) {
-      setDetectorCatalogState(null, error && error.message ? error.message : "unknown detector catalog error");
-    }
-
-    renderDetectorCatalog();
-    renderDiagnosticsHealth();
-  }
-
-  function loadDiagnosticsHealth() {
-    try {
-      setDiagnosticsHealthState(diagnosticsHealthData || null, "");
-    } catch (error) {
-      setDiagnosticsHealthState(null, error && error.message ? error.message : "unknown diagnostics health error");
-    }
-
-    renderDiagnosticsHealth();
-  }
-
   function refreshGeneralDiagnostics() {
     return Promise.all([
       collectStorageUsageDiagnostics(),
@@ -823,8 +496,6 @@
         refreshGeneralDiagnostics(),
         loadStorageDiagnostics({ silentStatus: true })
       ]).then(function finishRefresh() {
-        loadDetectorCatalog();
-
         if (!hasTargetTab) {
           setStatus("Diagnostics refreshed. No active target tab is available.", "");
           return;
@@ -880,11 +551,8 @@
     bindUi();
     renderGeneralDiagnostics();
     renderStorageDiagnostics();
-    renderDiagnosticsHealth();
-    renderDetectorCatalog();
-    loadDiagnosticsHealth();
     refreshDiagnostics();
   }
 
   initializeDiagnostics();
-})();
+}());

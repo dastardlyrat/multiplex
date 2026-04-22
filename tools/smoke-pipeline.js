@@ -61,6 +61,7 @@ const generatedTestSuiteHtmlPath = path.resolve(__dirname, "..", "lab", "firefox
 const generatedInboxFixtureDataPath = path.resolve(__dirname, "..", "lab", "firefox-extension", "inbox-browser-fixture-data.js");
 const generatedDiagnosticsHealthDataPath = path.resolve(__dirname, "..", "lab", "firefox-extension", "diagnostics-health-data.js");
 const diagnosticsPageHtmlPath = path.resolve(__dirname, "..", "lab", "firefox-extension", "diagnostics.html");
+const instrumentationPageHtmlPath = path.resolve(__dirname, "..", "lab", "firefox-extension", "instrumentation.html");
 const generatedSampleReviewDataPath = path.resolve(__dirname, "..", "lab", "firefox-extension", "sample-review-data.js");
 const sampleReviewPageHtmlPath = path.resolve(__dirname, "..", "lab", "firefox-extension", "sample-review.html");
 const appScriptPath = path.resolve(__dirname, "..", "lab", "firefox-extension", "app.js");
@@ -407,7 +408,7 @@ function runDebugHelperGatingRegression() {
 
 function runExtensionPageDomContractRegression() {
   const extensionDirectoryPath = path.resolve(__dirname, "..", "lab", "firefox-extension");
-  const pageNames = ["diagnostics", "storage", "tracking-parameters", "settings", "debugging", "test-suite", "sample-review", "popup"];
+  const pageNames = ["diagnostics", "instrumentation", "storage", "tracking-parameters", "settings", "debugging", "test-suite", "sample-review", "popup"];
   const actual = pageNames.map(function inspectExtensionPage(pageName) {
     const htmlPath = path.join(extensionDirectoryPath, pageName + ".html");
     const scriptPath = path.join(extensionDirectoryPath, pageName + ".js");
@@ -592,7 +593,7 @@ function runPageFactoryRegression() {
 
 function runExtensionPageHelperCouplingRegression() {
   const extensionDirectoryPath = path.resolve(__dirname, "..", "lab", "firefox-extension");
-  const pageScriptNames = ["app", "diagnostics", "storage", "settings", "tracking-parameters", "debugging", "popup", "test-suite", "sample-review"];
+  const pageScriptNames = ["app", "diagnostics", "instrumentation", "storage", "settings", "tracking-parameters", "debugging", "popup", "test-suite", "sample-review"];
   const forbiddenHelperGlobals = [
     "globalThis.urlForensicsPageUi",
     "globalThis.urlForensicsStorageModel",
@@ -783,6 +784,7 @@ function runPageNavigationMobileVisibilityRegression() {
   const navigationButtons = [
     createNavigationButton("./settings.html"),
     createNavigationButton("./tracking-parameters.html"),
+    createNavigationButton("./instrumentation.html"),
     createNavigationButton("./test-suite.html"),
     createNavigationButton("./sample-review.html"),
     createNavigationButton("./diagnostics.html"),
@@ -8970,7 +8972,7 @@ function loadGeneratedDiagnosticsHealthData(scriptSource) {
 }
 
 function runDiagnosticsHealthDataRegression() {
-  const diagnosticsHtml = fs.readFileSync(diagnosticsPageHtmlPath, "utf8");
+  const instrumentationHtml = fs.readFileSync(instrumentationPageHtmlPath, "utf8");
   const scriptSource = fs.readFileSync(generatedDiagnosticsHealthDataPath, "utf8");
   let generatedSnapshot = null;
   let snapshotReadError = "";
@@ -8987,7 +8989,7 @@ function runDiagnosticsHealthDataRegression() {
     })
     : null;
   const actual = {
-    diagnosticsPageLoadsDataScript: diagnosticsHtml.includes('<script src="./diagnostics-health-data.js"></script>'),
+    instrumentationPageLoadsDataScript: instrumentationHtml.includes('<script src="./diagnostics-health-data.js"></script>'),
     exposesGlobal: !!generatedSnapshot,
     snapshotReadError: snapshotReadError,
     generatedBy: generatedSnapshot ? generatedSnapshot.generatedBy : "",
@@ -8997,8 +8999,8 @@ function runDiagnosticsHealthDataRegression() {
   };
   const failures = [];
 
-  if (!actual.diagnosticsPageLoadsDataScript) {
-    failures.push("Expected diagnostics page to load diagnostics-health-data.js.");
+  if (!actual.instrumentationPageLoadsDataScript) {
+    failures.push("Expected instrumentation page to load diagnostics-health-data.js.");
   }
 
   if (actual.snapshotReadError) {
@@ -9049,7 +9051,7 @@ function runDiagnosticsHealthDataRegression() {
     sectionId: "module-regressions",
     sectionTitle: "Module Regressions",
     expected: {
-      diagnosticsPageLoadsDataScript: true,
+      instrumentationPageLoadsDataScript: true,
       exposesGlobal: true,
       detectorParityStatus: "passed",
       selectorHealthStatus: "passed",
@@ -9343,6 +9345,70 @@ function runStageRunnerRegression() {
     expected: {
       value: 4,
       errors: ["stageBeta: boom"]
+    },
+    targetExpected: null,
+    actual: actual,
+    failures: failures
+  };
+}
+
+function runInstrumentationPageRegression() {
+  const diagnosticsHtml = fs.readFileSync(diagnosticsPageHtmlPath, "utf8");
+  const instrumentationHtml = fs.readFileSync(instrumentationPageHtmlPath, "utf8");
+  const actual = {
+    diagnosticsLinksInstrumentation: diagnosticsHtml.includes('data-page-href="./instrumentation.html"'),
+    diagnosticsOmitsUrlCatalog: !diagnosticsHtml.includes("urlDetectorCatalogList"),
+    diagnosticsOmitsInboxCatalog: !diagnosticsHtml.includes("inboxDetectorCatalogList"),
+    diagnosticsOmitsPipelineCatalog: !diagnosticsHtml.includes("pipelineRuleCatalogList"),
+    instrumentationLoadsPage: instrumentationHtml.includes('<script src="./instrumentation.js"></script>'),
+    instrumentationLoadsDetectorCatalog: instrumentationHtml.includes('<script src="./detector-catalog.js"></script>'),
+    instrumentationLoadsDiagnosticsCatalogRows: instrumentationHtml.includes('<script src="./diagnostics-catalog-rows.js"></script>'),
+    instrumentationLoadsDiagnosticsHealthData: instrumentationHtml.includes('<script src="./diagnostics-health-data.js"></script>'),
+    instrumentationHasUrlCatalog: instrumentationHtml.includes("urlDetectorCatalogList"),
+    instrumentationHasInboxCatalog: instrumentationHtml.includes("inboxDetectorCatalogList"),
+    instrumentationHasPipelineCatalog: instrumentationHtml.includes("pipelineRuleCatalogList"),
+    instrumentationHasHealthSnapshots:
+      instrumentationHtml.includes("detectorParityList") &&
+      instrumentationHtml.includes("selectorHealthList")
+  };
+  const failures = [];
+
+  if (!actual.diagnosticsLinksInstrumentation) {
+    failures.push("Expected diagnostics page navigation to expose the instrumentation page.");
+  }
+
+  if (!actual.diagnosticsOmitsUrlCatalog || !actual.diagnosticsOmitsInboxCatalog || !actual.diagnosticsOmitsPipelineCatalog) {
+    failures.push("Expected diagnostics page to stop exposing matcher catalog lists.");
+  }
+
+  if (
+    !actual.instrumentationLoadsPage ||
+    !actual.instrumentationLoadsDetectorCatalog ||
+    !actual.instrumentationLoadsDiagnosticsCatalogRows ||
+    !actual.instrumentationLoadsDiagnosticsHealthData
+  ) {
+    failures.push("Expected instrumentation page to load the matcher catalog and validation dependencies.");
+  }
+
+  if (
+    !actual.instrumentationHasUrlCatalog ||
+    !actual.instrumentationHasInboxCatalog ||
+    !actual.instrumentationHasPipelineCatalog ||
+    !actual.instrumentationHasHealthSnapshots
+  ) {
+    failures.push("Expected instrumentation page to own URL, site, pipeline, detector parity, and selector health displays.");
+  }
+
+  return {
+    id: "page-instrumentation",
+    title: "Instrumentation page owns exposed matcher internals",
+    mode: "active",
+    status: failures.length ? "failed" : "passed",
+    sectionId: "module-regressions",
+    sectionTitle: "Module Regressions",
+    expected: {
+      diagnosticsOmitsCatalogs: true,
+      instrumentationHasCatalogs: true
     },
     targetExpected: null,
     actual: actual,
@@ -9721,6 +9787,7 @@ async function runSmokeSuite() {
     await runContentRuntimeLifecycleRegression(),
     runEmailCandidateDiscoveryRegression(),
     runPagePaneShellRegression(),
+    runInstrumentationPageRegression(),
     runGeneratedTestSuitePageRegression(),
     runSampleReviewPageRegression(),
     runPluginRegistryRegression(),
