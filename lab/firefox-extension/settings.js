@@ -2,15 +2,35 @@
 (function initializeMergedLinkLabSettingsPage() {
   "use strict";
 
-  const extensionApi = typeof browser !== "undefined" ? browser : (typeof chrome !== "undefined" ? chrome : null);
-  const pageUi = globalThis.urlForensicsPageUi;
-  const debugApi = typeof globalThis !== "undefined" ? globalThis.mergedLinkLabDebug : null;
+  const globalScope = typeof globalThis !== "undefined" ? globalThis : null;
+  const pageRuntimeFactory = globalScope ? globalScope.urlForensicsPageRuntime : null;
+  const pageDependenciesFactory = globalScope ? globalScope.urlForensicsPageDependencies : null;
+
+  if (!pageRuntimeFactory || typeof pageRuntimeFactory.create !== "function") {
+    throw new Error("URL Forensics page runtime helpers are unavailable.");
+  }
+
+  if (!pageDependenciesFactory || typeof pageDependenciesFactory.create !== "function") {
+    throw new Error("URL Forensics page dependency helpers are unavailable.");
+  }
+
+  const pageRuntime = pageRuntimeFactory.create({
+    globalScope: globalScope,
+    requirePageUi: true
+  });
+  const pageDependencies = pageDependenciesFactory.create({
+    globalScope: globalScope,
+    required: ["storageModel"]
+  });
+  const extensionApi = pageRuntime.extensionApi;
+  const pageUi = pageRuntime.pageUi;
+  const debugApi = pageRuntime.debugApi;
   if (debugApi && typeof debugApi.configure === "function") {
     debugApi.configure({ context: "settings-page", module: "settings" });
     debugApi.runtime("settings page initialization started");
   }
   // Shared model keeps storage migration and sender-list normalization in one place.
-  const storageModel = globalThis.urlForensicsStorageModel;
+  const storageModel = pageDependencies.storageModel;
   const storageKeys = storageModel.storageKeys;
   const legacyStorageKeys = storageModel.legacyStorageKeys;
   const defaults = storageModel.defaultSettings;
@@ -19,13 +39,12 @@
   const resolveStoredAutoApplyConfiguredSendersValue = storageModel.resolveStoredAutoApplyConfiguredSendersValue;
   const applyStoredBooleanSettingToControl = storageModel.applyStoredBooleanSettingToControl;
   const settingsState = {
-    manifest: null,
-    storageSnapshot: null,
     senderEmailList: defaults.autoApplyMirrorSenderEmailList.slice()
   };
   const DOM = {
     enableUrlNormalizationRepair: document.getElementById("enableUrlNormalizationRepair"),
     replaceEmailBodyWithMirrorContent: document.getElementById("replaceEmailBodyWithMirrorContent"),
+    autoApplyMirrorOnMobileDevice: document.getElementById("autoApplyMirrorOnMobileDevice"),
     autoApplyMirrorForConfiguredSenders: document.getElementById("autoApplyMirrorForConfiguredSenders"),
     autoApplySenderListSummary: document.getElementById("autoApplySenderListSummary"),
     senderAddressForm: document.getElementById("senderAddressForm"),
@@ -34,28 +53,8 @@
     senderAddressList: document.getElementById("senderAddressList"),
     senderAddressCount: document.getElementById("senderAddressCount"),
     senderAddressStatus: document.getElementById("senderAddressStatus"),
-    openHelpPageButton: document.getElementById("openHelpPageButton"),
-    openDiagnosticsPageButton: document.getElementById("openDiagnosticsPageButton"),
-    openDebuggingPageButton: document.getElementById("openDebuggingPageButton"),
-    openStoragePageButton: document.getElementById("openStoragePageButton"),
-    diagnosticsList: document.getElementById("diagnosticsList"),
-    diagnosticBadge: document.getElementById("diagnosticBadge"),
-    refreshDiagnosticsButton: document.getElementById("refreshDiagnosticsButton"),
     statusMessage: document.getElementById("statusMessage")
   };
-
-  // Function: resolve extension manifest.
-  function resolveManifest() {
-    if (!extensionApi || !extensionApi.runtime || typeof extensionApi.runtime.getManifest !== "function") {
-      return null;
-    }
-
-    try {
-      return extensionApi.runtime.getManifest();
-    } catch {
-      return null;
-    }
-  }
 
   // Function: set status.
   function setStatus(message, tone) {
@@ -65,21 +64,6 @@
   // Function: set sender-address status.
   function setSenderAddressStatus(message, tone) {
     pageUi.setStatusText(DOM.senderAddressStatus, message, tone);
-  }
-
-  // Function: set diagnostic badge.
-  function setDiagnosticBadge(text) {
-    pageUi.setBadgeText(DOM.diagnosticBadge, text, "Unavailable");
-  }
-
-  // Function: format timestamp.
-  function formatTimestamp(timestampValue) {
-    return pageUi.formatTimestamp(timestampValue);
-  }
-
-  // Function: shorten value.
-  function shortenValue(value, maximumLength) {
-    return pageUi.shortenValue(value, Number.isFinite(maximumLength) ? maximumLength : 92);
   }
 
   // Function: update sender count chip.
@@ -145,15 +129,6 @@
     renderSenderEmailList();
   }
 
-  // Function: set settings storage snapshot.
-  function setSettingsStorageSnapshot(source, storedSettings, errorMessage) {
-    settingsState.storageSnapshot = storageModel.createStorageSnapshot({
-      source: source,
-      storedSettings: storedSettings,
-      errorMessage: errorMessage
-    });
-  }
-
   // Function: set sender list summary.
   function setSenderListSummary(senderEmailList) {
     if (!DOM.autoApplySenderListSummary) {
@@ -178,26 +153,6 @@
       ").";
   }
 
-  // Function: render diagnostics list.
-  function renderDiagnosticsList(rows) {
-    pageUi.renderDefinitionRows(DOM.diagnosticsList, rows, "diagnostic-row");
-  }
-
-  // Function: render diagnostics.
-  function renderDiagnostics() {
-    const rows = storageModel.buildStorageDiagnosticsRows({
-      manifest: settingsState.manifest,
-      storageSnapshot: settingsState.storageSnapshot,
-      pageLabel: "Settings Page",
-      pageUrl: window.location.href,
-      readyState: document.readyState,
-      shortenValue: shortenValue,
-      formatTimestamp: formatTimestamp
-    });
-
-    setDiagnosticBadge(storageModel.getStorageBadgeLabel(settingsState.storageSnapshot));
-    renderDiagnosticsList(rows);
-  }
   // Function: apply default checkbox values.
   function applyDefaultCheckboxValues() {
     if (DOM.enableUrlNormalizationRepair) {
@@ -206,6 +161,10 @@
 
     if (DOM.replaceEmailBodyWithMirrorContent) {
       DOM.replaceEmailBodyWithMirrorContent.checked = defaults.replaceEmailBodyWithMirrorContent;
+    }
+
+    if (DOM.autoApplyMirrorOnMobileDevice) {
+      DOM.autoApplyMirrorOnMobileDevice.checked = defaults.autoApplyMirrorOnMobileDevice;
     }
 
     if (DOM.autoApplyMirrorForConfiguredSenders) {
@@ -220,6 +179,8 @@
     return {
       [storageKeys.enableUrlNormalizationRepair]: !!(DOM.enableUrlNormalizationRepair && DOM.enableUrlNormalizationRepair.checked),
       [storageKeys.replaceEmailBodyWithMirrorContent]: !!(DOM.replaceEmailBodyWithMirrorContent && DOM.replaceEmailBodyWithMirrorContent.checked),
+      [storageKeys.autoApplyMirrorOnMobileDevice]:
+        !!(DOM.autoApplyMirrorOnMobileDevice && DOM.autoApplyMirrorOnMobileDevice.checked),
       [storageKeys.autoApplyMirrorForConfiguredSenders]:
         !!(DOM.autoApplyMirrorForConfiguredSenders && DOM.autoApplyMirrorForConfiguredSenders.checked)
     };
@@ -231,6 +192,12 @@
       return isEnabled
         ? "Saved. Replacing the opened email body with mirror content is enabled."
         : "Saved. Replacing the opened email body with mirror content is disabled.";
+    }
+
+    if (changedControlId === "autoApplyMirrorOnMobileDevice") {
+      return isEnabled
+        ? "Saved. Mobile-device auto-apply is enabled."
+        : "Saved. Mobile-device auto-apply is disabled.";
     }
 
     if (changedControlId === "autoApplyMirrorForConfiguredSenders") {
@@ -330,6 +297,7 @@
     return !!(
       DOM.enableUrlNormalizationRepair ||
       DOM.replaceEmailBodyWithMirrorContent ||
+      DOM.autoApplyMirrorOnMobileDevice ||
       DOM.autoApplyMirrorForConfiguredSenders ||
       DOM.senderAddressList
     );
@@ -368,6 +336,12 @@
       storageKeys.replaceEmailBodyWithMirrorContent,
       defaults.replaceEmailBodyWithMirrorContent
     );
+    applyStoredBooleanSettingToControl(
+      DOM.autoApplyMirrorOnMobileDevice,
+      storedSettings,
+      storageKeys.autoApplyMirrorOnMobileDevice,
+      defaults.autoApplyMirrorOnMobileDevice
+    );
 
     if (DOM.autoApplyMirrorForConfiguredSenders) {
       const resolvedAutoApplyValue = resolveStoredAutoApplyConfiguredSendersValue(storedSettings);
@@ -401,6 +375,7 @@
       senderEmailCount: settingsState.senderEmailList.length,
       enableUrlNormalizationRepair: !!(DOM.enableUrlNormalizationRepair && DOM.enableUrlNormalizationRepair.checked),
       replaceEmailBodyWithMirrorContent: !!(DOM.replaceEmailBodyWithMirrorContent && DOM.replaceEmailBodyWithMirrorContent.checked),
+      autoApplyMirrorOnMobileDevice: !!(DOM.autoApplyMirrorOnMobileDevice && DOM.autoApplyMirrorOnMobileDevice.checked),
       autoApplyMirrorForConfiguredSenders: !!(DOM.autoApplyMirrorForConfiguredSenders && DOM.autoApplyMirrorForConfiguredSenders.checked)
     });
     debugApi.functionOut("settings.loadSettings", { source: "storage.local" });
@@ -408,8 +383,6 @@
 
   // Function: finish successful settings load.
   function finishSuccessfulSettingsLoad(storedSettings, loadOptions) {
-    setSettingsStorageSnapshot("storage.local", storedSettings, "");
-    renderDiagnostics();
     setSenderAddressStatus("Sender address list loaded.", "");
 
     if (!loadOptions.silentStatus) {
@@ -421,8 +394,6 @@
 
   // Function: handle settings controls unavailable.
   function handleSettingsControlsUnavailable() {
-    renderDiagnostics();
-
     if (debugApi) {
       debugApi.conditional("settings load skipped because settings controls are unavailable");
       debugApi.functionOut("settings.loadSettings", { source: "no-controls" });
@@ -432,8 +403,6 @@
   // Function: handle settings storage unavailable.
   function handleSettingsStorageUnavailable(loadOptions) {
     applyDefaultCheckboxValues();
-    setSettingsStorageSnapshot("storage-unavailable", null, "storage.local.get is unavailable in this context.");
-    renderDiagnostics();
     setSenderAddressStatus("Storage is unavailable in this context.", "error");
 
     if (!loadOptions.silentStatus) {
@@ -451,8 +420,6 @@
     const errorMessage = error && error.message ? error.message : "unknown error";
 
     applyDefaultCheckboxValues();
-    setSettingsStorageSnapshot("storage-error", null, errorMessage);
-    renderDiagnostics();
     setSenderAddressStatus("Could not load sender address list: " + errorMessage, "error");
 
     if (!loadOptions.silentStatus) {
@@ -505,6 +472,7 @@
       (
         !DOM.enableUrlNormalizationRepair &&
         !DOM.replaceEmailBodyWithMirrorContent &&
+        !DOM.autoApplyMirrorOnMobileDevice &&
         !DOM.autoApplyMirrorForConfiguredSenders
       ) ||
       !extensionApi ||
@@ -547,55 +515,6 @@
     }
   }
 
-  // Function: refresh diagnostics.
-  async function refreshDiagnostics() {
-    await loadSettings({ silentStatus: true });
-
-    if (settingsState.storageSnapshot && settingsState.storageSnapshot.source === "storage-error") {
-      setStatus("Diagnostics refreshed with storage read error details.", "error");
-      return;
-    }
-
-    if (settingsState.storageSnapshot && settingsState.storageSnapshot.source === "storage-unavailable") {
-      setStatus("Diagnostics refreshed. Storage API is unavailable in this context.", "error");
-      return;
-    }
-
-    setStatus("Diagnostics refreshed for the full settings page.", "saved");
-  }
-
-  // Function: open help page.
-  async function openHelpPage() {
-    await pageUi.openExtensionPage(extensionApi, "help.html", "Help", setStatus);
-  }
-
-  // Function: open diagnostics page.
-  async function openDiagnosticsPage() {
-    if (debugApi) {
-      debugApi.ui("settings open diagnostics clicked");
-    }
-
-    await pageUi.openExtensionPage(extensionApi, "diagnostics.html", "Diagnostics", setStatus);
-  }
-
-  // Function: open debugging page.
-  async function openDebuggingPage() {
-    if (debugApi) {
-      debugApi.ui("settings open debugging clicked");
-    }
-
-    await pageUi.openExtensionPage(extensionApi, "debugging.html", "Debugging", setStatus);
-  }
-
-  // Function: open storage page.
-  async function openStoragePage() {
-    if (debugApi) {
-      debugApi.ui("settings open storage clicked");
-    }
-
-    await pageUi.openExtensionPage(extensionApi, "storage.html", "Storage", setStatus);
-  }
-
   // Function: handle storage changes.
   function handleStorageChange(changes, areaName) {
     if (areaName !== "local" || !changes) {
@@ -617,6 +536,14 @@
     if (Object.prototype.hasOwnProperty.call(changes, storageKeys.replaceEmailBodyWithMirrorContent)) {
       if (DOM.replaceEmailBodyWithMirrorContent) {
         DOM.replaceEmailBodyWithMirrorContent.checked = changes[storageKeys.replaceEmailBodyWithMirrorContent].newValue === true;
+      }
+      didUpdate = true;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(changes, storageKeys.autoApplyMirrorOnMobileDevice)) {
+      if (DOM.autoApplyMirrorOnMobileDevice) {
+        DOM.autoApplyMirrorOnMobileDevice.checked =
+          changes[storageKeys.autoApplyMirrorOnMobileDevice].newValue === true;
       }
       didUpdate = true;
     }
@@ -649,14 +576,6 @@
       didUpdate = true;
     }
 
-    if (Object.prototype.hasOwnProperty.call(changes, storageKeys.stripKnownTrackingParameters)) {
-      didUpdate = true;
-    }
-
-    if (Object.prototype.hasOwnProperty.call(changes, storageKeys.trackingParameterFilters)) {
-      didUpdate = true;
-    }
-
     if (didUpdate) {
       loadSettings({ silentStatus: true });
     }
@@ -671,6 +590,10 @@
       DOM.replaceEmailBodyWithMirrorContent.addEventListener("change", saveSettings);
     }
 
+  if (DOM.autoApplyMirrorOnMobileDevice) {
+    DOM.autoApplyMirrorOnMobileDevice.addEventListener("change", saveSettings);
+  }
+
   if (DOM.autoApplyMirrorForConfiguredSenders) {
     DOM.autoApplyMirrorForConfiguredSenders.addEventListener("change", saveSettings);
   }
@@ -683,32 +606,9 @@
     DOM.senderAddressList.addEventListener("click", handleSenderAddressDelete);
   }
 
-  if (DOM.refreshDiagnosticsButton) {
-    DOM.refreshDiagnosticsButton.addEventListener("click", refreshDiagnostics);
-  }
-
-  if (DOM.openHelpPageButton) {
-    DOM.openHelpPageButton.addEventListener("click", openHelpPage);
-  }
-
-  if (DOM.openDiagnosticsPageButton) {
-    DOM.openDiagnosticsPageButton.addEventListener("click", openDiagnosticsPage);
-  }
-
-  if (DOM.openDebuggingPageButton) {
-    DOM.openDebuggingPageButton.addEventListener("click", openDebuggingPage);
-  }
-
-  if (DOM.openStoragePageButton) {
-    DOM.openStoragePageButton.addEventListener("click", openStoragePage);
-  }
-
   if (extensionApi && extensionApi.storage && extensionApi.storage.onChanged) {
     extensionApi.storage.onChanged.addListener(handleStorageChange);
   }
 
-  settingsState.manifest = resolveManifest();
-  setSettingsStorageSnapshot("defaults", null, "");
-  renderDiagnostics();
   loadSettings();
 })();

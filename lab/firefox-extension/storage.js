@@ -2,10 +2,30 @@
 (function initializeUrlForensicsStoragePage() {
   "use strict";
 
-  const extensionApi = typeof browser !== "undefined" ? browser : (typeof chrome !== "undefined" ? chrome : null);
-  const pageUi = globalThis.urlForensicsPageUi;
+  const globalScope = typeof globalThis !== "undefined" ? globalThis : null;
+  const pageRuntimeFactory = globalScope ? globalScope.urlForensicsPageRuntime : null;
+  const pageDependenciesFactory = globalScope ? globalScope.urlForensicsPageDependencies : null;
+
+  if (!pageRuntimeFactory || typeof pageRuntimeFactory.create !== "function") {
+    throw new Error("URL Forensics page runtime helpers are unavailable.");
+  }
+
+  if (!pageDependenciesFactory || typeof pageDependenciesFactory.create !== "function") {
+    throw new Error("URL Forensics page dependency helpers are unavailable.");
+  }
+
+  const pageRuntime = pageRuntimeFactory.create({
+    globalScope: globalScope,
+    requirePageUi: true
+  });
+  const pageDependencies = pageDependenciesFactory.create({
+    globalScope: globalScope,
+    required: ["storageModel"]
+  });
+  const extensionApi = pageRuntime.extensionApi;
+  const pageUi = pageRuntime.pageUi;
   // Shared model owns storage defaults, legacy migration, and debug-choice formatting.
-  const storageModel = globalThis.urlForensicsStorageModel;
+  const storageModel = pageDependencies.storageModel;
   const storageState = {
     manifest: null,
     storageSnapshot: null
@@ -13,15 +33,11 @@
   const DOM = {
     extensionVersion: document.getElementById("extensionVersion"),
     refreshStorageButton: document.getElementById("refreshStorageButton"),
-    openSettingsPageButton: document.getElementById("openSettingsPageButton"),
-    openDiagnosticsPageButton: document.getElementById("openDiagnosticsPageButton"),
-    openDebuggingPageButton: document.getElementById("openDebuggingPageButton"),
-    openHelpPageButton: document.getElementById("openHelpPageButton"),
     storageBadge: document.getElementById("storageBadge"),
     storageDiagnosticsList: document.getElementById("storageDiagnosticsList"),
     statusMessage: document.getElementById("statusMessage")
   };
-  const debugApi = typeof globalThis !== "undefined" ? globalThis.mergedLinkLabDebug : null;
+  const debugApi = pageRuntime.debugApi;
 
   if (debugApi && typeof debugApi.configure === "function") {
     debugApi.configure({ context: "storage-page", module: "storage" });
@@ -118,16 +134,6 @@
     }
   }
 
-  async function openExtensionPage(pageName, label) {
-    await pageUi.openExtensionPage(extensionApi, pageName, label, setStatus);
-  }
-
-  async function openSettingsPage() {
-    await pageUi.openSettingsPage(extensionApi, setStatus, {
-      successMessage: "Opened settings hub."
-    });
-  }
-
   function handleStorageChange(changes, areaName) {
     if (areaName !== "local" || !changes) {
       return;
@@ -149,28 +155,6 @@
     if (DOM.refreshStorageButton) {
       DOM.refreshStorageButton.addEventListener("click", function refreshStorageFromButton() {
         loadStorageDiagnostics();
-      });
-    }
-
-    if (DOM.openSettingsPageButton) {
-      DOM.openSettingsPageButton.addEventListener("click", openSettingsPage);
-    }
-
-    if (DOM.openDiagnosticsPageButton) {
-      DOM.openDiagnosticsPageButton.addEventListener("click", function openDiagnosticsFromStorage() {
-        openExtensionPage("diagnostics.html", "Diagnostics");
-      });
-    }
-
-    if (DOM.openDebuggingPageButton) {
-      DOM.openDebuggingPageButton.addEventListener("click", function openDebuggingFromStorage() {
-        openExtensionPage("debugging.html", "Debugging");
-      });
-    }
-
-    if (DOM.openHelpPageButton) {
-      DOM.openHelpPageButton.addEventListener("click", function openHelpFromStorage() {
-        openExtensionPage("help.html", "Help");
       });
     }
 

@@ -2,25 +2,41 @@
 (function initializeUrlForensicsDebuggingPage() {
   "use strict";
 
-  const extensionApi = typeof browser !== "undefined" ? browser : (typeof chrome !== "undefined" ? chrome : null);
-  const pageUi = globalThis.urlForensicsPageUi;
-  const defaultDebugConfig = {
-    level: "off",
-    categories: {
-      error: true,
-      runtime: true,
-      storage: true,
-      messaging: true,
-      ui: true,
-      pipeline: true,
-      function: false,
-      conditional: false,
-      loop: false,
-      variable: false
-    }
-  };
-  const pageChoicesStorageKey = "programDebugPageChoices";
-  const maxVisibleRenderLimit = 10000;
+  const globalScope = typeof globalThis !== "undefined" ? globalThis : null;
+  const pageRuntimeFactory = globalScope ? globalScope.urlForensicsPageRuntime : null;
+
+  if (!pageRuntimeFactory || typeof pageRuntimeFactory.create !== "function") {
+    throw new Error("URL Forensics page runtime helpers are unavailable.");
+  }
+
+  const pageRuntime = pageRuntimeFactory.create({
+    globalScope: globalScope,
+    requirePageUi: true
+  });
+  const extensionApi = pageRuntime.extensionApi;
+  const pageUi = pageRuntime.pageUi;
+  const debugConfigModel = globalScope && globalScope.urlForensicsDebugConfig ? globalScope.urlForensicsDebugConfig : null;
+  const defaultDebugConfig = debugConfigModel
+    ? debugConfigModel.defaultConfig
+    : {
+      level: "off",
+      categories: {
+        error: true,
+        runtime: true,
+        storage: true,
+        messaging: true,
+        ui: true,
+        pipeline: true,
+        function: false,
+        conditional: false,
+        loop: false,
+        variable: false
+      }
+    };
+  const pageChoicesStorageKey = debugConfigModel
+    ? debugConfigModel.storageKeys.programDebugPageChoices
+    : "programDebugPageChoices";
+  const maxVisibleRenderLimit = debugConfigModel ? 10000 : 10000;
   const debugState = {
     config: {
       level: defaultDebugConfig.level,
@@ -45,10 +61,6 @@
     emitDebugTestButton: document.getElementById("emitDebugTestButton"),
     clearDebugButton: document.getElementById("clearDebugButton"),
     exportDebugButton: document.getElementById("exportDebugButton"),
-    openDiagnosticsPageButton: document.getElementById("openDiagnosticsPageButton"),
-    openStoragePageButton: document.getElementById("openStoragePageButton"),
-    openSettingsPageButton: document.getElementById("openSettingsPageButton"),
-    openHelpPageButton: document.getElementById("openHelpPageButton"),
     debugBadge: document.getElementById("debugBadge"),
     debugLevelSelect: document.getElementById("debugLevelSelect"),
     debugTypeFilterSelect: document.getElementById("debugTypeFilterSelect"),
@@ -58,7 +70,7 @@
     debugTrace: document.getElementById("debugTrace"),
     statusMessage: document.getElementById("statusMessage")
   };
-  const debugApi = typeof globalThis !== "undefined" ? globalThis.mergedLinkLabDebug : null;
+  const debugApi = pageRuntime.debugApi;
 
   if (debugApi && typeof debugApi.configure === "function") {
     debugApi.configure({ context: "debugging-page", module: "debugging" });
@@ -209,6 +221,10 @@
 
   // Function: clone debug config.
   function cloneDebugConfig(config) {
+    if (debugConfigModel && typeof debugConfigModel.cloneConfig === "function") {
+      return debugConfigModel.cloneConfig(config);
+    }
+
     const safeConfig = config && typeof config === "object" ? config : defaultDebugConfig;
     const safeCategories = safeConfig.categories && typeof safeConfig.categories === "object"
       ? safeConfig.categories
@@ -689,15 +705,6 @@
   }
 
   // Function: open extension page.
-  async function openExtensionPage(pageName, label) {
-    await pageUi.openExtensionPage(extensionApi, pageName, label, setStatus);
-  }
-
-  // Function: open settings page.
-  async function openSettingsPage() {
-    await pageUi.openSettingsPage(extensionApi, setStatus);
-  }
-
   // Function: update render limit.
   function updateRenderLimit() {
     debugState.renderLimit = normalizeVisibleRenderLimit(DOM.renderLimitSelect ? DOM.renderLimitSelect.value : debugState.renderLimit);
@@ -741,28 +748,6 @@
 
     if (DOM.exportDebugButton) {
       DOM.exportDebugButton.addEventListener("click", exportDebugEvents);
-    }
-
-    if (DOM.openDiagnosticsPageButton) {
-      DOM.openDiagnosticsPageButton.addEventListener("click", function openDiagnosticsFromDebugging() {
-        openExtensionPage("diagnostics.html", "Diagnostics");
-      });
-    }
-
-    if (DOM.openStoragePageButton) {
-      DOM.openStoragePageButton.addEventListener("click", function openStorageFromDebugging() {
-        openExtensionPage("storage.html", "Storage");
-      });
-    }
-
-    if (DOM.openSettingsPageButton) {
-      DOM.openSettingsPageButton.addEventListener("click", openSettingsPage);
-    }
-
-    if (DOM.openHelpPageButton) {
-      DOM.openHelpPageButton.addEventListener("click", function openHelpFromDebugging() {
-        openExtensionPage("help.html", "Help");
-      });
     }
 
     if (DOM.debugLevelSelect) {

@@ -9,12 +9,77 @@ function urlForensicsPipelineUrlCreateResolverContext(pipelineBase) {
 
   return Object.freeze({
     regularExpressions: pipelineBase.regularExpressions,
+    ruleConfiguration: pipelineBase.ruleConfiguration || Object.freeze({}),
     preferredTrackingParameterNames: pipelineBase.preferredTrackingParameterNames,
     trackingHostKeywords: pipelineBase.trackingHostKeywords,
     trackingParameterModel: pipelineBase.trackingParameterModel || null,
     convertValueToString: pipelineBase.convertValueToString,
     resolvePipelineSettings: pipelineBase.resolvePipelineSettings
   });
+}
+
+// Function: create regular expression from declarative pattern.
+function urlForensicsPipelineUrlCreateRegularExpression(patternDefinition) {
+  if (!patternDefinition || typeof patternDefinition !== "object" || !patternDefinition.source) {
+    return null;
+  }
+
+  return new RegExp(String(patternDefinition.source), String(patternDefinition.flags || ""));
+}
+
+// Function: normalize email address value.
+function urlForensicsPipelineUrlNormalizeEmailAddress(value) {
+  const safeValue = String(value || "").trim().toLowerCase();
+  const mailtoMatch = safeValue.match(/^mailto:\s*([^?]+)/i);
+  const candidateValue = mailtoMatch ? mailtoMatch[1].trim() : safeValue;
+
+  if (!candidateValue) {
+    return "";
+  }
+
+  return /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i.test(candidateValue)
+    ? candidateValue
+    : "";
+}
+
+// Function: check whether value is email-like.
+function urlForensicsPipelineUrlIsEmailValue(resolverContext, value) {
+  return !!urlForensicsPipelineUrlNormalizeEmailAddress(resolverContext.convertValueToString(value).trim());
+}
+
+// Function: normalize link-like value.
+function urlForensicsPipelineUrlNormalizeLinkValue(resolverContext, value) {
+  const trimmedValue = resolverContext.convertValueToString(value).trim();
+  const mailtoMatch = trimmedValue.match(/^mailto:\s*([^?]+)(.*)$/i);
+  const normalizedEmailAddress = urlForensicsPipelineUrlNormalizeEmailAddress(trimmedValue);
+
+  if (!normalizedEmailAddress) {
+    return trimmedValue;
+  }
+
+  if (mailtoMatch) {
+    return "mailto:" + normalizedEmailAddress + resolverContext.convertValueToString(mailtoMatch[2] || "");
+  }
+
+  return "mailto:" + normalizedEmailAddress;
+}
+
+// Function: extract normalized email host.
+function urlForensicsPipelineUrlExtractEmailHost(value) {
+  const normalizedEmailAddress = urlForensicsPipelineUrlNormalizeEmailAddress(value);
+
+  if (!normalizedEmailAddress || normalizedEmailAddress.indexOf("@") === -1) {
+    return "";
+  }
+
+  return normalizedEmailAddress.split("@")[1] || "";
+}
+
+// Function: append unique cleanup note.
+function urlForensicsPipelineUrlAppendCleanupNote(cleanupNotes, noteText) {
+  if (noteText && cleanupNotes.indexOf(noteText) === -1) {
+    cleanupNotes.push(noteText);
+  }
 }
 
 // Function: peel URL token.
@@ -30,15 +95,20 @@ function urlForensicsPipelineUrlPeel(resolverContext, urlValue, options) {
     };
   }
 
-  if (resolverContext.regularExpressions.trailingUrlPunctuation.test(peeledUrl)) {
-    peeledUrl = peeledUrl.replace(resolverContext.regularExpressions.trailingUrlPunctuation, "");
-    cleanupNotes.push("TRAILING_PUNCT_REMOVED");
-  }
+  ((resolverContext.ruleConfiguration.repair && resolverContext.ruleConfiguration.repair.peelTransforms) || []).forEach(function applyPeelTransform(transformDefinition) {
+    const matchPattern = urlForensicsPipelineUrlCreateRegularExpression(transformDefinition && transformDefinition.match);
+    const replaceWith = resolverContext.convertValueToString(transformDefinition && transformDefinition.replaceWith);
+    const nextValue = matchPattern ? peeledUrl.replace(matchPattern, replaceWith) : peeledUrl;
 
-  if (/^https?:\/([^/])/.test(peeledUrl)) {
-    peeledUrl = peeledUrl.replace(/^https?:\/([^/])/, "https://$1");
-    cleanupNotes.push("PROTOCOL_REPAIRED");
-  }
+    if (nextValue === peeledUrl) {
+      return;
+    }
+
+    peeledUrl = nextValue;
+    urlForensicsPipelineUrlAppendCleanupNote(cleanupNotes, transformDefinition && transformDefinition.note
+      ? transformDefinition.note
+      : "NORMALIZATION_REPAIRED");
+  });
 
   return {
     value: peeledUrl,
@@ -152,6 +222,10 @@ function urlForensicsPipelineUrlExtractTrackingCandidates(resolverContext, urlVa
   const seenDestinationUrls = new Set();
   const trimmedUrlValue = resolverContext.convertValueToString(urlValue).trim();
 
+  if (urlForensicsPipelineUrlIsEmailValue(resolverContext, trimmedUrlValue)) {
+    return foundDestinationUrls;
+  }
+
   // Function: remember destination candidate.
   function rememberDestinationCandidate(candidateValue) {
     const extractedAbsoluteUrl = urlForensicsPipelineUrlNormalizeDestinationCandidateValue(
@@ -186,7 +260,6 @@ function urlForensicsPipelineUrlExtractTrackingCandidates(resolverContext, urlVa
     parsedUrl.searchParams.forEach(function inspectAllSearchParameterValues(parameterValue) {
       rememberDestinationCandidate(parameterValue);
     });
-
   }
 
   const embeddedTrackingMatches = [...trimmedUrlValue.matchAll(resolverContext.regularExpressions.embeddedTrackingParameter)];
@@ -226,6 +299,10 @@ function urlForensicsPipelineUrlExtractKnownTrackingParameterNames(resolverConte
     return [];
   }
 
+  if (urlForensicsPipelineUrlIsEmailValue(resolverContext, trimmedUrlValue)) {
+    return [];
+  }
+
   try {
     parsedUrl = new URL(trimmedUrlValue);
   } catch {
@@ -255,10 +332,17 @@ function urlForensicsPipelineUrlFormatParsedValue(parsedUrl) {
 // Function: strip known tracking parameters.
 function urlForensicsPipelineUrlStripKnownTrackingParameters(resolverContext, urlValue, options) {
   const pipelineSettings = resolverContext.resolvePipelineSettings(options);
-  const trimmedUrlValue = resolverContext.convertValueToString(urlValue).trim();
+  const trimmedUrlValue = urlForensicsPipelineUrlNormalizeLinkValue(resolverContext, urlValue);
   const removedParameterNames = [];
 
   if (!pipelineSettings.stripKnownTrackingParameters || !trimmedUrlValue) {
+    return {
+      value: trimmedUrlValue,
+      removedParameterNames: removedParameterNames
+    };
+  }
+
+  if (urlForensicsPipelineUrlIsEmailValue(resolverContext, trimmedUrlValue)) {
     return {
       value: trimmedUrlValue,
       removedParameterNames: removedParameterNames
@@ -329,9 +413,19 @@ function urlForensicsPipelineUrlQueueDestinationCandidates(queueState, destinati
 
 // Function: resolve URL.
 function urlForensicsPipelineUrlResolveURL(resolverContext, urlValue) {
+  const normalizedUrlValue = urlForensicsPipelineUrlNormalizeLinkValue(resolverContext, urlValue);
+
+  if (!normalizedUrlValue) {
+    return [normalizedUrlValue];
+  }
+
+  if (urlForensicsPipelineUrlIsEmailValue(resolverContext, normalizedUrlValue)) {
+    return [normalizedUrlValue];
+  }
+
   const queueState = {
-    pendingUrlQueue: [{ value: urlValue, depth: 0 }],
-    seenQueuedUrls: new Set([urlValue])
+    pendingUrlQueue: [{ value: normalizedUrlValue, depth: 0 }],
+    seenQueuedUrls: new Set([normalizedUrlValue])
   };
   const resolvedLeafUrls = [];
   const seenLeafUrls = new Set();
@@ -356,17 +450,21 @@ function urlForensicsPipelineUrlResolveURL(resolverContext, urlValue) {
     });
   }
 
-  return resolvedLeafUrls.length ? resolvedLeafUrls : [urlValue];
+  return resolvedLeafUrls.length ? resolvedLeafUrls : [normalizedUrlValue];
 }
 
 // Function: resolve URL with minimal recursive normalization.
 function urlForensicsPipelineUrlResolveMinimalRecursive(resolverContext, urlValue, options) {
   const seenIntermediateUrls = new Set();
   const pipelineSettings = resolverContext.resolvePipelineSettings(options);
-  let currentUrlValue = resolverContext.convertValueToString(urlValue).trim();
+  let currentUrlValue = urlForensicsPipelineUrlNormalizeLinkValue(resolverContext, urlValue);
   let safetyGuardCount = 0;
 
   if (!pipelineSettings.enableUrlNormalizationRepair) {
+    return currentUrlValue;
+  }
+
+  if (urlForensicsPipelineUrlIsEmailValue(resolverContext, currentUrlValue)) {
     return currentUrlValue;
   }
 
@@ -374,7 +472,10 @@ function urlForensicsPipelineUrlResolveMinimalRecursive(resolverContext, urlValu
     safetyGuardCount += 1;
     seenIntermediateUrls.add(currentUrlValue);
 
-    const peeledUrl = urlForensicsPipelineUrlPeel(resolverContext, currentUrlValue, pipelineSettings).value;
+    const peeledUrl = urlForensicsPipelineUrlNormalizeLinkValue(
+      resolverContext,
+      urlForensicsPipelineUrlPeel(resolverContext, currentUrlValue, pipelineSettings).value
+    );
     const decodedUrl = urlForensicsPipelineUrlDecodeRepeated(peeledUrl, 4);
     const resolvedCandidates = urlForensicsPipelineUrlResolveURL(resolverContext, decodedUrl);
     const validResolvedCandidates = resolvedCandidates.filter(urlForensicsPipelineUrlIsValidURL);
@@ -387,7 +488,7 @@ function urlForensicsPipelineUrlResolveMinimalRecursive(resolverContext, urlValu
     currentUrlValue = preferredNextUrl;
   }
 
-  return currentUrlValue || resolverContext.convertValueToString(urlValue).trim();
+  return currentUrlValue || urlForensicsPipelineUrlNormalizeLinkValue(resolverContext, urlValue);
 }
 
 // Function: check valid URL.
@@ -402,6 +503,12 @@ function urlForensicsPipelineUrlIsValidURL(urlValue) {
 
 // Function: extract host.
 function urlForensicsPipelineUrlExtractHost(urlValue) {
+  const emailHost = urlForensicsPipelineUrlExtractEmailHost(urlValue);
+
+  if (emailHost) {
+    return emailHost;
+  }
+
   try {
     return new URL(urlValue).hostname;
   } catch {
@@ -411,6 +518,12 @@ function urlForensicsPipelineUrlExtractHost(urlValue) {
 
 // Function: extract base URL.
 function urlForensicsPipelineUrlExtractBaseUrl(urlValue) {
+  const normalizedEmailAddress = urlForensicsPipelineUrlNormalizeEmailAddress(urlValue);
+
+  if (normalizedEmailAddress) {
+    return "mailto:" + normalizedEmailAddress;
+  }
+
   try {
     const parsedUrl = new URL(urlValue);
     return parsedUrl.origin + parsedUrl.pathname.replace(/\/$/, "");
@@ -421,6 +534,12 @@ function urlForensicsPipelineUrlExtractBaseUrl(urlValue) {
 
 // Function: extract origin URL.
 function urlForensicsPipelineUrlExtractOriginUrl(urlValue) {
+  const normalizedEmailAddress = urlForensicsPipelineUrlNormalizeEmailAddress(urlValue);
+
+  if (normalizedEmailAddress) {
+    return "mailto:" + normalizedEmailAddress;
+  }
+
   try {
     const parsedUrl = new URL(urlValue);
     return parsedUrl.protocol + "//" + parsedUrl.host;
@@ -432,6 +551,12 @@ function urlForensicsPipelineUrlExtractOriginUrl(urlValue) {
 // Function: build final URL display name.
 function urlForensicsPipelineUrlBuildFinalUrlDisplayName(resolverContext, urlValue) {
   const trimmedUrlValue = resolverContext.convertValueToString(urlValue).trim();
+  const normalizedEmailAddress = urlForensicsPipelineUrlNormalizeEmailAddress(trimmedUrlValue);
+
+  if (normalizedEmailAddress) {
+    return normalizedEmailAddress;
+  }
+
   return urlForensicsPipelineUrlExtractOriginUrl(trimmedUrlValue) || trimmedUrlValue;
 }
 
@@ -450,38 +575,72 @@ function urlForensicsPipelineUrlBuildFinalUrlLinkText(resolverContext, finalUrlE
 // Function: build final URL entry.
 function urlForensicsPipelineUrlBuildFinalUrlEntry(resolverContext, urlValue, options) {
   const optionBag = options || {};
-  const trimmedUrlValue = resolverContext.convertValueToString(urlValue).trim();
+  const trimmedUrlValue = urlForensicsPipelineUrlNormalizeLinkValue(resolverContext, urlValue);
   const hostName = urlForensicsPipelineUrlExtractHost(trimmedUrlValue);
   const detectedType = resolverContext.convertValueToString(optionBag.detectedType || optionBag.type).trim();
 
   return {
     url: trimmedUrlValue,
     host: hostName,
-    type: detectedType || urlForensicsPipelineUrlClassify(resolverContext, hostName),
+    type: detectedType || (urlForensicsPipelineUrlIsEmailValue(resolverContext, trimmedUrlValue)
+      ? "email"
+      : urlForensicsPipelineUrlClassify(resolverContext, hostName)),
     label: urlForensicsPipelineUrlBuildFinalUrlDisplayName(resolverContext, trimmedUrlValue)
   };
+}
+
+// Function: check host classification rule.
+function urlForensicsPipelineUrlHostMatchesClassificationRule(hostName, ruleDefinition) {
+  const normalizedHostName = String(hostName || "").trim().toLowerCase();
+  const safeRuleDefinition = ruleDefinition && typeof ruleDefinition === "object" ? ruleDefinition : {};
+  const matchType = String(safeRuleDefinition.matchType || "").trim();
+
+  if (!normalizedHostName || !matchType) {
+    return false;
+  }
+
+  if (matchType === "hostContains") {
+    return normalizedHostName.includes(String(safeRuleDefinition.value || "").trim().toLowerCase());
+  }
+
+  if (matchType === "hostContainsAny") {
+    return (safeRuleDefinition.values || []).some(function matchAnyHostValue(value) {
+      return normalizedHostName.includes(String(value || "").trim().toLowerCase());
+    });
+  }
+
+  if (matchType === "hostPattern") {
+    const pattern = urlForensicsPipelineUrlCreateRegularExpression(safeRuleDefinition.pattern);
+    return pattern ? pattern.test(normalizedHostName) : false;
+  }
+
+  return false;
 }
 
 // Function: classify host.
 function urlForensicsPipelineUrlClassify(resolverContext, hostName) {
   const normalizedHostName = resolverContext.convertValueToString(hostName).toLowerCase();
+  const hostRules = (resolverContext.ruleConfiguration.classification && resolverContext.ruleConfiguration.classification.hostRules) || [];
 
   if (!normalizedHostName) return "unknown";
-  if (normalizedHostName.includes("list-manage")) return "publisher";
-  if (
-    normalizedHostName.includes("rs6.net") ||
-    normalizedHostName.includes("kajabimail") ||
-    normalizedHostName.includes("ymlpmail") ||
-    normalizedHostName.includes("ccsend.com") ||
-    normalizedHostName.includes("mailchi.mp")
-  ) return "newsletter";
-  if (/track|trk|click|redirect/i.test(normalizedHostName)) return "tracker";
+
+  for (let ruleIndex = 0; ruleIndex < hostRules.length; ruleIndex += 1) {
+    if (urlForensicsPipelineUrlHostMatchesClassificationRule(normalizedHostName, hostRules[ruleIndex])) {
+      return resolverContext.convertValueToString(hostRules[ruleIndex].type).trim() || "destination";
+    }
+  }
+
   return "destination";
 }
 
 // Function: classify URL value.
 function urlForensicsPipelineUrlClassifyUrlValue(resolverContext, urlValue) {
   const trimmedUrlValue = resolverContext.convertValueToString(urlValue).trim();
+
+  if (urlForensicsPipelineUrlIsEmailValue(resolverContext, trimmedUrlValue)) {
+    return "email";
+  }
+
   const hostName = urlForensicsPipelineUrlExtractHost(trimmedUrlValue);
   const classifiedHostType = urlForensicsPipelineUrlClassify(resolverContext, hostName);
 
@@ -543,10 +702,17 @@ function urlForensicsPipelineUrlResolverCreate(pipelineBase) {
     isLikelyTrackerHost: function isLikelyTrackerHost(hostName) {
       return urlForensicsPipelineUrlIsLikelyTrackerHost(resolverContext, hostName);
     },
+    isEmailValue: function isEmailValue(urlValue) {
+      return urlForensicsPipelineUrlIsEmailValue(resolverContext, urlValue);
+    },
     isKnownTrackingParameter: function isKnownTrackingParameter(parameterName) {
       return urlForensicsPipelineUrlIsKnownTrackingParameter(resolverContext, parameterName);
     },
     isValidURL: urlForensicsPipelineUrlIsValidURL,
+    normalizeEmailAddress: urlForensicsPipelineUrlNormalizeEmailAddress,
+    normalizeLinkValue: function normalizeLinkValue(urlValue) {
+      return urlForensicsPipelineUrlNormalizeLinkValue(resolverContext, urlValue);
+    },
     peel: function peel(urlValue, options) {
       return urlForensicsPipelineUrlPeel(resolverContext, urlValue, options);
     },

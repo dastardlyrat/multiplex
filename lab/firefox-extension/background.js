@@ -12,7 +12,8 @@
   const backgroundState = {
     activeTabIdByWindowId: new Map(),
     detectedEmailByTabId: new Map(),
-    focusedWindowId: null
+    focusedWindowId: null,
+    isMobileDevice: false
   };
   const debugApi = typeof globalThis !== "undefined" ? globalThis.mergedLinkLabDebug : null;
   const debugRedaction = typeof globalThis !== "undefined" && globalThis.urlForensicsDebugRedaction
@@ -22,26 +23,51 @@
           return "[debug redaction helper unavailable]";
         }
       };
-  const debugLevels = {
-    off: 0,
-    error: 1,
-    info: 2,
-    verbose: 3,
-    trace: 4
-  };
-  const defaultDebugCategories = {
-    error: true,
-    runtime: true,
-    storage: true,
-    messaging: true,
-    ui: true,
-    pipeline: true,
-    function: false,
-    conditional: false,
-    loop: false,
-    variable: false
-  };
-  const debugStorageKey = "programDebugConfig";
+  const debugConfigModel = typeof globalThis !== "undefined" && globalThis.urlForensicsDebugConfig
+    ? globalThis.urlForensicsDebugConfig
+    : {
+        categories: {
+          error: true,
+          runtime: true,
+          storage: true,
+          messaging: true,
+          ui: true,
+          pipeline: true,
+          function: false,
+          conditional: false,
+          loop: false,
+          variable: false
+        },
+        defaultConfig: {
+          level: "off",
+          categories: {
+            error: true,
+            runtime: true,
+            storage: true,
+            messaging: true,
+            ui: true,
+            pipeline: true,
+            function: false,
+            conditional: false,
+            loop: false,
+            variable: false
+          }
+        },
+        levels: {
+          off: 0,
+          error: 1,
+          info: 2,
+          verbose: 3,
+          trace: 4
+        },
+        normalizeConfig: null,
+        storageKeys: {
+          programDebugConfig: "programDebugConfig"
+        }
+      };
+  const debugLevels = debugConfigModel.levels;
+  const defaultDebugCategories = debugConfigModel.categories;
+  const debugStorageKey = debugConfigModel.storageKeys.programDebugConfig;
   const debugPayloadDefaultEventLimit = 10000;
   const debugState = {
     nextId: 1,
@@ -50,8 +76,8 @@
     droppedEventCount: 0,
     lastCollectorError: "",
     config: {
-      level: "off",
-      categories: Object.assign({}, defaultDebugCategories)
+      level: debugConfigModel.defaultConfig.level,
+      categories: Object.assign({}, debugConfigModel.defaultConfig.categories)
     }
   };
 
@@ -61,6 +87,10 @@
 
   // Function: normalize debug config.
   function normalizeDebugConfig(config) {
+    if (typeof debugConfigModel.normalizeConfig === "function") {
+      return debugConfigModel.normalizeConfig(config, debugState.config);
+    }
+
     const safeConfig = config && typeof config === "object" ? config : {};
     const nextLevel = Object.prototype.hasOwnProperty.call(debugLevels, safeConfig.level)
       ? safeConfig.level
@@ -358,6 +388,82 @@
     return activeTabId ? !!backgroundState.detectedEmailByTabId.get(activeTabId) : false;
   }
 
+  // Function: check whether a platform info response is mobile.
+  function isMobilePlatformInfo(platformInfo) {
+    const osValue = String(platformInfo && platformInfo.os || "").toLowerCase();
+    return osValue === "android";
+  }
+
+  // Function: load mobile platform state.
+  async function loadMobilePlatformState() {
+    if (!extensionApi.runtime || typeof extensionApi.runtime.getPlatformInfo !== "function") {
+      backgroundState.isMobileDevice = false;
+      return false;
+    }
+
+    try {
+      backgroundState.isMobileDevice = isMobilePlatformInfo(await extensionApi.runtime.getPlatformInfo());
+    } catch {
+      backgroundState.isMobileDevice = false;
+    }
+
+    return backgroundState.isMobileDevice;
+  }
+
+  // Function: sync toolbar popup mode.
+  async function syncToolbarPopupMode() {
+    if (!extensionApi.action || typeof extensionApi.action.setPopup !== "function") {
+      return false;
+    }
+
+    try {
+      await extensionApi.action.setPopup({
+        popup: backgroundState.isMobileDevice ? "" : "popup.html"
+      });
+      debugLog("ui", "info", "toolbar popup mode synced", {
+        isMobileDevice: backgroundState.isMobileDevice
+      });
+      return true;
+    } catch (error) {
+      debugLog("error", "error", "toolbar popup mode sync failed", {
+        message: error && error.message ? error.message : "unknown error"
+      });
+      return false;
+    }
+  }
+
+  // Function: open toolbar popup page as a standalone extension page.
+  async function openToolbarPopupPage() {
+    if (!extensionApi.runtime || typeof extensionApi.runtime.getURL !== "function") {
+      return { ok: false, error: "popup page URL is unavailable" };
+    }
+
+    const popupPageUrl = extensionApi.runtime.getURL("popup.html");
+
+    try {
+      if (extensionApi.windows && typeof extensionApi.windows.create === "function") {
+        await extensionApi.windows.create({
+          url: popupPageUrl,
+          type: "normal"
+        });
+        return { ok: true, opened: "window" };
+      }
+    } catch (error) {
+      debugLog("error", "error", "toolbar popup window open failed; falling back to tab", {
+        message: error && error.message ? error.message : "unknown error"
+      });
+    }
+
+    if (extensionApi.tabs && typeof extensionApi.tabs.create === "function") {
+      await extensionApi.tabs.create({
+        url: popupPageUrl
+      });
+      return { ok: true, opened: "tab" };
+    }
+
+    return { ok: false, error: "popup page opener is unavailable" };
+  }
+
   // Function: open settings page.
   async function openSettingsPage() {
     // Branch: try the primary operation before handling failures.
@@ -397,9 +503,13 @@
       return;
     }
 
-    const nextToolbarTitle = activeTabHasDetectedEmail()
-      ? "Open URL Forensics Workbench popup for controls, the settings hub, and the in-page helper."
-      : "Open URL Forensics Workbench popup. Use Settings for Diagnostics, Debugging, Storage, and Help.";
+    const nextToolbarTitle = backgroundState.isMobileDevice
+      ? "Open URL Forensics Workbench controls in a full page."
+      : (
+          activeTabHasDetectedEmail()
+            ? "Open URL Forensics Workbench popup for controls, the settings hub, and the in-page helper."
+            : "Open URL Forensics Workbench popup. Use Settings for Diagnostics, Debugging, Storage, and Help."
+        );
 
     // Branch: try the primary operation before handling failures.
     try {
@@ -510,6 +620,23 @@
     }
   }
 
+  // Function: handle toolbar action click.
+  function handleToolbarActionClicked() {
+    if (!backgroundState.isMobileDevice) {
+      return;
+    }
+
+    openToolbarPopupPage().catch(function ignoreToolbarPopupPageOpenError(error) {
+      debugLog("error", "error", "toolbar popup page open failed", {
+        message: error && error.message ? error.message : "unknown error"
+      });
+    });
+  }
+
+  if (extensionApi.action.onClicked && typeof extensionApi.action.onClicked.addListener === "function") {
+    extensionApi.action.onClicked.addListener(handleToolbarActionClicked);
+  }
+
   // Function: handle tab activated.
   extensionApi.tabs.onActivated.addListener(function handleTabActivated(activeInfo) {
     // Branch: follow this path only when the current condition passes.
@@ -583,6 +710,9 @@
     } catch (error) {
       console.error("URL Forensics Workbench could not load debug choices.", error);
     }
+
+    await loadMobilePlatformState();
+    await syncToolbarPopupMode();
 
     // Branch: try the primary operation before handling failures.
     try {

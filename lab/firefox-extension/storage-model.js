@@ -22,49 +22,75 @@
     throw new Error("URL Forensics tracking parameter model is unavailable.");
   }
 
+  const debugConfigModel = (function resolveDebugConfigModel() {
+    if (typeof globalThis !== "undefined" && globalThis.urlForensicsDebugConfig) {
+      return globalThis.urlForensicsDebugConfig;
+    }
+
+    if (typeof require === "function") {
+      try {
+        return require("./debug-config.js");
+      } catch {
+        return null;
+      }
+    }
+
+    return null;
+  }());
+
   const storageKeys = Object.freeze({
     enableUrlNormalizationRepair: "enableUrlNormalizationRepair",
     stripKnownTrackingParameters: "stripKnownTrackingParameters",
     trackingParameterFilters: "trackingParameterFilters",
     replaceEmailBodyWithMirrorContent: "replaceEmailBodyWithMirrorContent",
+    allowHelperOpenWithoutDetectedEmailBody: "allowHelperOpenWithoutDetectedEmailBody",
+    autoApplyMirrorOnMobileDevice: "autoApplyMirrorOnMobileDevice",
     autoApplyMirrorForConfiguredSenders: "autoApplyMirrorForConfiguredSenders",
     autoApplyMirrorSenderEmailList: "autoApplyMirrorSenderEmailList"
   });
   const legacyStorageKeys = Object.freeze({
     autoApplyMirrorForNamedSender: "autoApplyMirrorForNamedSender"
   });
-  const debugStorageKeys = Object.freeze({
-    programDebugConfig: "programDebugConfig",
-    programDebugPageChoices: "programDebugPageChoices"
-  });
+  const debugStorageKeys = debugConfigModel
+    ? debugConfigModel.storageKeys
+    : Object.freeze({
+      programDebugConfig: "programDebugConfig",
+      programDebugPageChoices: "programDebugPageChoices"
+    });
   const defaultSettings = Object.freeze({
     enableUrlNormalizationRepair: false,
     stripKnownTrackingParameters: true,
     trackingParameterFilters: trackingParameterModel.defaultTrackingParameterFilters,
     replaceEmailBodyWithMirrorContent: false,
+    allowHelperOpenWithoutDetectedEmailBody: false,
+    autoApplyMirrorOnMobileDevice: false,
     autoApplyMirrorForConfiguredSenders: false,
     autoApplyMirrorSenderEmailList: Object.freeze([])
   });
-  const defaultDebugConfig = Object.freeze({
-    level: "off",
-    categories: Object.freeze({
-      error: true,
-      runtime: true,
-      storage: true,
-      messaging: true,
-      ui: true,
-      pipeline: true,
-      function: false,
-      conditional: false,
-      loop: false,
-      variable: false
-    })
-  });
-  const defaultDebugPageChoices = Object.freeze({
-    renderLimit: 750,
-    autoRefresh: false,
-    typeFilter: "all"
-  });
+  const defaultDebugConfig = debugConfigModel
+    ? debugConfigModel.defaultConfig
+    : Object.freeze({
+      level: "off",
+      categories: Object.freeze({
+        error: true,
+        runtime: true,
+        storage: true,
+        messaging: true,
+        ui: true,
+        pipeline: true,
+        function: false,
+        conditional: false,
+        loop: false,
+        variable: false
+      })
+    });
+  const defaultDebugPageChoices = debugConfigModel
+    ? debugConfigModel.defaultPageChoices
+    : Object.freeze({
+      renderLimit: 750,
+      autoRefresh: false,
+      typeFilter: "all"
+    });
 
   // Function: normalize sender email address.
   function normalizeSenderEmailAddress(value) {
@@ -198,6 +224,10 @@
 
   // Function: normalize debug config choices.
   function normalizeDebugConfigChoices(value) {
+    if (debugConfigModel && typeof debugConfigModel.normalizeConfig === "function") {
+      return debugConfigModel.normalizeConfig(value, defaultDebugConfig);
+    }
+
     const safeValue = value && typeof value === "object" ? value : {};
     const safeCategories = safeValue.categories && typeof safeValue.categories === "object" ? safeValue.categories : {};
     const allowedLevels = {
@@ -224,6 +254,10 @@
 
   // Function: normalize debug page choices.
   function normalizeDebugPageChoices(value) {
+    if (debugConfigModel && typeof debugConfigModel.normalizePageChoices === "function") {
+      return debugConfigModel.normalizePageChoices(value);
+    }
+
     const safeValue = value && typeof value === "object" ? value : {};
     const parsedRenderLimit = Number(safeValue.renderLimit);
     const allowedTypeFilters = Object.assign({ all: true }, defaultDebugConfig.categories);
@@ -241,6 +275,10 @@
 
   // Function: compare debug config choices.
   function debugConfigMatchesDefault(config) {
+    if (debugConfigModel && typeof debugConfigModel.configMatchesDefault === "function") {
+      return debugConfigModel.configMatchesDefault(config);
+    }
+
     const normalizedConfig = normalizeDebugConfigChoices(config);
 
     if (normalizedConfig.level !== defaultDebugConfig.level) {
@@ -254,6 +292,10 @@
 
   // Function: compare debug page choices.
   function debugPageChoicesMatchDefault(pageChoices) {
+    if (debugConfigModel && typeof debugConfigModel.pageChoicesMatchDefault === "function") {
+      return debugConfigModel.pageChoicesMatchDefault(pageChoices);
+    }
+
     const normalizedChoices = normalizeDebugPageChoices(pageChoices);
 
     return (
@@ -326,6 +368,16 @@
         normalizedStoredSettings,
         storageKeys.replaceEmailBodyWithMirrorContent,
         defaultSettings.replaceEmailBodyWithMirrorContent
+      ),
+      allowHelperOpenWithoutDetectedEmailBody: buildStorageBooleanEntry(
+        normalizedStoredSettings,
+        storageKeys.allowHelperOpenWithoutDetectedEmailBody,
+        defaultSettings.allowHelperOpenWithoutDetectedEmailBody
+      ),
+      autoApplyMirrorOnMobileDevice: buildStorageBooleanEntry(
+        normalizedStoredSettings,
+        storageKeys.autoApplyMirrorOnMobileDevice,
+        defaultSettings.autoApplyMirrorOnMobileDevice
       ),
       autoApplyMirrorForConfiguredSenders: buildStorageBooleanEntry(
         normalizedStoredSettings,
@@ -576,6 +628,14 @@
     rows.push({
       label: "Storage Replace Body",
       value: formatStorageBooleanEntry(storageSnapshot.replaceEmailBodyWithMirrorContent)
+    });
+    rows.push({
+      label: "Storage Helper Open Before Detection",
+      value: formatStorageBooleanEntry(storageSnapshot.allowHelperOpenWithoutDetectedEmailBody)
+    });
+    rows.push({
+      label: "Storage Mobile Auto-Apply",
+      value: formatStorageBooleanEntry(storageSnapshot.autoApplyMirrorOnMobileDevice)
     });
     rows.push({
       label: "Storage Auto-Apply Toggle",

@@ -2,128 +2,39 @@
 (function initializeUrlForensicsTrackingParameterModel(globalScope) {
   "use strict";
 
-  const trackingParameterDefinitions = Object.freeze([
-    Object.freeze({
-      key: "utmPrefix",
-      bucket: "safe",
-      label: "utm_*",
-      parameterName: "utm_",
-      matchMode: "prefix",
-      description: "Remove any UTM campaign parameter whose name starts with utm_."
-    }),
-    Object.freeze({
-      key: "gclid",
-      bucket: "safe",
-      label: "gclid",
-      parameterName: "gclid",
-      matchMode: "exact",
-      description: "Google Ads click identifier."
-    }),
-    Object.freeze({
-      key: "dclid",
-      bucket: "safe",
-      label: "dclid",
-      parameterName: "dclid",
-      matchMode: "exact",
-      description: "Google display click identifier."
-    }),
-    Object.freeze({
-      key: "gbraid",
-      bucket: "safe",
-      label: "gbraid",
-      parameterName: "gbraid",
-      matchMode: "exact",
-      description: "Google app-to-web attribution parameter."
-    }),
-    Object.freeze({
-      key: "wbraid",
-      bucket: "safe",
-      label: "wbraid",
-      parameterName: "wbraid",
-      matchMode: "exact",
-      description: "Google web-to-app attribution parameter."
-    }),
-    Object.freeze({
-      key: "msclkid",
-      bucket: "safe",
-      label: "msclkid",
-      parameterName: "msclkid",
-      matchMode: "exact",
-      description: "Microsoft Ads click identifier."
-    }),
-    Object.freeze({
-      key: "ttclid",
-      bucket: "safe",
-      label: "ttclid",
-      parameterName: "ttclid",
-      matchMode: "exact",
-      description: "TikTok click identifier."
-    }),
-    Object.freeze({
-      key: "liFatId",
-      bucket: "safe",
-      label: "li_fat_id",
-      parameterName: "li_fat_id",
-      matchMode: "exact",
-      description: "LinkedIn ad attribution identifier."
-    }),
-    Object.freeze({
-      key: "fbclid",
-      bucket: "safe",
-      label: "fbclid",
-      parameterName: "fbclid",
-      matchMode: "exact",
-      description: "Facebook click identifier."
-    }),
-    Object.freeze({
-      key: "mcCid",
-      bucket: "safe",
-      label: "mc_cid",
-      parameterName: "mc_cid",
-      matchMode: "exact",
-      description: "Mailchimp campaign identifier."
-    }),
-    Object.freeze({
-      key: "mcEid",
-      bucket: "safe",
-      label: "mc_eid",
-      parameterName: "mc_eid",
-      matchMode: "exact",
-      description: "Mailchimp email identifier."
-    }),
-    Object.freeze({
-      key: "mcTc",
-      bucket: "safe",
-      label: "mc_tc",
-      parameterName: "mc_tc",
-      matchMode: "exact",
-      description: "Mailchimp tracking code parameter."
-    }),
-    Object.freeze({
-      key: "hsenc",
-      bucket: "safe",
-      label: "hsenc",
-      parameterName: "hsenc",
-      matchMode: "exact",
-      description: "HubSpot email hash parameter."
-    }),
-    Object.freeze({
-      key: "hsmi",
-      bucket: "safe",
-      label: "_hsmi",
-      parameterName: "_hsmi",
-      matchMode: "exact",
-      description: "HubSpot message identifier."
-    }),
-    Object.freeze({
-      key: "hsCtaTracking",
-      bucket: "safe",
-      label: "hsCtaTracking",
-      parameterName: "hsctatracking",
-      matchMode: "exact",
-      description: "HubSpot CTA tracking parameter."
+  const pluginRegistry = (function resolveUrlForensicsPluginRegistry(scope) {
+    if (scope && scope.urlForensicsPipelinePluginRegistry) {
+      return scope.urlForensicsPipelinePluginRegistry;
+    }
+
+    if (typeof require === "function") {
+      try {
+        return require("./pipeline-plugin-registry.js");
+      } catch {
+        return null;
+      }
+    }
+
+    return null;
+  }(globalScope));
+
+  if (!pluginRegistry || typeof pluginRegistry.getResolvedConfig !== "function") {
+    throw new Error("URL Forensics pipeline plugin registry is unavailable.");
+  }
+
+  const resolvedRuleConfiguration = pluginRegistry.getResolvedConfig();
+  const trackingParameterDefinitions = Object.freeze(
+    ((resolvedRuleConfiguration.tracking && resolvedRuleConfiguration.tracking.trackingParameterDefinitions) || []).map(function normalizeTrackingDefinition(definition) {
+      return Object.freeze({
+        key: String(definition && definition.key || "").trim(),
+        bucket: String(definition && definition.bucket || "").trim(),
+        label: String(definition && definition.label || "").trim(),
+        parameterName: String(definition && definition.parameterName || "").trim().toLowerCase(),
+        matchMode: String(definition && definition.matchMode || "").trim().toLowerCase(),
+        description: String(definition && definition.description || "").trim()
+      });
     })
-  ]);
+  );
 
   const defaultTrackingParameterFilters = Object.freeze(
     trackingParameterDefinitions.reduce(function buildDefaultTrackingFilters(result, definition) {

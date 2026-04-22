@@ -14,7 +14,9 @@
     <nav class="page-nav" aria-label="Extension pages">
       <button class="page-link" type="button" data-page-href="./settings.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">settings</span>Settings</button>
       <button class="page-link" type="button" data-page-href="./tracking-parameters.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">filter_alt</span>Trackers</button>
+      <button class="page-link" type="button" data-page-href="./instrumentation.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">rule</span>Instrumentation</button>
       <button class="page-link" type="button" data-page-href="./test-suite.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">science</span>Test Suite</button>
+      <button class="page-link" type="button" data-page-href="./sample-review.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">preview</span>Samples</button>
       <button class="page-link" type="button" data-page-href="./diagnostics.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">analytics</span>Diagnostics</button>
       <button class="page-link" type="button" data-page-href="./debugging.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">bug_report</span>Debugging</button>
       <button class="page-link" type="button" data-page-href="./storage.html"><span class="material-symbols-outlined link-icon" aria-hidden="true">storage</span>Storage</button>
@@ -63,8 +65,12 @@
         <p>Default: off. When enabled, the opened email body is replaced in-page with the current mirror content after the snapshot is ready.</p>
       </article>
       <article class="info-item">
+        <h3>Auto-apply mirror on mobile devices</h3>
+        <p>Default: off. This applies mirror replacement automatically when the extension detects a mobile device.</p>
+      </article>
+      <article class="info-item">
         <h3>Tracker filters</h3>
-        <p>Use the Trackers page to choose which known click-ID and campaign parameters, such as <code>utm_*</code>, <code>gclid</code>, <code>fbclid</code>, and HubSpot tags, should be removed.</p>
+        <p>Use the Trackers page to choose which saved tracker-cleaning filters should be active. Matching details live on Instrumentation.</p>
       </article>
       <article class="info-item">
         <h3>Auto-apply mirror for configured sender addresses</h3>
@@ -86,7 +92,11 @@
       </article>
       <article class="info-item">
         <h3>Diagnostics</h3>
-        <p>Detection mode, counts, and any pipeline errors that can explain why a message did or did not populate correctly. Storage values now live on the Storage page from Settings.</p>
+        <p>Runtime, memory, and storage health for the extension pages. Matching details now live on Instrumentation.</p>
+      </article>
+      <article class="info-item">
+        <h3>Instrumentation</h3>
+        <p>URL, site, tracker, classification, and repair matching catalogs plus committed validation snapshots.</p>
       </article>
     </div>
   </section>
@@ -127,6 +137,7 @@
     </ul>
   </section>
 </main>
+<script src="./mobile-device.js"></script>
 <script src="./page-navigation.js"></script>
 </body>
 </html>

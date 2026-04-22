@@ -1,4 +1,4 @@
-# AMO Listing Copy (RC-3 / v0.9.1)
+# AMO Listing Copy (RC-3 / v0.3.0)
 
 ## Short Description (Recommended)
 
@@ -21,7 +21,7 @@ Key capabilities:
 - Includes settings to control URL normalization/repair and mirror-replacement behavior
 
 Version and compatibility:
-- Current version: 0.9.1
+- Current version: 0.3.0
 - Firefox minimum supported version: 142.0+
 
 Notes:

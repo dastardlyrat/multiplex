@@ -2,12 +2,31 @@
 (function initializeMergedLinkLabFromBaseHtml() {
   "use strict";
 
+  const globalScope = typeof globalThis !== "undefined" ? globalThis : null;
+  const pageRuntimeFactory = globalScope ? globalScope.urlForensicsPageRuntime : null;
+  const pageDependenciesFactory = globalScope ? globalScope.urlForensicsPageDependencies : null;
+
+  if (!pageRuntimeFactory || typeof pageRuntimeFactory.create !== "function") {
+    throw new Error("URL Forensics page runtime helpers are unavailable.");
+  }
+
+  if (!pageDependenciesFactory || typeof pageDependenciesFactory.create !== "function") {
+    throw new Error("URL Forensics page dependency helpers are unavailable.");
+  }
+
+  const pageRuntime = pageRuntimeFactory.create({
+    globalScope: globalScope,
+    requirePageUi: false
+  });
+  const pageDependencies = pageDependenciesFactory.create({
+    globalScope: globalScope
+  });
   const componentKit = typeof ComponentKit !== "undefined" ? ComponentKit : null;
   const mergedLinkLabPipeline = typeof MergedLinkLabPipeline !== "undefined" ? MergedLinkLabPipeline : null;
-  const extensionApi = typeof browser !== "undefined" ? browser : (typeof chrome !== "undefined" ? chrome : null);
-  const storageModel = typeof globalThis !== "undefined" ? globalThis.urlForensicsStorageModel : null;
-  const settingsOpener = typeof globalThis !== "undefined" ? globalThis.urlForensicsSettingsOpener : null;
-  const debugApi = typeof globalThis !== "undefined" ? globalThis.mergedLinkLabDebug : null;
+  const extensionApi = pageRuntime.extensionApi;
+  const storageModel = pageDependencies.storageModel;
+  const settingsOpener = pageDependencies.settingsOpener;
+  const debugApi = pageRuntime.debugApi;
   if (debugApi && typeof debugApi.configure === "function") {
     debugApi.configure({ context: "workbench", module: "app" });
     debugApi.runtime("workbench initialization started");
@@ -303,7 +322,9 @@
     }
 
     // Loop: iterate through each item in the current collection.
-    parsedDocument.querySelectorAll("script, style, link, meta, base, iframe, object, embed, form").forEach(function removeUnsafeNode(node) {
+    parsedDocument.querySelectorAll(
+      "script, style, link, meta, base, iframe, object, embed, form, img, picture, source, video, audio, track, canvas, svg, math"
+    ).forEach(function removeUnsafeNode(node) {
       node.remove();
     });
 
@@ -321,12 +342,49 @@
         }
 
         // Branch: follow this path only when the current condition passes.
-        if (/^(href|src|action|poster|xlink:href)$/i.test(attribute.name)) {
-          const normalizedValue = attributeValue.trim().toLowerCase();
+        if (
+          attributeName === "style" ||
+          attributeName === "srcset" ||
+          attributeName === "sizes" ||
+          attributeName === "background" ||
+          attributeName === "poster" ||
+          attributeName === "ping" ||
+          attributeName === "crossorigin" ||
+          attributeName === "integrity" ||
+          attributeName === "nonce" ||
+          attributeName === "referrerpolicy"
+        ) {
+          element.removeAttribute(attribute.name);
+          return;
+        }
+
+        // Branch: follow this path only when the current condition passes.
+        if (/^(href|src|action|formaction|poster|xlink:href)$/i.test(attribute.name)) {
+          const normalizedValue = attributeValue.trim();
+          const normalizedLowerValue = normalizedValue.toLowerCase();
+          const elementTagName = String(element.tagName || "").toLowerCase();
+
           // Branch: follow this path only when the current condition passes.
-          if (/^javascript:/i.test(normalizedValue)) {
+          if (
+            /^javascript:/i.test(normalizedLowerValue) ||
+            /^data:/i.test(normalizedLowerValue) ||
+            /^blob:/i.test(normalizedLowerValue) ||
+            /^file:/i.test(normalizedLowerValue)
+          ) {
             element.removeAttribute(attribute.name);
+            return;
           }
+
+          // Branch: follow this path only when the current condition passes.
+          if (
+            attributeName === "href" &&
+            elementTagName === "a" &&
+            /^(https?:|mailto:|tel:|#|\/|\.\.?\/)/i.test(normalizedValue)
+          ) {
+            return;
+          }
+
+          element.removeAttribute(attribute.name);
         }
       });
     });
@@ -947,8 +1005,21 @@
     document.querySelectorAll("[data-copy]").forEach(function bindCopyButton(button) {
       // Function: handle copy click.
       button.addEventListener("click", function handleCopyClick() {
-        const targetId = button.getAttribute("data-copy");
-        copyElementRichThenPlain(targetId);
+        const targetId = String(button.getAttribute("data-copy") || "").trim();
+
+        // Branch: follow this path only when the current condition passes.
+        if (!targetId) {
+          return;
+        }
+
+        const targetElement = document.getElementById(targetId);
+
+        // Branch: follow this path only when the current condition passes.
+        if (!targetElement) {
+          return;
+        }
+
+        copyElementRichThenPlain(targetElement);
       });
     });
 
@@ -1014,10 +1085,27 @@
     }
 
     const pipeline = snapshot && snapshot.pipeline ? snapshot.pipeline : null;
-    const rawText = snapshot && snapshot.rawText
-      ? snapshot.rawText
-      : (pipeline && pipeline.rawText ? pipeline.rawText : "");
-    const sourceHtml = snapshot && snapshot.sourceHtml ? snapshot.sourceHtml : "";
+    const originalBackup = snapshot && snapshot.originalEmailBackup && typeof snapshot.originalEmailBackup === "object"
+      ? snapshot.originalEmailBackup
+      : null;
+    const rawText = originalBackup && originalBackup.rawText
+      ? originalBackup.rawText
+      : (
+          snapshot && snapshot.rawText
+            ? snapshot.rawText
+            : (pipeline && pipeline.rawText ? pipeline.rawText : "")
+        );
+    const sourceHtml = originalBackup && originalBackup.sourceHtml
+      ? originalBackup.sourceHtml
+      : (snapshot && snapshot.sourceHtml ? snapshot.sourceHtml : "");
+
+    if (debugApi) {
+      debugApi.variable("workbench editor source selected from snapshot", {
+        source: originalBackup ? "originalEmailBackup" : "snapshot",
+        sourceHtmlLength: String(sourceHtml || "").length,
+        rawTextLength: String(rawText || "").length
+      });
+    }
 
     // Branch: follow this path only when the current condition passes.
     if (sourceHtml) {

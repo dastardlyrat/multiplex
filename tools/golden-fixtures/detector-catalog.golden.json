@@ -1,0 +1,392 @@
+{
+  "summary": {
+    "urlDetectorCount": 2,
+    "inboxProviderCount": 6,
+    "pluginPackCount": 1,
+    "trackingParameterDefinitionCount": 15,
+    "classificationRuleCount": 3,
+    "repairTransformCount": 7
+  },
+  "urlDetectors": [
+    {
+      "id": "regex",
+      "title": "Regex",
+      "kind": "regex",
+      "priority": 0,
+      "summary": "Pattern-driven discovery using the resolved URL token rules plus explicit email patterns.",
+      "supportedTokens": [
+        "https://",
+        "http://",
+        "mailto:",
+        "bare email"
+      ],
+      "supportedRepairs": [
+        "protocol whitespace",
+        "single slash",
+        "missing colon",
+        "missing leading h"
+      ]
+    },
+    {
+      "id": "tokenizer",
+      "title": "Tokenizer",
+      "kind": "tokenizer",
+      "priority": 1,
+      "summary": "Deterministic character scanner with explicit token boundaries for links, repairs, and emails.",
+      "supportedTokens": [
+        "https://",
+        "http://",
+        "mailto:",
+        "bare email"
+      ],
+      "supportedRepairs": [
+        "protocol whitespace",
+        "single slash",
+        "missing colon",
+        "missing leading h"
+      ]
+    }
+  ],
+  "detectionRules": {
+    "urlTokenPattern": "/https?:\\/\\/[^\\s<>\"']+/gi",
+    "repairableUrlTokenPatterns": [
+      {
+        "id": "protocol-whitespace-token",
+        "pattern": "/(?:^|[^a-z])(https?:\\/\\/\\s+[^\\s<>\"']+)/gi",
+        "tokenGroupIndex": 1
+      },
+      {
+        "id": "protocol-single-slash-token",
+        "pattern": "/(?:^|[^a-z])(https?:\\/(?!\\/)[^\\s<>\"']+)/gi",
+        "tokenGroupIndex": 1
+      },
+      {
+        "id": "protocol-missing-colon-token",
+        "pattern": "/(?:^|[^a-z])(https?\\/\\/[^\\s<>\"']+)/gi",
+        "tokenGroupIndex": 1
+      },
+      {
+        "id": "protocol-missing-leading-h-token",
+        "pattern": "/(?:^|[^a-z])(ttps?:\\/\\/[^\\s<>\"']+)/gi",
+        "tokenGroupIndex": 1
+      }
+    ],
+    "trailingUrlPunctuationPattern": "/[)\\]\\.,>]+$/",
+    "embeddedTrackingParameterPattern": "/[?&](?:url|u|target|redirect|redirect_url|dest|destination|next|forward|goto|continue|to|href|link|data)=([^&]+)/gi"
+  },
+  "inboxProviders": [
+    {
+      "id": "gmail",
+      "title": "Gmail",
+      "priority": 0,
+      "hostPattern": "/(^|\\.)mail\\.google\\.com$/i",
+      "pathPattern": "",
+      "primaryInboxBodySelectors": [
+        "div.maincontent",
+        "div.AO div.adn.ads[data-message-id] .a3s.aiL",
+        "div.AO div[data-message-id].adn.ads .a3s.aiL",
+        "[data-message-id] .a3s.aiL",
+        ".a3s.aiL"
+      ]
+    },
+    {
+      "id": "outlook",
+      "title": "Outlook",
+      "priority": 0,
+      "hostPattern": "/(^|\\.)outlook\\.(office|live|office365)\\.com$/i",
+      "pathPattern": "",
+      "primaryInboxBodySelectors": [
+        "div[data-test-id='mailMessageBodyContainer']",
+        "[data-app-section='MailReadCompose'] div[role='document']",
+        "div[role='document'][aria-label*='Message']",
+        "div[aria-label='Message body']",
+        "div[aria-label*='Message body']"
+      ]
+    },
+    {
+      "id": "yahoo",
+      "title": "Yahoo Mail",
+      "priority": 0,
+      "hostPattern": "/(^|\\.)mail\\.yahoo\\.com$/i",
+      "pathPattern": "",
+      "primaryInboxBodySelectors": [
+        "div.msg-body[data-test-id='message-view-body-content']"
+      ]
+    },
+    {
+      "id": "proton",
+      "title": "Proton Mail",
+      "priority": 0,
+      "hostPattern": "/(^|\\.)mail\\.proton\\.me$/i",
+      "pathPattern": "",
+      "primaryInboxBodySelectors": [
+        "iframe.w-full[title='Email content']"
+      ]
+    },
+    {
+      "id": "hey",
+      "title": "HEY",
+      "priority": 0,
+      "hostPattern": "/(^|\\.)app\\.hey\\.com$/i",
+      "pathPattern": "/^\\/topics(?:\\/|$)/i",
+      "primaryInboxBodySelectors": [
+        "div[id^='entry_expander_entry_'].entry__body.entry-expander",
+        "#entries .entry__body.entry-expander",
+        "div.entry__body.entry-expander",
+        "article.entry .entry__body.entry-expander",
+        "div.entry__wrapper .entry__body.entry-expander",
+        ".thread-message__body",
+        ".message-body",
+        ".message-content"
+      ]
+    },
+    {
+      "id": "fastmail",
+      "title": "Fastmail",
+      "priority": 0,
+      "hostPattern": "/(^|\\.)app\\.fastmail\\.com$/i",
+      "pathPattern": "",
+      "primaryInboxBodySelectors": [
+        "div.u-containSelection.v-Message-body"
+      ]
+    }
+  ],
+  "pluginPacks": [
+    {
+      "id": "builtin-default",
+      "title": "Built-in URL Forensics rule pack",
+      "priority": 0,
+      "detectionRuleCount": 5,
+      "trackingDefinitionCount": 15,
+      "classificationRuleCount": 3,
+      "repairTransformCount": 7
+    }
+  ],
+  "trackingRules": {
+    "preferredTrackingParameterNames": [
+      "url",
+      "u",
+      "target",
+      "redirect",
+      "redirect_url",
+      "dest",
+      "destination",
+      "next",
+      "forward",
+      "goto",
+      "continue",
+      "to",
+      "href",
+      "link",
+      "data"
+    ],
+    "trackerHostKeywords": [
+      "list-manage",
+      "rs6.net",
+      "ccsend.com",
+      "kajabimail",
+      "mail",
+      "tracking",
+      "redirect",
+      "click"
+    ],
+    "trackingParameterDefinitions": [
+      {
+        "key": "utmPrefix",
+        "bucket": "safe",
+        "label": "utm_*",
+        "parameterName": "utm_",
+        "matchMode": "prefix",
+        "description": "Remove any UTM campaign parameter whose name starts with utm_."
+      },
+      {
+        "key": "gclid",
+        "bucket": "safe",
+        "label": "gclid",
+        "parameterName": "gclid",
+        "matchMode": "exact",
+        "description": "Google Ads click identifier."
+      },
+      {
+        "key": "dclid",
+        "bucket": "safe",
+        "label": "dclid",
+        "parameterName": "dclid",
+        "matchMode": "exact",
+        "description": "Google display click identifier."
+      },
+      {
+        "key": "gbraid",
+        "bucket": "safe",
+        "label": "gbraid",
+        "parameterName": "gbraid",
+        "matchMode": "exact",
+        "description": "Google app-to-web attribution parameter."
+      },
+      {
+        "key": "wbraid",
+        "bucket": "safe",
+        "label": "wbraid",
+        "parameterName": "wbraid",
+        "matchMode": "exact",
+        "description": "Google web-to-app attribution parameter."
+      },
+      {
+        "key": "msclkid",
+        "bucket": "safe",
+        "label": "msclkid",
+        "parameterName": "msclkid",
+        "matchMode": "exact",
+        "description": "Microsoft Ads click identifier."
+      },
+      {
+        "key": "ttclid",
+        "bucket": "safe",
+        "label": "ttclid",
+        "parameterName": "ttclid",
+        "matchMode": "exact",
+        "description": "TikTok click identifier."
+      },
+      {
+        "key": "liFatId",
+        "bucket": "safe",
+        "label": "li_fat_id",
+        "parameterName": "li_fat_id",
+        "matchMode": "exact",
+        "description": "LinkedIn ad attribution identifier."
+      },
+      {
+        "key": "fbclid",
+        "bucket": "safe",
+        "label": "fbclid",
+        "parameterName": "fbclid",
+        "matchMode": "exact",
+        "description": "Facebook click identifier."
+      },
+      {
+        "key": "mcCid",
+        "bucket": "safe",
+        "label": "mc_cid",
+        "parameterName": "mc_cid",
+        "matchMode": "exact",
+        "description": "Mailchimp campaign identifier."
+      },
+      {
+        "key": "mcEid",
+        "bucket": "safe",
+        "label": "mc_eid",
+        "parameterName": "mc_eid",
+        "matchMode": "exact",
+        "description": "Mailchimp email identifier."
+      },
+      {
+        "key": "mcTc",
+        "bucket": "safe",
+        "label": "mc_tc",
+        "parameterName": "mc_tc",
+        "matchMode": "exact",
+        "description": "Mailchimp tracking code parameter."
+      },
+      {
+        "key": "hsenc",
+        "bucket": "safe",
+        "label": "hsenc",
+        "parameterName": "hsenc",
+        "matchMode": "exact",
+        "description": "HubSpot email hash parameter."
+      },
+      {
+        "key": "hsmi",
+        "bucket": "safe",
+        "label": "_hsmi",
+        "parameterName": "_hsmi",
+        "matchMode": "exact",
+        "description": "HubSpot message identifier."
+      },
+      {
+        "key": "hsCtaTracking",
+        "bucket": "safe",
+        "label": "hsCtaTracking",
+        "parameterName": "hsctatracking",
+        "matchMode": "exact",
+        "description": "HubSpot CTA tracking parameter."
+      }
+    ]
+  },
+  "classificationRules": [
+    {
+      "id": "publisher-list-manage",
+      "type": "publisher",
+      "matchType": "hostContains",
+      "value": "list-manage",
+      "values": [],
+      "pattern": ""
+    },
+    {
+      "id": "newsletter-known-mailers",
+      "type": "newsletter",
+      "matchType": "hostContainsAny",
+      "value": "",
+      "values": [
+        "rs6.net",
+        "kajabimail",
+        "ymlpmail",
+        "ccsend.com",
+        "mailchi.mp"
+      ],
+      "pattern": ""
+    },
+    {
+      "id": "tracker-host-pattern",
+      "type": "tracker",
+      "matchType": "hostPattern",
+      "value": "",
+      "values": [],
+      "pattern": "/track|trk|click|redirect/i"
+    }
+  ],
+  "repairTransforms": [
+    {
+      "id": "trim-trailing-url-punctuation",
+      "note": "TRAILING_PUNCT_REMOVED",
+      "match": "/[)\\]\\.,>]+$/",
+      "replaceWith": ""
+    },
+    {
+      "id": "collapse-protocol-whitespace",
+      "note": "PROTOCOL_REPAIRED",
+      "match": "/^(https?:\\/\\/|https?:\\/|https?\\/\\/|ttps?:\\/\\/)\\s+/i",
+      "replaceWith": "$1"
+    },
+    {
+      "id": "repair-single-protocol-slash",
+      "note": "PROTOCOL_REPAIRED",
+      "match": "/^([^:]+):\\/([^/])/i",
+      "replaceWith": "$1://$2"
+    },
+    {
+      "id": "repair-missing-colon-https",
+      "note": "PROTOCOL_REPAIRED",
+      "match": "/^https\\/\\/([^/])/i",
+      "replaceWith": "https://$1"
+    },
+    {
+      "id": "repair-missing-colon-http",
+      "note": "PROTOCOL_REPAIRED",
+      "match": "/^http\\/\\/([^/])/i",
+      "replaceWith": "http://$1"
+    },
+    {
+      "id": "repair-missing-leading-h-https",
+      "note": "PROTOCOL_REPAIRED",
+      "match": "/^ttps:\\/\\//i",
+      "replaceWith": "https://"
+    },
+    {
+      "id": "repair-missing-leading-h-http",
+      "note": "PROTOCOL_REPAIRED",
+      "match": "/^ttp:\\/\\//i",
+      "replaceWith": "http://"
+    }
+  ]
+}

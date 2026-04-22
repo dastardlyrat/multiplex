@@ -1,17 +1,11 @@
 // Function: initialize shared inbox provider detectors.
-(function initializeUrlForensicsInboxDetectors() {
+(function initializeUrlForensicsInboxDetectors(globalScope, inboxDetectorRegistry) {
   "use strict";
 
-  const inboxHostPattern =
-    /^(?:(?:[^.]+\.)*mail\.google\.com|(?:[^.]+\.)*outlook\.office\.com|(?:[^.]+\.)*outlook\.live\.com|(?:[^.]+\.)*outlook\.office365\.com|(?:[^.]+\.)*mail\.yahoo\.com|(?:[^.]+\.)*mail\.proton\.me|(?:[^.]+\.)*app\.hey\.com|(?:[^.]+\.)*app\.fastmail\.com)$/i;
-  const gmailHostPattern = /(^|\.)mail\.google\.com$/i;
-  const outlookHostPattern = /(^|\.)outlook\.(office|live|office365)\.com$/i;
-  const yahooHostPattern = /(^|\.)mail\.yahoo\.com$/i;
-  const protonHostPattern = /(^|\.)mail\.proton\.me$/i;
-  const heyHostPattern = /(^|\.)app\.hey\.com$/i;
-  const heyTopicPathPattern = /^\/topics(?:\/|$)/i;
-  const fastmailHostPattern = /(^|\.)app\.fastmail\.com$/i;
-  const outlookMailBodySelector = 'div[data-test-id="mailMessageBodyContainer"]';
+  if (!inboxDetectorRegistry || typeof inboxDetectorRegistry.listProviderDefinitions !== "function") {
+    throw new Error("URL Forensics inbox detector registry is unavailable.");
+  }
+
   const readViewHintPattern =
     /\b(message body|message|conversation|thread|mail view|reading pane|preview|viewer|article|body)\b/i;
   const composeContextHintPattern = /\b(compose|composer|reply|forward|draft|editable|editor)\b/i;
@@ -21,58 +15,51 @@
     /\b(email|e-mail|message|mail|subject|forwarded|reply|print|eml|rfc822|sender|recipient)\b/i;
   const topicDigestLabelPattern = /\btopic digest\b/i;
   const topicDigestActionPattern = /\bview all topics\b/i;
-  const primaryInboxBodySelectorsByProvider = Object.freeze({
-    gmail: Object.freeze([
-      "div.AO div.adn.ads[data-message-id] .a3s.aiL",
-      "div.AO div[data-message-id].adn.ads .a3s.aiL",
-      "[data-message-id] .a3s.aiL",
-      ".a3s.aiL"
-    ]),
-    outlook: Object.freeze([
-      "div[data-test-id='mailMessageBodyContainer']",
-      "[data-app-section='MailReadCompose'] div[role='document']",
-      "div[role='document'][aria-label*='Message']",
-      "div[aria-label='Message body']",
-      "div[aria-label*='Message body']"
-    ]),
-    yahoo: Object.freeze([
-      "div.msg-body[data-test-id='message-view-body-content']"
-    ]),
-    proton: Object.freeze([
-      "iframe.w-full[title='Email content']"
-    ]),
-    hey: Object.freeze([
-      "div[id^='entry_expander_entry_'].entry__body.entry-expander",
-      "#entries .entry__body.entry-expander",
-      "div.entry__body.entry-expander",
-      "article.entry .entry__body.entry-expander",
-      "div.entry__wrapper .entry__body.entry-expander",
-      ".thread-message__body",
-      ".message-body",
-      ".message-content"
-    ]),
-    fastmail: Object.freeze([
-      "div.u-containSelection.v-Message-body"
-    ])
-  });
-  const inboxBodySelectors = Object.freeze([
-    "div.AO div.adn.ads[data-message-id] .a3s.aiL",
-    "div.AO div[data-message-id].adn.ads .a3s.aiL",
-    "div[data-test-id='mailMessageBodyContainer']",
-    "[data-message-id] .a3s.aiL",
-    ".a3s.aiL",
-    "iframe.w-full[title='Email content']",
-    "div.msg-body[data-test-id='message-view-body-content']",
-    "div[id^='entry_expander_entry_'].entry__body.entry-expander",
-    "#entries .entry__body.entry-expander",
-    "div.entry__body.entry-expander",
-    "article.entry .entry__body.entry-expander",
-    "div.entry__wrapper .entry__body.entry-expander",
-    "div.u-containSelection.v-Message-body",
-    "[data-app-section='MailReadCompose'] div[role='document']",
-    "div[role='document'][aria-label*='Message']",
-    "div[aria-label='Message body']",
-    "div[aria-label*='Message body']",
+  const providerDefinitions = inboxDetectorRegistry.listProviderDefinitions();
+  const providerDefinitionsById = new Map(providerDefinitions.map(function mapProviderDefinition(providerDefinition) {
+    return [providerDefinition.id, providerDefinition];
+  }));
+  const genericInboxContainerSelectors = Object.freeze([
+    "[data-view='message']",
+    ".mail-view",
+    ".conversation-view",
+    "main",
+    "[role='main']",
+    "[role='article']",
+    "article"
+  ]);
+
+  function buildUniqueSelectorList(items) {
+    const seenSelectors = new Set();
+
+    return Object.freeze((Array.isArray(items) ? items : []).filter(function keepUniqueSelector(selector) {
+      const normalizedSelector = String(selector || "").trim();
+
+      if (!normalizedSelector || seenSelectors.has(normalizedSelector)) {
+        return false;
+      }
+
+      seenSelectors.add(normalizedSelector);
+      return true;
+    }));
+  }
+
+  function getProviderPrimaryInboxBodySelectors(providerId) {
+    const providerDefinition = providerDefinitionsById.get(String(providerId || "").trim());
+
+    return providerDefinition && Array.isArray(providerDefinition.primaryInboxBodySelectors)
+      ? providerDefinition.primaryInboxBodySelectors.slice()
+      : [];
+  }
+
+  const primaryInboxBodySelectorsByProvider = Object.freeze(providerDefinitions.reduce(function mapSelectorsByProvider(result, providerDefinition) {
+    result[providerDefinition.id] = Object.freeze(providerDefinition.primaryInboxBodySelectors.slice());
+    return result;
+  }, {}));
+  const providerInboxBodySelectors = buildUniqueSelectorList(providerDefinitions.flatMap(function flattenProviderPrimarySelectors(providerDefinition) {
+    return providerDefinition.primaryInboxBodySelectors || [];
+  }));
+  const inboxBodySelectors = buildUniqueSelectorList(providerInboxBodySelectors.concat([
     "[data-testid='message-view-body']",
     "[data-testid='message-body']",
     "[data-test-id='message-view-body']",
@@ -84,36 +71,12 @@
     ".thread-message__body",
     ".message-body",
     ".message-content",
-    ".msg-body",
-    "[data-view='message']",
-    ".mail-view",
-    ".conversation-view",
-    "main",
-    "[role='main']",
-    "[role='article']",
-    "article"
-  ]);
-  const standaloneEmailBodySelectors = Object.freeze([
+    ".msg-body"
+  ]).concat(genericInboxContainerSelectors));
+  const standaloneEmailBodySelectors = buildUniqueSelectorList([
     "[data-email-body]",
-    "[data-message-body]",
-    "div.AO div.adn.ads[data-message-id] .a3s.aiL",
-    "div.AO div[data-message-id].adn.ads .a3s.aiL",
-    "[data-message-id] .a3s.aiL",
-    ".a3s.aiL",
-    "iframe.w-full[title='Email content']",
-    "div.msg-body[data-test-id='message-view-body-content']",
-    "div[id^='entry_expander_entry_'].entry__body.entry-expander",
-    "#entries .entry__body.entry-expander",
-    "div.entry__body.entry-expander",
-    "article.entry .entry__body.entry-expander",
-    "div.entry__wrapper .entry__body.entry-expander",
-    "div.u-containSelection.v-Message-body",
-    "[data-testid='message-view-body']",
-    "[data-testid='message-body']",
-    "[data-testid*='message'][data-testid*='body']",
-    "[data-testid*='message-content']",
-    "[data-test-id*='message'][data-test-id*='body']",
-    "[data-test-id*='message-content']",
+    "[data-message-body]"
+  ].concat(providerInboxBodySelectors).concat([
     ".email-body",
     ".email-content",
     ".email-message",
@@ -137,19 +100,16 @@
     "article",
     "main",
     "[role='main']"
-  ]);
-  const genericInboxContainerSelectors = Object.freeze([
-    "[data-view='message']",
-    ".mail-view",
-    ".conversation-view",
-    "main",
-    "[role='main']",
-    "[role='article']",
-    "article"
-  ]);
+  ]));
   const explicitInboxBodySelectors = Object.freeze(inboxBodySelectors.filter(function filterExplicitInboxBodySelector(selector) {
     return genericInboxContainerSelectors.indexOf(selector) === -1;
   }));
+  const outlookMailBodySelector = getProviderPrimaryInboxBodySelectors("outlook")[0] || 'div[data-test-id="mailMessageBodyContainer"]';
+  const inboxHostPattern = Object.freeze({
+    test: function testSupportedInboxHost(hostnameValue) {
+      return isSupportedInboxHost({ hostname: hostnameValue });
+    }
+  });
 
   // Function: get location hostname.
   function getLocationHostname(locationLike) {
@@ -163,84 +123,148 @@
     return String(safeLocation.pathname || "");
   }
 
+  // Function: get location search.
+  function getLocationSearch(locationLike) {
+    const safeLocation = locationLike || window.location || {};
+    return String(safeLocation.search || "");
+  }
+
+  // Function: get location hash.
+  function getLocationHash(locationLike) {
+    const safeLocation = locationLike || window.location || {};
+    return String(safeLocation.hash || "");
+  }
+
+  // Function: check Gmail read-view location.
+  function isGmailReadViewLocation(locationLike) {
+    const searchValue = getLocationSearch(locationLike).toLowerCase();
+    const normalizedHash = getLocationHash(locationLike).replace(/^#/, "");
+    const hashSegments = normalizedHash.split("/").filter(Boolean);
+    const firstHashSegment = hashSegments.length ? hashSegments[0].toLowerCase() : "";
+
+    if (/[?&](?:view=(?:lg|pt)|permmsgid=|th=|msg=)/i.test(searchValue)) {
+      return true;
+    }
+
+    if (!normalizedHash) {
+      return false;
+    }
+
+    if (/(^|\/)(?:fmfcgz[^/?#]*|thread-[^/?#]+|msg-[^/?#]+)/i.test(normalizedHash)) {
+      return true;
+    }
+
+    if (/^(label|category|search)$/.test(firstHashSegment)) {
+      return hashSegments.length >= 3;
+    }
+
+    if (/^(inbox|all|sent|drafts|starred|snoozed|important|scheduled|spam|trash|chats)$/.test(firstHashSegment)) {
+      return hashSegments.length >= 2;
+    }
+
+    return hashSegments.length >= 2;
+  }
+
+  // Function: check provider host match.
+  function matchesProviderHost(providerId, locationLike) {
+    const providerDefinition = providerDefinitionsById.get(String(providerId || "").trim());
+    const hostname = getLocationHostname(locationLike);
+
+    return !!(
+      providerDefinition &&
+      providerDefinition.hostPattern &&
+      providerDefinition.hostPattern.test(hostname)
+    );
+  }
+
+  // Function: check provider key match.
+  function matchesProviderKey(providerId, locationLike) {
+    const providerDefinition = providerDefinitionsById.get(String(providerId || "").trim());
+    const pathname = getLocationPathname(locationLike);
+
+    return !!(
+      matchesProviderHost(providerId, locationLike) &&
+      (
+        providerId !== "gmail" ||
+        isGmailReadViewLocation(locationLike)
+      ) &&
+      (
+        !providerDefinition ||
+        !providerDefinition.pathPattern ||
+        providerDefinition.pathPattern.test(pathname)
+      )
+    );
+  }
+
   // Function: check supported inbox host.
   function isSupportedInboxHost(locationLike) {
-    return inboxHostPattern.test(getLocationHostname(locationLike));
+    return providerDefinitions.some(function hasMatchingProviderHost(providerDefinition) {
+      return matchesProviderHost(providerDefinition.id, locationLike);
+    });
   }
 
   // Function: check Outlook host.
   function isOutlookHost(locationLike) {
-    return outlookHostPattern.test(getLocationHostname(locationLike));
+    return matchesProviderHost("outlook", locationLike);
   }
 
   // Function: check Gmail host.
   function isGmailHost(locationLike) {
-    return gmailHostPattern.test(getLocationHostname(locationLike));
+    return matchesProviderHost("gmail", locationLike);
   }
 
   // Function: check Yahoo host.
   function isYahooHost(locationLike) {
-    return yahooHostPattern.test(getLocationHostname(locationLike));
+    return matchesProviderHost("yahoo", locationLike);
   }
 
   // Function: check Proton host.
   function isProtonHost(locationLike) {
-    return protonHostPattern.test(getLocationHostname(locationLike));
+    return matchesProviderHost("proton", locationLike);
   }
 
   // Function: check Hey host.
   function isHeyHost(locationLike) {
-    return heyHostPattern.test(getLocationHostname(locationLike));
+    return matchesProviderHost("hey", locationLike);
   }
 
   // Function: check Hey topic path.
   function isHeyTopicPath(locationLike) {
-    return heyTopicPathPattern.test(getLocationPathname(locationLike));
+    const heyProviderDefinition = providerDefinitionsById.get("hey");
+    return !!(
+      heyProviderDefinition &&
+      heyProviderDefinition.pathPattern &&
+      heyProviderDefinition.pathPattern.test(getLocationPathname(locationLike))
+    );
   }
 
   // Function: check Fastmail host.
   function isFastmailHost(locationLike) {
-    return fastmailHostPattern.test(getLocationHostname(locationLike));
+    return matchesProviderHost("fastmail", locationLike);
   }
 
   // Function: get inbox provider key.
   function getInboxProviderKey(locationLike) {
-    if (isGmailHost(locationLike)) {
-      return "gmail";
-    }
+    const matchedProviderDefinition = providerDefinitions.find(function findMatchedProviderDefinition(providerDefinition) {
+      return matchesProviderKey(providerDefinition.id, locationLike);
+    });
 
-    if (isOutlookHost(locationLike)) {
-      return "outlook";
-    }
-
-    if (isYahooHost(locationLike)) {
-      return "yahoo";
-    }
-
-    if (isProtonHost(locationLike)) {
-      return "proton";
-    }
-
-    if (isHeyHost(locationLike) && isHeyTopicPath(locationLike)) {
-      return "hey";
-    }
-
-    if (isFastmailHost(locationLike)) {
-      return "fastmail";
-    }
-
-    return "";
+    return matchedProviderDefinition ? matchedProviderDefinition.id : "";
   }
 
   // Function: get primary inbox body selectors.
   function getPrimaryInboxBodySelectors(locationLike) {
     const providerKey = getInboxProviderKey(locationLike);
 
-    if (!providerKey || !primaryInboxBodySelectorsByProvider[providerKey]) {
-      return [];
+    if (providerKey && primaryInboxBodySelectorsByProvider[providerKey]) {
+      return primaryInboxBodySelectorsByProvider[providerKey].slice();
     }
 
-    return primaryInboxBodySelectorsByProvider[providerKey].slice();
+    if (isGmailHost(locationLike) && primaryInboxBodySelectorsByProvider.gmail) {
+      return primaryInboxBodySelectorsByProvider.gmail.slice();
+    }
+
+    return [];
   }
 
   // Function: get detection search roots, including open shadow roots.
@@ -292,6 +316,9 @@
       genericInboxContainer: genericInboxContainerSelectors,
       explicitInboxBody: explicitInboxBodySelectors
     }),
+    registry: inboxDetectorRegistry,
+    listProviderDefinitions: inboxDetectorRegistry.listProviderDefinitions,
+    getProviderDefinition: inboxDetectorRegistry.getProviderDefinition,
     isSupportedInboxHost: isSupportedInboxHost,
     isOutlookHost: isOutlookHost,
     isGmailHost: isGmailHost,
@@ -300,8 +327,26 @@
     isHeyHost: isHeyHost,
     isHeyTopicPath: isHeyTopicPath,
     isFastmailHost: isFastmailHost,
+    isGmailReadViewLocation: isGmailReadViewLocation,
     getInboxProviderKey: getInboxProviderKey,
     getPrimaryInboxBodySelectors: getPrimaryInboxBodySelectors,
     getDetectionSearchRoots: getDetectionSearchRoots
   });
-}());
+}(
+  typeof globalThis !== "undefined" ? globalThis : this,
+  (function resolveUrlForensicsInboxDetectorRegistry(globalScope) {
+    if (globalScope && globalScope.urlForensicsInboxDetectorRegistry) {
+      return globalScope.urlForensicsInboxDetectorRegistry;
+    }
+
+    if (typeof require === "function") {
+      try {
+        return require("./inbox-detector-registry.js");
+      } catch {
+        return null;
+      }
+    }
+
+    return null;
+  }(typeof globalThis !== "undefined" ? globalThis : this))
+));

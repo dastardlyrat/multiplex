@@ -1,6 +1,22 @@
 // Shared low-level helpers for the URL Forensics pipeline.
 "use strict";
 
+var urlForensicsPipelineBasePluginRegistry = (function resolvePipelinePluginRegistry(globalScope) {
+  if (globalScope && globalScope.urlForensicsPipelinePluginRegistry) {
+    return globalScope.urlForensicsPipelinePluginRegistry;
+  }
+
+  if (typeof require === "function") {
+    try {
+      return require("./pipeline-plugin-registry.js");
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}(typeof globalThis !== "undefined" ? globalThis : this));
+
 var urlForensicsPipelineBaseTrackingParameterModel = (function resolvePipelineTrackingParameterModel(globalScope) {
   if (globalScope && globalScope.urlForensicsTrackingParameterModel) {
     return globalScope.urlForensicsTrackingParameterModel;
@@ -17,49 +33,76 @@ var urlForensicsPipelineBaseTrackingParameterModel = (function resolvePipelineTr
   return null;
 }(typeof globalThis !== "undefined" ? globalThis : this));
 
+if (!urlForensicsPipelineBasePluginRegistry || typeof urlForensicsPipelineBasePluginRegistry.getResolvedConfig !== "function") {
+  throw new Error("URL Forensics pipeline plugin registry is unavailable.");
+}
+
 if (!urlForensicsPipelineBaseTrackingParameterModel) {
   throw new Error("URL Forensics tracking parameter model is unavailable.");
 }
 
+function urlForensicsPipelineBaseCreateRegularExpression(patternDefinition, fallbackValue) {
+  const safePatternDefinition = patternDefinition && typeof patternDefinition === "object" ? patternDefinition : null;
+
+  if (!safePatternDefinition || !safePatternDefinition.source) {
+    return fallbackValue;
+  }
+
+  return new RegExp(String(safePatternDefinition.source), String(safePatternDefinition.flags || ""));
+}
+
+const urlForensicsPipelineBaseRuleConfiguration = urlForensicsPipelineBasePluginRegistry.getResolvedConfig();
+const urlForensicsPipelineBaseDetectionRules = urlForensicsPipelineBaseRuleConfiguration.detection || {};
+const urlForensicsPipelineBaseTrackingRules = urlForensicsPipelineBaseRuleConfiguration.tracking || {};
+
 var urlForensicsPipelineBaseRegularExpressions = Object.freeze({
-  urlToken: /https?:\/\/[^\s<>"']+/gi,
-  trailingUrlPunctuation: /[)\]\.,>]+$/,
-  wrappedNoise: /[<>]/g,
-  lightweightWhitespaceNoise: /[\u2000-\u200F\u2028-\u202F]/g,
-  heavyWhitespaceNoise: /[\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180E\u2000-\u200F\u2028-\u202F\u2060-\u206F\uFEFF]/g,
-  protectedMarkupTag: /^(A|SCRIPT|STYLE|NOSCRIPT|TEXTAREA|PRE|CODE)$/i,
-  embeddedTrackingParameter:
+  urlToken: urlForensicsPipelineBaseCreateRegularExpression(urlForensicsPipelineBaseDetectionRules.urlTokenPattern, /https?:\/\/[^\s<>"']+/gi),
+  repairableUrlTokenPatterns: Object.freeze(
+    (urlForensicsPipelineBaseDetectionRules.repairableUrlTokenPatterns || []).map(function mapRepairableUrlTokenPattern(definition) {
+      return Object.freeze({
+        id: String(definition && definition.id || "").trim(),
+        expression: urlForensicsPipelineBaseCreateRegularExpression(definition && definition.pattern, /(?:^|[^a-z])(https?:\/\/[^\s<>"']+)/gi),
+        tokenGroupIndex: typeof definition.tokenGroupIndex === "number" ? definition.tokenGroupIndex : null
+      });
+    })
+  ),
+  trailingUrlPunctuation: urlForensicsPipelineBaseCreateRegularExpression(
+    urlForensicsPipelineBaseDetectionRules.trailingUrlPunctuationPattern,
+    /[)\]\.,>]+$/
+  ),
+  wrappedNoise: urlForensicsPipelineBaseCreateRegularExpression(
+    urlForensicsPipelineBaseDetectionRules.wrappedNoisePattern,
+    /[<>]/g
+  ),
+  lightweightWhitespaceNoise: urlForensicsPipelineBaseCreateRegularExpression(
+    urlForensicsPipelineBaseDetectionRules.lightweightWhitespaceNoisePattern,
+    /[\u2000-\u200F\u2028-\u202F]/g
+  ),
+  heavyWhitespaceNoise: urlForensicsPipelineBaseCreateRegularExpression(
+    urlForensicsPipelineBaseDetectionRules.heavyWhitespaceNoisePattern,
+    /[\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180E\u2000-\u200F\u2028-\u202F\u2060-\u206F\uFEFF]/g
+  ),
+  protectedMarkupTag: urlForensicsPipelineBaseCreateRegularExpression(
+    urlForensicsPipelineBaseDetectionRules.protectedMarkupTagPattern,
+    /^(A|SCRIPT|STYLE|NOSCRIPT|TEXTAREA|PRE|CODE)$/i
+  ),
+  embeddedTrackingParameter: urlForensicsPipelineBaseCreateRegularExpression(
+    urlForensicsPipelineBaseDetectionRules.embeddedTrackingParameterPattern,
     /[?&](?:url|u|target|redirect|redirect_url|dest|destination|next|forward|goto|continue|to|href|link|data)=([^&]+)/gi
+  )
 });
 
-var urlForensicsPipelineBasePreferredTrackingParameterNames = Object.freeze([
-  "url",
-  "u",
-  "target",
-  "redirect",
-  "redirect_url",
-  "dest",
-  "destination",
-  "next",
-  "forward",
-  "goto",
-  "continue",
-  "to",
-  "href",
-  "link",
-  "data"
-]);
+var urlForensicsPipelineBasePreferredTrackingParameterNames = Object.freeze(
+  (urlForensicsPipelineBaseTrackingRules.preferredTrackingParameterNames || []).map(function normalizeTrackingParameterName(parameterName) {
+    return String(parameterName || "").trim();
+  }).filter(Boolean)
+);
 
-var urlForensicsPipelineBaseTrackingHostKeywords = Object.freeze([
-  "list-manage",
-  "rs6.net",
-  "ccsend.com",
-  "kajabimail",
-  "mail",
-  "tracking",
-  "redirect",
-  "click"
-]);
+var urlForensicsPipelineBaseTrackingHostKeywords = Object.freeze(
+  (urlForensicsPipelineBaseTrackingRules.trackerHostKeywords || []).map(function normalizeTrackingHostKeyword(keyword) {
+    return String(keyword || "").trim();
+  }).filter(Boolean)
+);
 
 var urlForensicsPipelineBaseDefaultSettings = Object.freeze({
   enableUrlNormalizationRepair: false,
@@ -173,7 +216,14 @@ function urlForensicsPipelineBaseNormalizeTitle(titleText, fallbackHost) {
 }
 
 // Function: create detected URL record.
-function urlForensicsPipelineBaseCreateDetectedUrlRecord(originalUrl, recordId) {
+function urlForensicsPipelineBaseCreateDetectedUrlRecord(originalUrl, recordId, metadata) {
+  const safeMetadata = metadata && typeof metadata === "object" ? metadata : {};
+  const detectorIds = Array.isArray(safeMetadata.detectorIds)
+    ? safeMetadata.detectorIds.map(function normalizeDetectorId(detectorId) {
+      return String(detectorId || "").trim();
+    }).filter(Boolean)
+    : [];
+
   return {
     id: recordId,
     original: originalUrl,
@@ -181,17 +231,20 @@ function urlForensicsPipelineBaseCreateDetectedUrlRecord(originalUrl, recordId) 
     resolved: [],
     validResolved: [],
     replacementUrl: "",
-    notes: []
+    notes: [],
+    detectorIds: detectorIds
   };
 }
 
 // Function: attach pipeline base helpers.
 (function attachUrlForensicsPipelineBase(globalScope) {
   const pipelineBase = Object.freeze({
+    ruleConfiguration: urlForensicsPipelineBaseRuleConfiguration,
     regularExpressions: urlForensicsPipelineBaseRegularExpressions,
     preferredTrackingParameterNames: urlForensicsPipelineBasePreferredTrackingParameterNames,
     trackingHostKeywords: urlForensicsPipelineBaseTrackingHostKeywords,
     trackingParameterModel: urlForensicsPipelineBaseTrackingParameterModel,
+    pluginRegistry: urlForensicsPipelineBasePluginRegistry,
     defaultPipelineSettings: urlForensicsPipelineBaseDefaultSettings,
     convertValueToString: urlForensicsPipelineBaseConvertValueToString,
     resolvePipelineSettings: urlForensicsPipelineBaseResolveSettings,

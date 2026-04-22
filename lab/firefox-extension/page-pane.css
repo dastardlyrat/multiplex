@@ -50,7 +50,9 @@ body.merged-link-lab-page-pane-reserved {
   transition: padding-right 180ms ease !important;
 }
 
-#merged-link-lab-page-pane.has-snapshot {
+#merged-link-lab-page-pane.has-snapshot,
+#merged-link-lab-page-pane.is-pre-detection-visible,
+#merged-link-lab-page-pane.is-expanded {
   opacity: 1;
   transform: translateY(0);
   pointer-events: auto;
@@ -290,10 +292,44 @@ html.merged-link-lab-page-pane-icon-font-ready #merged-link-lab-page-pane .merge
 
 #merged-link-lab-page-pane .merged-link-lab-page-pane__hover-link-box {
   margin: 8px 12px 10px;
-  padding: 8px 10px;
   border: 1px solid var(--merged-link-lab-pane-border);
   border-radius: 8px;
   background: #ffffff;
+  overflow: hidden;
+}
+
+#merged-link-lab-page-pane .merged-link-lab-page-pane__hover-link-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  cursor: pointer;
+  list-style: none;
+  background: var(--merged-link-lab-pane-surface-soft);
+}
+
+#merged-link-lab-page-pane .merged-link-lab-page-pane__hover-link-summary::-webkit-details-marker {
+  display: none;
+}
+
+#merged-link-lab-page-pane .merged-link-lab-page-pane__hover-link-summary::after {
+  content: "\25b8";
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--merged-link-lab-pane-ink-soft);
+  transition: transform 160ms ease;
+}
+
+#merged-link-lab-page-pane .merged-link-lab-page-pane__hover-link-box[open] .merged-link-lab-page-pane__hover-link-summary::after {
+  transform: rotate(90deg);
+}
+
+#merged-link-lab-page-pane .merged-link-lab-page-pane__hover-link-summary-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
 #merged-link-lab-page-pane .merged-link-lab-page-pane__hover-link-label {
@@ -308,8 +344,14 @@ html.merged-link-lab-page-pane-icon-font-ready #merged-link-lab-page-pane .merge
   color: var(--merged-link-lab-pane-ink-soft);
 }
 
+#merged-link-lab-page-pane .merged-link-lab-page-pane__hover-link-summary-line {
+  font-size: 11px;
+  color: var(--merged-link-lab-pane-ink-soft);
+}
+
 #merged-link-lab-page-pane .merged-link-lab-page-pane__hover-link-value {
   margin: 0;
+  padding: 0 10px 10px;
   height: calc(1.35em * 10);
   overflow: auto;
   white-space: pre-wrap;
@@ -392,6 +434,7 @@ html.merged-link-lab-page-pane-icon-font-ready #merged-link-lab-page-pane .merge
 }
 
 #merged-link-lab-page-pane .merged-link-lab-page-pane__preview-shell,
+#merged-link-lab-page-pane .merged-link-lab-page-pane__backup-pane,
 #merged-link-lab-page-pane .merged-link-lab-page-pane__diagnostics-pane {
   flex: 1 1 auto;
   min-height: 0;
@@ -406,7 +449,8 @@ html.merged-link-lab-page-pane-icon-font-ready #merged-link-lab-page-pane .merge
   background: var(--merged-link-lab-pane-surface);
 }
 
-#merged-link-lab-page-pane .merged-link-lab-page-pane__mirror-frame {
+#merged-link-lab-page-pane .merged-link-lab-page-pane__mirror-frame,
+#merged-link-lab-page-pane .merged-link-lab-page-pane__backup-frame {
   display: block;
   width: 100%;
   height: 100%;
@@ -417,6 +461,46 @@ html.merged-link-lab-page-pane-icon-font-ready #merged-link-lab-page-pane .merge
 #merged-link-lab-page-pane .merged-link-lab-page-pane__diagnostics-pane {
   overflow: auto;
   padding: 12px;
+}
+
+#merged-link-lab-page-pane .merged-link-lab-page-pane__backup-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: auto;
+  padding: 12px;
+}
+
+#merged-link-lab-page-pane .merged-link-lab-page-pane__backup-summary {
+  flex: 0 0 auto;
+  margin: 0;
+  color: var(--merged-link-lab-pane-ink-soft);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+#merged-link-lab-page-pane .merged-link-lab-page-pane__backup-frame {
+  flex: 1 1 auto;
+  min-height: 0;
+  border: 1px solid var(--merged-link-lab-pane-border);
+  border-radius: 8px;
+}
+
+#merged-link-lab-page-pane .merged-link-lab-page-pane__backup-payload {
+  display: none !important;
+}
+
+#merged-link-lab-page-pane .merged-link-lab-page-pane__backup-block {
+  margin: 0;
+  min-height: 100%;
+  padding: 12px;
+  border: 1px solid var(--merged-link-lab-pane-border);
+  border-radius: 10px;
+  background: var(--merged-link-lab-pane-surface-soft);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: 12px/1.5 Consolas, "Courier New", monospace;
+  color: var(--merged-link-lab-pane-ink);
 }
 
 #merged-link-lab-page-pane .merged-link-lab-page-pane__diagnostic-card {
