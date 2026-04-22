@@ -123,6 +123,48 @@
     return String(safeLocation.pathname || "");
   }
 
+  // Function: get location search.
+  function getLocationSearch(locationLike) {
+    const safeLocation = locationLike || window.location || {};
+    return String(safeLocation.search || "");
+  }
+
+  // Function: get location hash.
+  function getLocationHash(locationLike) {
+    const safeLocation = locationLike || window.location || {};
+    return String(safeLocation.hash || "");
+  }
+
+  // Function: check Gmail read-view location.
+  function isGmailReadViewLocation(locationLike) {
+    const searchValue = getLocationSearch(locationLike).toLowerCase();
+    const normalizedHash = getLocationHash(locationLike).replace(/^#/, "");
+    const hashSegments = normalizedHash.split("/").filter(Boolean);
+    const firstHashSegment = hashSegments.length ? hashSegments[0].toLowerCase() : "";
+
+    if (/[?&](?:view=(?:lg|pt)|permmsgid=|th=|msg=)/i.test(searchValue)) {
+      return true;
+    }
+
+    if (!normalizedHash) {
+      return false;
+    }
+
+    if (/(^|\/)(?:fmfcgz[^/?#]*|thread-[^/?#]+|msg-[^/?#]+)/i.test(normalizedHash)) {
+      return true;
+    }
+
+    if (/^(label|category|search)$/.test(firstHashSegment)) {
+      return hashSegments.length >= 3;
+    }
+
+    if (/^(inbox|all|sent|drafts|starred|snoozed|important|scheduled|spam|trash|chats)$/.test(firstHashSegment)) {
+      return hashSegments.length >= 2;
+    }
+
+    return hashSegments.length >= 2;
+  }
+
   // Function: check provider host match.
   function matchesProviderHost(providerId, locationLike) {
     const providerDefinition = providerDefinitionsById.get(String(providerId || "").trim());
@@ -142,6 +184,10 @@
 
     return !!(
       matchesProviderHost(providerId, locationLike) &&
+      (
+        providerId !== "gmail" ||
+        isGmailReadViewLocation(locationLike)
+      ) &&
       (
         !providerDefinition ||
         !providerDefinition.pathPattern ||
@@ -210,11 +256,15 @@
   function getPrimaryInboxBodySelectors(locationLike) {
     const providerKey = getInboxProviderKey(locationLike);
 
-    if (!providerKey || !primaryInboxBodySelectorsByProvider[providerKey]) {
-      return [];
+    if (providerKey && primaryInboxBodySelectorsByProvider[providerKey]) {
+      return primaryInboxBodySelectorsByProvider[providerKey].slice();
     }
 
-    return primaryInboxBodySelectorsByProvider[providerKey].slice();
+    if (isGmailHost(locationLike) && primaryInboxBodySelectorsByProvider.gmail) {
+      return primaryInboxBodySelectorsByProvider.gmail.slice();
+    }
+
+    return [];
   }
 
   // Function: get detection search roots, including open shadow roots.
@@ -277,6 +327,7 @@
     isHeyHost: isHeyHost,
     isHeyTopicPath: isHeyTopicPath,
     isFastmailHost: isFastmailHost,
+    isGmailReadViewLocation: isGmailReadViewLocation,
     getInboxProviderKey: getInboxProviderKey,
     getPrimaryInboxBodySelectors: getPrimaryInboxBodySelectors,
     getDetectionSearchRoots: getDetectionSearchRoots

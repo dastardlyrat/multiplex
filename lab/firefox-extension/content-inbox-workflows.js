@@ -16,53 +16,73 @@ function urlForensicsContentInboxWorkflowsGetCssObject() {
   return typeof CSS !== "undefined" ? CSS : null;
 }
 
-function urlForensicsCreateWorkflowEmailSnapshotSync(
-  emailSnapshotSync,
-  debugApi,
-  mergedLinkLabPipeline,
-  workflowPaneSnapshot,
-  workflowPaneLayout,
-  getLatestSnapshot,
-  getLastPublishedSnapshotSignature,
-  getLatestDetectedEmailRoot,
-  setLatestDetectedEmailRoot,
-  getLatestDetectedEmailMode,
-  setLatestDetectedEmailMode,
-  getLatestInboxCandidateSeenAt,
-  setLatestInboxCandidateSeenAt,
-  getInboxCandidateMissingSince,
-  setInboxCandidateMissingSince,
-  getLastObservedLocationHref,
-  setLastObservedLocationHref,
-  resetLatestEmailDetectionState,
-  isPageCurrentlyVisible,
-  getCurrentLocationHref,
-  getInboxRootCandidates,
-  getInboxDetectionFailure,
-  observeEmailRoot,
-  choosePrimaryEmailCandidate,
-  getCandidateMissingGraceWindow,
-  summarizeEmailRoot,
-  createSnapshotSignature
-) {
-  return emailSnapshotSync && typeof emailSnapshotSync.create === "function"
-    ? emailSnapshotSync.create({
+function urlForensicsIsWorkflowOptionBag(candidateValue, propertyName) {
+  return !!(
+    candidateValue &&
+    typeof candidateValue === "object" &&
+    Object.prototype.hasOwnProperty.call(candidateValue, propertyName)
+  );
+}
+
+function urlForensicsResolveWorkflowEmailSnapshotSyncOptions(args) {
+  if (urlForensicsIsWorkflowOptionBag(args[0], "emailSnapshotSync")) {
+    return args[0];
+  }
+
+  return {
+    emailSnapshotSync: args[0],
+    debugApi: args[1],
+    mergedLinkLabPipeline: args[2],
+    workflowPaneSnapshot: args[3],
+    workflowPaneLayout: args[4],
+    getLatestSnapshot: args[5],
+    getLastPublishedSnapshotSignature: args[6],
+    getLatestDetectedEmailRoot: args[7],
+    setLatestDetectedEmailRoot: args[8],
+    getLatestDetectedEmailMode: args[9],
+    setLatestDetectedEmailMode: args[10],
+    getLatestInboxCandidateSeenAt: args[11],
+    setLatestInboxCandidateSeenAt: args[12],
+    getInboxCandidateMissingSince: args[13],
+    setInboxCandidateMissingSince: args[14],
+    getLastObservedLocationHref: args[15],
+    setLastObservedLocationHref: args[16],
+    resetLatestEmailDetectionState: args[17],
+    isPageCurrentlyVisible: args[18],
+    getCurrentLocationHref: args[19],
+    getInboxRootCandidates: args[20],
+    getInboxDetectionFailure: args[21],
+    observeEmailRoot: args[22],
+    choosePrimaryEmailCandidate: args[23],
+    getCandidateMissingGraceWindow: args[24],
+    summarizeEmailRoot: args[25],
+    createSnapshotSignature: args[26]
+  };
+}
+
+function urlForensicsBuildWorkflowEmailSnapshotSyncOptions(workflowOptions) {
+  const optionBag = workflowOptions && typeof workflowOptions === "object" ? workflowOptions : {};
+  const mergedLinkLabPipeline = optionBag.mergedLinkLabPipeline;
+  const workflowPaneSnapshot = optionBag.workflowPaneSnapshot;
+  const workflowPaneLayout = optionBag.workflowPaneLayout;
+
+  return {
       windowObject: urlForensicsContentInboxWorkflowsGetWindowObject(),
-      debugApi: debugApi,
-      isPageCurrentlyVisible: isPageCurrentlyVisible,
-      getCurrentLocationHref: getCurrentLocationHref,
-      getInboxRootCandidates: getInboxRootCandidates,
-      getInboxDetectionFailure: getInboxDetectionFailure,
-      observeEmailRoot: observeEmailRoot,
-      choosePrimaryEmailCandidate: choosePrimaryEmailCandidate,
-      getCandidateMissingGraceWindow: getCandidateMissingGraceWindow,
+      debugApi: optionBag.debugApi,
+      isPageCurrentlyVisible: optionBag.isPageCurrentlyVisible,
+      getCurrentLocationHref: optionBag.getCurrentLocationHref,
+      getInboxRootCandidates: optionBag.getInboxRootCandidates,
+      getInboxDetectionFailure: optionBag.getInboxDetectionFailure,
+      observeEmailRoot: optionBag.observeEmailRoot,
+      choosePrimaryEmailCandidate: optionBag.choosePrimaryEmailCandidate,
+      getCandidateMissingGraceWindow: optionBag.getCandidateMissingGraceWindow,
       cleanInputText: mergedLinkLabPipeline && typeof mergedLinkLabPipeline.cleanInputText === "function"
         ? mergedLinkLabPipeline.cleanInputText
         : function cleanMissingInputText(value) {
           return String(value || "").trim();
         },
-      summarizeEmailRoot: summarizeEmailRoot,
-      createSnapshotSignature: createSnapshotSignature,
+      summarizeEmailRoot: optionBag.summarizeEmailRoot,
+      createSnapshotSignature: optionBag.createSnapshotSignature,
       publishSnapshot: workflowPaneSnapshot && typeof workflowPaneSnapshot.publishSnapshot === "function"
         ? workflowPaneSnapshot.publishSnapshot
         : async function publishMissingSnapshot() {},
@@ -78,20 +98,28 @@ function urlForensicsCreateWorkflowEmailSnapshotSync(
           workflowPaneLayout.hidePane();
         }
       },
-      getLatestSnapshot: getLatestSnapshot,
-      getLastPublishedSnapshotSignature: getLastPublishedSnapshotSignature,
-      getLatestDetectedEmailRoot: getLatestDetectedEmailRoot,
-      setLatestDetectedEmailRoot: setLatestDetectedEmailRoot,
-      getLatestDetectedEmailMode: getLatestDetectedEmailMode,
-      setLatestDetectedEmailMode: setLatestDetectedEmailMode,
-      getLatestInboxCandidateSeenAt: getLatestInboxCandidateSeenAt,
-      setLatestInboxCandidateSeenAt: setLatestInboxCandidateSeenAt,
-      getInboxCandidateMissingSince: getInboxCandidateMissingSince,
-      setInboxCandidateMissingSince: setInboxCandidateMissingSince,
-      getLastObservedLocationHref: getLastObservedLocationHref,
-      setLastObservedLocationHref: setLastObservedLocationHref,
-      resetLatestEmailDetectionState: resetLatestEmailDetectionState
-    })
+      getLatestSnapshot: optionBag.getLatestSnapshot,
+      getLastPublishedSnapshotSignature: optionBag.getLastPublishedSnapshotSignature,
+      getLatestDetectedEmailRoot: optionBag.getLatestDetectedEmailRoot,
+      setLatestDetectedEmailRoot: optionBag.setLatestDetectedEmailRoot,
+      getLatestDetectedEmailMode: optionBag.getLatestDetectedEmailMode,
+      setLatestDetectedEmailMode: optionBag.setLatestDetectedEmailMode,
+      getLatestInboxCandidateSeenAt: optionBag.getLatestInboxCandidateSeenAt,
+      setLatestInboxCandidateSeenAt: optionBag.setLatestInboxCandidateSeenAt,
+      getInboxCandidateMissingSince: optionBag.getInboxCandidateMissingSince,
+      setInboxCandidateMissingSince: optionBag.setInboxCandidateMissingSince,
+      getLastObservedLocationHref: optionBag.getLastObservedLocationHref,
+      setLastObservedLocationHref: optionBag.setLastObservedLocationHref,
+      resetLatestEmailDetectionState: optionBag.resetLatestEmailDetectionState
+  };
+}
+
+function urlForensicsCreateWorkflowEmailSnapshotSync() {
+  const workflowOptions = urlForensicsResolveWorkflowEmailSnapshotSyncOptions(arguments);
+  const emailSnapshotSync = workflowOptions.emailSnapshotSync;
+
+  return emailSnapshotSync && typeof emailSnapshotSync.create === "function"
+    ? emailSnapshotSync.create(urlForensicsBuildWorkflowEmailSnapshotSyncOptions(workflowOptions))
     : Object.freeze({
       scheduleSnapshotSync: function scheduleMissingSnapshotSync() {
         return 0;
@@ -100,6 +128,26 @@ function urlForensicsCreateWorkflowEmailSnapshotSync(
         return false;
       }
     });
+}
+
+function urlForensicsResolveWorkflowPatternMatcher(patternLike) {
+  if (patternLike instanceof RegExp) {
+    return patternLike;
+  }
+
+  if (patternLike && typeof patternLike.test === "function") {
+    return Object.freeze({
+      test: function testWorkflowPattern(value) {
+        try {
+          return !!patternLike.test(value);
+        } catch {
+          return false;
+        }
+      }
+    });
+  }
+
+  return /^$/;
 }
 
 function urlForensicsBuildWorkflowEmailRootSummaryOptions(
@@ -137,9 +185,9 @@ function urlForensicsBuildWorkflowEmailRootSummaryOptions(
         return {};
       },
     debugApi: debugApi,
-    inboxHostPattern: detectorPatterns.inboxHost instanceof RegExp ? detectorPatterns.inboxHost : /^$/,
-    topicDigestLabelPattern: detectorPatterns.topicDigestLabel instanceof RegExp ? detectorPatterns.topicDigestLabel : /^$/,
-    topicDigestActionPattern: detectorPatterns.topicDigestAction instanceof RegExp ? detectorPatterns.topicDigestAction : /^$/
+    inboxHostPattern: urlForensicsResolveWorkflowPatternMatcher(detectorPatterns.inboxHost),
+    topicDigestLabelPattern: urlForensicsResolveWorkflowPatternMatcher(detectorPatterns.topicDigestLabel),
+    topicDigestActionPattern: urlForensicsResolveWorkflowPatternMatcher(detectorPatterns.topicDigestAction)
   };
 }
 
@@ -197,39 +245,54 @@ function urlForensicsCreateWorkflowEmailRootSummary(
   });
 }
 
-function urlForensicsBuildWorkflowEmailRootRuntimeOptions(
-  emailRootSummary,
-  workflowPaneSnapshot,
-  getLatestSnapshot,
-  getLatestDetectedEmailRoot,
-  setLatestDetectedEmailRoot,
-  getLatestDetectedEmailMode,
-  setLatestDetectedEmailMode,
-  choosePrimaryEmailCandidate,
-  getInboxRootCandidates,
-  syncEmailSnapshot,
-  scheduleSnapshotSync,
-  summarizeEmailRoot,
-  shouldReplaceEmailBodyWithMirrorContent,
-  replaceElementMarkup
-) {
+function urlForensicsResolveWorkflowEmailRootRuntimeOptions(args) {
+  if (urlForensicsIsWorkflowOptionBag(args[0], "emailRootRuntime")) {
+    return args[0];
+  }
+
   return {
+    emailRootRuntime: args[0],
+    workflowEmailRootSummary: args[1],
+    workflowPaneSnapshot: args[2],
+    debugApi: args[3],
+    getLatestSnapshot: args[4],
+    getLatestDetectedEmailRoot: args[5],
+    setLatestDetectedEmailRoot: args[6],
+    getLatestDetectedEmailMode: args[7],
+    setLatestDetectedEmailMode: args[8],
+    choosePrimaryEmailCandidate: args[9],
+    getInboxRootCandidates: args[10],
+    syncEmailSnapshot: args[11],
+    scheduleSnapshotSync: args[12],
+    summarizeEmailRoot: args[13],
+    shouldReplaceEmailBodyWithMirrorContent: args[14],
+    replaceElementMarkup: args[15]
+  };
+}
+
+function urlForensicsBuildWorkflowEmailRootRuntimeOptions(workflowOptions) {
+  const optionBag = workflowOptions && typeof workflowOptions === "object" ? workflowOptions : {};
+  const emailRootSummary = optionBag.workflowEmailRootSummary;
+  const workflowPaneSnapshot = optionBag.workflowPaneSnapshot;
+
+  return {
+    debugApi: optionBag.debugApi,
     mutationObserverClass: urlForensicsContentInboxWorkflowsGetMutationObserverClass(),
-    replaceElementMarkup: replaceElementMarkup,
-    syncEmailSnapshot: syncEmailSnapshot,
-    summarizeEmailRoot: summarizeEmailRoot,
+    replaceElementMarkup: optionBag.replaceElementMarkup,
+    syncEmailSnapshot: optionBag.syncEmailSnapshot,
+    summarizeEmailRoot: optionBag.summarizeEmailRoot,
     publishSnapshot: workflowPaneSnapshot && typeof workflowPaneSnapshot.publishSnapshot === "function"
       ? workflowPaneSnapshot.publishSnapshot
       : async function publishMissingSnapshot() {},
-    scheduleSnapshotSync: scheduleSnapshotSync,
-    shouldReplaceEmailBodyWithMirrorContent: shouldReplaceEmailBodyWithMirrorContent,
-    getLatestSnapshot: getLatestSnapshot,
-    getLatestDetectedEmailRoot: getLatestDetectedEmailRoot,
-    setLatestDetectedEmailRoot: setLatestDetectedEmailRoot,
-    getLatestDetectedEmailMode: getLatestDetectedEmailMode,
-    setLatestDetectedEmailMode: setLatestDetectedEmailMode,
-    choosePrimaryEmailCandidate: choosePrimaryEmailCandidate,
-    getInboxRootCandidates: getInboxRootCandidates,
+    scheduleSnapshotSync: optionBag.scheduleSnapshotSync,
+    shouldReplaceEmailBodyWithMirrorContent: optionBag.shouldReplaceEmailBodyWithMirrorContent,
+    getLatestSnapshot: optionBag.getLatestSnapshot,
+    getLatestDetectedEmailRoot: optionBag.getLatestDetectedEmailRoot,
+    setLatestDetectedEmailRoot: optionBag.setLatestDetectedEmailRoot,
+    getLatestDetectedEmailMode: optionBag.getLatestDetectedEmailMode,
+    setLatestDetectedEmailMode: optionBag.setLatestDetectedEmailMode,
+    choosePrimaryEmailCandidate: optionBag.choosePrimaryEmailCandidate,
+    getInboxRootCandidates: optionBag.getInboxRootCandidates,
     getEmailRootHtmlMarkup: emailRootSummary && typeof emailRootSummary.getEmailRootHtmlMarkup === "function"
       ? emailRootSummary.getEmailRootHtmlMarkup
       : function getMissingEmailRootHtmlMarkup() {
@@ -249,42 +312,12 @@ function urlForensicsBuildWorkflowEmailRootRuntimeOptions(
   };
 }
 
-function urlForensicsCreateWorkflowEmailRootRuntime(
-  emailRootRuntime,
-  workflowEmailRootSummary,
-  workflowPaneSnapshot,
-  getLatestSnapshot,
-  getLatestDetectedEmailRoot,
-  setLatestDetectedEmailRoot,
-  getLatestDetectedEmailMode,
-  setLatestDetectedEmailMode,
-  choosePrimaryEmailCandidate,
-  getInboxRootCandidates,
-  syncEmailSnapshot,
-  scheduleSnapshotSync,
-  summarizeEmailRoot,
-  shouldReplaceEmailBodyWithMirrorContent,
-  replaceElementMarkup
-) {
+function urlForensicsCreateWorkflowEmailRootRuntime() {
+  const workflowOptions = urlForensicsResolveWorkflowEmailRootRuntimeOptions(arguments);
+  const emailRootRuntime = workflowOptions.emailRootRuntime;
+
   if (emailRootRuntime && typeof emailRootRuntime.create === "function") {
-    return emailRootRuntime.create(
-      urlForensicsBuildWorkflowEmailRootRuntimeOptions(
-        workflowEmailRootSummary,
-        workflowPaneSnapshot,
-        getLatestSnapshot,
-        getLatestDetectedEmailRoot,
-        setLatestDetectedEmailRoot,
-        getLatestDetectedEmailMode,
-        setLatestDetectedEmailMode,
-        choosePrimaryEmailCandidate,
-        getInboxRootCandidates,
-        syncEmailSnapshot,
-        scheduleSnapshotSync,
-        summarizeEmailRoot,
-        shouldReplaceEmailBodyWithMirrorContent,
-        replaceElementMarkup
-      )
-    );
+    return emailRootRuntime.create(urlForensicsBuildWorkflowEmailRootRuntimeOptions(workflowOptions));
   }
 
   return Object.freeze({
@@ -311,6 +344,7 @@ function urlForensicsBuildWorkflowEmailAutoReplaceOptions(
 ) {
   return {
     documentObject: urlForensicsContentInboxWorkflowsGetDocumentObject(),
+    windowObject: urlForensicsContentInboxWorkflowsGetWindowObject(),
     getActiveEmailRoot: getActiveEmailRoot,
     getAutoApplyMirrorSenderSelector: getAutoApplyMirrorSenderSelector,
     getAutoApplyMirrorSenderEmailPattern: getAutoApplyMirrorSenderEmailPattern,
@@ -321,6 +355,9 @@ function urlForensicsBuildWorkflowEmailAutoReplaceOptions(
     },
     getAutoApplyMirrorForConfiguredSendersEnabled: function getAutoApplyMirrorForConfiguredSendersEnabled() {
       return extensionSettings.autoApplyMirrorForConfiguredSenders === true;
+    },
+    getAutoApplyMirrorOnMobileDeviceEnabled: function getAutoApplyMirrorOnMobileDeviceEnabled() {
+      return extensionSettings.autoApplyMirrorOnMobileDevice === true;
     },
     getAutoApplyMirrorSenderEmailList: function getAutoApplyMirrorSenderEmailList() {
       return Array.isArray(extensionSettings.autoApplyMirrorSenderEmailList)
@@ -360,6 +397,9 @@ function urlForensicsCreateWorkflowEmailAutoReplace(
       return false;
     },
     hasNativeEmailExpansionControl: function hasMissingNativeEmailExpansionControl() {
+      return false;
+    },
+    isMobileDeviceDetected: function isMissingMobileDeviceDetected() {
       return false;
     },
     isConfiguredSenderDetected: function isMissingConfiguredSenderDetected() {
@@ -436,6 +476,7 @@ function urlForensicsBuildWorkflowContentSettingsStorageOptions(
   trackingParameterFiltersStorageKey,
   replaceEmailBodyWithMirrorContentStorageKey,
   allowHelperOpenWithoutDetectedEmailBodyStorageKey,
+  autoApplyMirrorOnMobileDeviceStorageKey,
   autoApplyMirrorForConfiguredSendersStorageKey,
   autoApplyMirrorSenderEmailListStorageKey,
   legacyAutoApplyMirrorForNamedSenderStorageKey,
@@ -460,6 +501,7 @@ function urlForensicsBuildWorkflowContentSettingsStorageOptions(
     trackingParameterFiltersStorageKey: trackingParameterFiltersStorageKey,
     replaceEmailBodyWithMirrorContentStorageKey: replaceEmailBodyWithMirrorContentStorageKey,
     allowHelperOpenWithoutDetectedEmailBodyStorageKey: allowHelperOpenWithoutDetectedEmailBodyStorageKey,
+    autoApplyMirrorOnMobileDeviceStorageKey: autoApplyMirrorOnMobileDeviceStorageKey,
     autoApplyMirrorForConfiguredSendersStorageKey: autoApplyMirrorForConfiguredSendersStorageKey,
     autoApplyMirrorSenderEmailListStorageKey: autoApplyMirrorSenderEmailListStorageKey,
     legacyAutoApplyMirrorForNamedSenderStorageKey: legacyAutoApplyMirrorForNamedSenderStorageKey,
@@ -493,6 +535,7 @@ function urlForensicsCreateWorkflowContentSettingsStorage(
   trackingParameterFiltersStorageKey,
   replaceEmailBodyWithMirrorContentStorageKey,
   allowHelperOpenWithoutDetectedEmailBodyStorageKey,
+  autoApplyMirrorOnMobileDeviceStorageKey,
   autoApplyMirrorForConfiguredSendersStorageKey,
   autoApplyMirrorSenderEmailListStorageKey,
   legacyAutoApplyMirrorForNamedSenderStorageKey,
@@ -517,6 +560,7 @@ function urlForensicsCreateWorkflowContentSettingsStorage(
         trackingParameterFiltersStorageKey,
         replaceEmailBodyWithMirrorContentStorageKey,
         allowHelperOpenWithoutDetectedEmailBodyStorageKey,
+        autoApplyMirrorOnMobileDeviceStorageKey,
         autoApplyMirrorForConfiguredSendersStorageKey,
         autoApplyMirrorSenderEmailListStorageKey,
         legacyAutoApplyMirrorForNamedSenderStorageKey,
@@ -647,7 +691,7 @@ function urlForensicsResolveWorkflowEmailCandidateDiscoveryFunction(inboxDetecto
 }
 
 function urlForensicsResolveWorkflowEmailCandidateDiscoveryPattern(patterns, propertyName) {
-  return patterns && patterns[propertyName] instanceof RegExp ? patterns[propertyName] : /^$/;
+  return urlForensicsResolveWorkflowPatternMatcher(patterns ? patterns[propertyName] : null);
 }
 
 function urlForensicsResolveWorkflowEmailCandidateDiscoverySelector(selectors, propertyName, fallbackValue) {
@@ -657,6 +701,7 @@ function urlForensicsResolveWorkflowEmailCandidateDiscoverySelector(selectors, p
 function urlForensicsBuildWorkflowEmailCandidateDiscoveryOptions(
   mergedLinkLabPipeline,
   inboxDetectors,
+  debugApi,
   getEmailRootContentElement,
   measureElementText,
   inboxCandidateMissingGraceMs,
@@ -669,6 +714,7 @@ function urlForensicsBuildWorkflowEmailCandidateDiscoveryOptions(
   return {
     windowObject: urlForensicsContentInboxWorkflowsGetWindowObject(),
     documentObject: urlForensicsContentInboxWorkflowsGetDocumentObject(),
+    debugApi: debugApi,
     cleanInputText:
       mergedLinkLabPipeline && typeof mergedLinkLabPipeline.cleanInputText === "function"
         ? mergedLinkLabPipeline.cleanInputText
@@ -758,6 +804,7 @@ function urlForensicsCreateWorkflowEmailCandidateDiscovery(
   emailCandidateDiscovery,
   mergedLinkLabPipeline,
   inboxDetectors,
+  debugApi,
   getEmailRootContentElement,
   measureElementText,
   inboxCandidateMissingGraceMs,
@@ -769,6 +816,7 @@ function urlForensicsCreateWorkflowEmailCandidateDiscovery(
       urlForensicsBuildWorkflowEmailCandidateDiscoveryOptions(
         mergedLinkLabPipeline,
         inboxDetectors,
+        debugApi,
         getEmailRootContentElement,
         measureElementText,
         inboxCandidateMissingGraceMs,

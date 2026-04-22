@@ -44,6 +44,7 @@
   const DOM = {
     enableUrlNormalizationRepair: document.getElementById("enableUrlNormalizationRepair"),
     replaceEmailBodyWithMirrorContent: document.getElementById("replaceEmailBodyWithMirrorContent"),
+    autoApplyMirrorOnMobileDevice: document.getElementById("autoApplyMirrorOnMobileDevice"),
     autoApplyMirrorForConfiguredSenders: document.getElementById("autoApplyMirrorForConfiguredSenders"),
     autoApplySenderListSummary: document.getElementById("autoApplySenderListSummary"),
     senderAddressForm: document.getElementById("senderAddressForm"),
@@ -162,6 +163,10 @@
       DOM.replaceEmailBodyWithMirrorContent.checked = defaults.replaceEmailBodyWithMirrorContent;
     }
 
+    if (DOM.autoApplyMirrorOnMobileDevice) {
+      DOM.autoApplyMirrorOnMobileDevice.checked = defaults.autoApplyMirrorOnMobileDevice;
+    }
+
     if (DOM.autoApplyMirrorForConfiguredSenders) {
       DOM.autoApplyMirrorForConfiguredSenders.checked = defaults.autoApplyMirrorForConfiguredSenders;
     }
@@ -174,6 +179,8 @@
     return {
       [storageKeys.enableUrlNormalizationRepair]: !!(DOM.enableUrlNormalizationRepair && DOM.enableUrlNormalizationRepair.checked),
       [storageKeys.replaceEmailBodyWithMirrorContent]: !!(DOM.replaceEmailBodyWithMirrorContent && DOM.replaceEmailBodyWithMirrorContent.checked),
+      [storageKeys.autoApplyMirrorOnMobileDevice]:
+        !!(DOM.autoApplyMirrorOnMobileDevice && DOM.autoApplyMirrorOnMobileDevice.checked),
       [storageKeys.autoApplyMirrorForConfiguredSenders]:
         !!(DOM.autoApplyMirrorForConfiguredSenders && DOM.autoApplyMirrorForConfiguredSenders.checked)
     };
@@ -185,6 +192,12 @@
       return isEnabled
         ? "Saved. Replacing the opened email body with mirror content is enabled."
         : "Saved. Replacing the opened email body with mirror content is disabled.";
+    }
+
+    if (changedControlId === "autoApplyMirrorOnMobileDevice") {
+      return isEnabled
+        ? "Saved. Mobile-device auto-apply is enabled."
+        : "Saved. Mobile-device auto-apply is disabled.";
     }
 
     if (changedControlId === "autoApplyMirrorForConfiguredSenders") {
@@ -284,6 +297,7 @@
     return !!(
       DOM.enableUrlNormalizationRepair ||
       DOM.replaceEmailBodyWithMirrorContent ||
+      DOM.autoApplyMirrorOnMobileDevice ||
       DOM.autoApplyMirrorForConfiguredSenders ||
       DOM.senderAddressList
     );
@@ -322,6 +336,12 @@
       storageKeys.replaceEmailBodyWithMirrorContent,
       defaults.replaceEmailBodyWithMirrorContent
     );
+    applyStoredBooleanSettingToControl(
+      DOM.autoApplyMirrorOnMobileDevice,
+      storedSettings,
+      storageKeys.autoApplyMirrorOnMobileDevice,
+      defaults.autoApplyMirrorOnMobileDevice
+    );
 
     if (DOM.autoApplyMirrorForConfiguredSenders) {
       const resolvedAutoApplyValue = resolveStoredAutoApplyConfiguredSendersValue(storedSettings);
@@ -355,6 +375,7 @@
       senderEmailCount: settingsState.senderEmailList.length,
       enableUrlNormalizationRepair: !!(DOM.enableUrlNormalizationRepair && DOM.enableUrlNormalizationRepair.checked),
       replaceEmailBodyWithMirrorContent: !!(DOM.replaceEmailBodyWithMirrorContent && DOM.replaceEmailBodyWithMirrorContent.checked),
+      autoApplyMirrorOnMobileDevice: !!(DOM.autoApplyMirrorOnMobileDevice && DOM.autoApplyMirrorOnMobileDevice.checked),
       autoApplyMirrorForConfiguredSenders: !!(DOM.autoApplyMirrorForConfiguredSenders && DOM.autoApplyMirrorForConfiguredSenders.checked)
     });
     debugApi.functionOut("settings.loadSettings", { source: "storage.local" });
@@ -451,6 +472,7 @@
       (
         !DOM.enableUrlNormalizationRepair &&
         !DOM.replaceEmailBodyWithMirrorContent &&
+        !DOM.autoApplyMirrorOnMobileDevice &&
         !DOM.autoApplyMirrorForConfiguredSenders
       ) ||
       !extensionApi ||
@@ -518,6 +540,14 @@
       didUpdate = true;
     }
 
+    if (Object.prototype.hasOwnProperty.call(changes, storageKeys.autoApplyMirrorOnMobileDevice)) {
+      if (DOM.autoApplyMirrorOnMobileDevice) {
+        DOM.autoApplyMirrorOnMobileDevice.checked =
+          changes[storageKeys.autoApplyMirrorOnMobileDevice].newValue === true;
+      }
+      didUpdate = true;
+    }
+
     if (Object.prototype.hasOwnProperty.call(changes, storageKeys.autoApplyMirrorForConfiguredSenders)) {
       if (DOM.autoApplyMirrorForConfiguredSenders) {
         const hasBooleanValue =
@@ -559,6 +589,10 @@
     if (DOM.replaceEmailBodyWithMirrorContent) {
       DOM.replaceEmailBodyWithMirrorContent.addEventListener("change", saveSettings);
     }
+
+  if (DOM.autoApplyMirrorOnMobileDevice) {
+    DOM.autoApplyMirrorOnMobileDevice.addEventListener("change", saveSettings);
+  }
 
   if (DOM.autoApplyMirrorForConfiguredSenders) {
     DOM.autoApplyMirrorForConfiguredSenders.addEventListener("change", saveSettings);

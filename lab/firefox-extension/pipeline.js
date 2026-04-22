@@ -332,6 +332,19 @@
       debugApi: debugApi
     });
 
+    // Function: choose rewritten markup result for mirror/page replacement.
+    function chooseRewrittenMarkupResult(sourceMarkup, detectedItems, changedUrls, pipelineSettings) {
+      const rewrittenMarkupResult = rewriteHtml(sourceMarkup, detectedItems, pipelineSettings);
+
+      if (rewrittenMarkupResult.count || !changedUrls.length) {
+        return rewrittenMarkupResult;
+      }
+
+      const standalonePreviewResult = rewriteHtmlForStandalonePreview(sourceMarkup, detectedItems, pipelineSettings);
+
+      return standalonePreviewResult.count ? standalonePreviewResult : rewrittenMarkupResult;
+    }
+
     // Function: analyze input.
     function analyzeInput(input) {
       if (debugApi) {
@@ -399,9 +412,10 @@
               .filter(Boolean);
             stageState.changedUrls = buildChangedUrls(stageState.detectedItems);
             stageState.digestEntries = buildDigestEntries(stageState.normalizedRawText, stageState.detectedItems, { useReplacementUrlOnly: true });
-            stageState.rewrittenMarkupResult = rewriteHtml(
+            stageState.rewrittenMarkupResult = chooseRewrittenMarkupResult(
               stageState.sourceMarkup || stageState.normalizedRawText,
               stageState.detectedItems,
+              stageState.changedUrls,
               stageState.pipelineSettings
             );
             stageState.rewrittenText = htmlToText(stageState.rewrittenMarkupResult.html);

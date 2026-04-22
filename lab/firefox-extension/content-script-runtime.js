@@ -158,6 +158,7 @@ function urlForensicsContentScriptRuntimeBuildExtensionSettings(context) {
     trackingParameterFilters: context.storageModel.defaultSettings.trackingParameterFilters,
     replaceEmailBodyWithMirrorContent: false,
     allowHelperOpenWithoutDetectedEmailBody: false,
+    autoApplyMirrorOnMobileDevice: context.storageModel.defaultSettings.autoApplyMirrorOnMobileDevice,
     autoApplyMirrorForConfiguredSenders: false,
     autoApplyMirrorSenderEmailList: context.storageModel.defaultSettings.autoApplyMirrorSenderEmailList.slice()
   };
@@ -194,6 +195,11 @@ function urlForensicsContentScriptRuntimeBuildExtensionStorageSnapshot(extension
         rawValue: undefined,
         effectiveValue: extensionSettings.allowHelperOpenWithoutDetectedEmailBody
       },
+      autoApplyMirrorOnMobileDevice: {
+        hasStoredValue: false,
+        rawValue: undefined,
+        effectiveValue: extensionSettings.autoApplyMirrorOnMobileDevice
+      },
       autoApplyMirrorForConfiguredSenders: {
         hasStoredValue: false,
         rawValue: undefined,
@@ -215,14 +221,8 @@ function urlForensicsContentScriptRuntimeBuildWorkflowRailElements() {
     railBadge: null,
     railStatus: null,
     railCount: null,
-    statusText: null,
-    pageLink: null,
-    detectedAt: null,
     sectionLabel: null,
-    sourceType: null,
-    rawUrlCount: null,
     finalUrlCount: null,
-    changedCount: null,
     rewrittenCount: null,
     digestCount: null,
     refreshButton: null,
@@ -231,6 +231,10 @@ function urlForensicsContentScriptRuntimeBuildWorkflowRailElements() {
     tabPanels: [],
     convertedPane: null,
     convertedSummary: null,
+    backupPane: null,
+    backupSummary: null,
+    backupFrame: null,
+    backupPayload: null,
     labFrame: null,
     labFrameLoaded: false,
     diagnosticsPane: null,
@@ -239,9 +243,7 @@ function urlForensicsContentScriptRuntimeBuildWorkflowRailElements() {
     hoverLinkInfoSummary: null,
     hoverLinkPanelExpanded: false,
     hoverLinkInfoValue: null,
-    rewrittenPane: null,
     applyChangesButton: null,
-    copyConvertedButton: null,
     copyDiagnosticsButton: null,
     collapseButton: null,
     currentPaneKey: "",
@@ -287,6 +289,7 @@ function urlForensicsContentScriptRuntimeBuildState(context) {
       trackingParameterFilters: context.storageModel.storageKeys.trackingParameterFilters,
       replaceEmailBodyWithMirrorContent: context.storageModel.storageKeys.replaceEmailBodyWithMirrorContent,
       allowHelperOpenWithoutDetectedEmailBody: context.storageModel.storageKeys.allowHelperOpenWithoutDetectedEmailBody,
+      autoApplyMirrorOnMobileDevice: context.storageModel.storageKeys.autoApplyMirrorOnMobileDevice,
       autoApplyMirrorForConfiguredSenders: context.storageModel.storageKeys.autoApplyMirrorForConfiguredSenders,
       autoApplyMirrorSenderEmailList: context.storageModel.storageKeys.autoApplyMirrorSenderEmailList,
       legacyAutoApplyMirrorForNamedSender: context.storageModel.legacyStorageKeys.autoApplyMirrorForNamedSender
@@ -300,6 +303,41 @@ function urlForensicsContentScriptRuntimeBuildState(context) {
       buildStorageEmailListSnapshotEntry: context.storageModel.buildStorageEmailListEntry
     }
   };
+}
+
+function urlForensicsContentScriptRuntimeResetStalePaneDom(context) {
+  const documentObject = context && context.documentObject ? context.documentObject : null;
+
+  if (!documentObject || typeof documentObject.querySelector !== "function") {
+    return false;
+  }
+
+  const stalePaneRoot = documentObject.querySelector("#merged-link-lab-page-pane");
+
+  if (
+    stalePaneRoot &&
+    stalePaneRoot.parentNode &&
+    typeof stalePaneRoot.parentNode.removeChild === "function"
+  ) {
+    stalePaneRoot.parentNode.removeChild(stalePaneRoot);
+  }
+
+  [documentObject.documentElement, documentObject.body].forEach(function clearReservedPaneState(targetElement) {
+    if (!targetElement) {
+      return;
+    }
+
+    if (targetElement.classList && typeof targetElement.classList.remove === "function") {
+      targetElement.classList.remove("merged-link-lab-page-pane-reserved");
+    }
+
+    if (targetElement.style && typeof targetElement.style.removeProperty === "function") {
+      targetElement.style.removeProperty("--merged-link-lab-page-pane-reserved-space");
+      targetElement.style.removeProperty("--merged-link-lab-page-pane-expanded-width");
+    }
+  });
+
+  return !!stalePaneRoot;
 }
 
 function urlForensicsContentScriptRuntimeCreatePageContext(context, state) {
@@ -469,38 +507,41 @@ function urlForensicsContentScriptRuntimeCreatePaneSnapshotWorkflow(
   }
 
   return {
-    workflowPaneSnapshot: context.contentPaneWorkflows.createWorkflowPaneSnapshot(
-      context.pagePaneSnapshot,
-      state.workflowRailElements,
-      paneControls.ensurePane,
-      workflowPaneMirror,
-      workflowDiagnostics,
-      workflowPaneLayout,
-      context.extensionApi,
-      function getLatestSnapshot() {
+    workflowPaneSnapshot: context.contentPaneWorkflows.createWorkflowPaneSnapshot({
+      pagePaneSnapshot: context.pagePaneSnapshot,
+      workflowRailElements: state.workflowRailElements,
+      ensurePane: paneControls.ensurePane,
+      workflowPaneMirror: workflowPaneMirror,
+      workflowDiagnostics: workflowDiagnostics,
+      workflowPaneLayout: workflowPaneLayout,
+      extensionApi: context.extensionApi,
+      debugApi: context.debugApi,
+      getLatestSnapshot: function getLatestSnapshot() {
         return state.latestSnapshot;
       },
-      function setLatestSnapshot(nextSnapshot) {
+      setLatestSnapshot: function setLatestSnapshot(nextSnapshot) {
         state.latestSnapshot = nextSnapshot;
       },
-      function setLastPublishedSnapshotSignature(nextSignature) {
+      setLastPublishedSnapshotSignature: function setLastPublishedSnapshotSignature(nextSignature) {
         state.lastPublishedSnapshotSignature = nextSignature;
       },
-      function getDidAutoExpandBuiltInTestPagePane() {
+      getDidAutoExpandBuiltInTestPagePane: function getDidAutoExpandBuiltInTestPagePane() {
         return state.didAutoExpandBuiltInTestPagePane;
       },
-      function setDidAutoExpandBuiltInTestPagePane(nextDidAutoExpandBuiltInTestPagePane) {
+      setDidAutoExpandBuiltInTestPagePane: function setDidAutoExpandBuiltInTestPagePane(
+        nextDidAutoExpandBuiltInTestPagePane
+      ) {
         state.didAutoExpandBuiltInTestPagePane = !!nextDidAutoExpandBuiltInTestPagePane;
       },
-      workflowContentUiHelpers.formatMetricCount,
-      workflowContentUiHelpers.formatRailBadgeCount,
-      syncEmailSnapshot,
-      shared.workflowContentAccessors.maybeReplaceEmailBodyWithMirrorContent,
-      paneControls.isBuiltInTestSuitePage,
-      paneControls.createSnapshotSignature,
-      paneControls.createSnapshotPaneKey,
-      paneControls.resetLatestEmailDetectionState
-    ),
+      formatMetricCount: workflowContentUiHelpers.formatMetricCount,
+      formatRailBadgeCount: workflowContentUiHelpers.formatRailBadgeCount,
+      syncEmailSnapshot: syncEmailSnapshot,
+      maybeReplaceEmailBodyWithMirrorContent: shared.workflowContentAccessors.maybeReplaceEmailBodyWithMirrorContent,
+      isBuiltInTestSuitePage: paneControls.isBuiltInTestSuitePage,
+      createSnapshotSignature: paneControls.createSnapshotSignature,
+      createSnapshotPaneKey: paneControls.createSnapshotPaneKey,
+      resetLatestEmailDetectionState: paneControls.resetLatestEmailDetectionState
+    }),
     syncEmailSnapshot: syncEmailSnapshot,
     scheduleSnapshotSync: scheduleSnapshotSync
   };
@@ -516,6 +557,41 @@ function urlForensicsContentScriptRuntimeCreatePaneWorkflows(
 ) {
   const workflowPaneBootstrap = context.contentPaneWorkflows.createWorkflowPaneBootstrap(context.pagePaneBootstrap);
   const paneControls = urlForensicsContentScriptRuntimeBuildPaneContextControls(workflowContentPageContext, shared);
+  function shouldSuppressPaneVisibility() {
+    const locationObject =
+      context.windowObject && context.windowObject.location
+        ? context.windowObject.location
+        : null;
+    const inboxRootCandidates = shared.workflowContentAccessors.getInboxRootCandidates();
+    const candidateCount = Array.isArray(inboxRootCandidates) ? inboxRootCandidates.length : 0;
+    const isSupportedInboxHost = !!(
+      locationObject &&
+      context.inboxDetectors &&
+      typeof context.inboxDetectors.isSupportedInboxHost === "function" &&
+      context.inboxDetectors.isSupportedInboxHost(locationObject)
+    );
+    const shouldSuppress = isSupportedInboxHost && candidateCount === 0;
+
+    if (context.debugApi && typeof context.debugApi.conditional === "function") {
+      context.debugApi.conditional("content pane visibility suppression evaluated", {
+        href: locationObject && locationObject.href ? String(locationObject.href) : "",
+        isSupportedInboxHost: isSupportedInboxHost,
+        candidateCount: candidateCount,
+        suppressed: shouldSuppress
+      });
+    }
+
+    if (
+      !locationObject ||
+      !context.inboxDetectors ||
+      typeof context.inboxDetectors.isSupportedInboxHost !== "function" ||
+      !context.inboxDetectors.isSupportedInboxHost(locationObject)
+    ) {
+      return false;
+    }
+
+    return shouldSuppress;
+  }
 
   const workflowPaneLayout = context.contentPaneWorkflows.createWorkflowPaneLayout(
     context.pagePaneLayout,
@@ -527,7 +603,9 @@ function urlForensicsContentScriptRuntimeCreatePaneWorkflows(
     shared.workflowContentAccessors.getActiveEmailRoot,
     function shouldAllowOpenWithoutSnapshot() {
       return false;
-    }
+    },
+    shouldSuppressPaneVisibility,
+    context.debugApi
   );
   const workflowPaneMirror = context.contentPaneWorkflows.createWorkflowPaneMirror(
     context.pagePaneMirror,
@@ -608,6 +686,7 @@ function urlForensicsContentScriptRuntimeCreateSummaryAndSettingsWorkflows(conte
     state.storageKeys.trackingParameterFilters,
     state.storageKeys.replaceEmailBodyWithMirrorContent,
     state.storageKeys.allowHelperOpenWithoutDetectedEmailBody,
+    state.storageKeys.autoApplyMirrorOnMobileDevice,
     state.storageKeys.autoApplyMirrorForConfiguredSenders,
     state.storageKeys.autoApplyMirrorSenderEmailList,
     state.storageKeys.legacyAutoApplyMirrorForNamedSender,
@@ -625,86 +704,87 @@ function urlForensicsContentScriptRuntimeCreateSnapshotAndRootRuntimeWorkflows(
   shared,
   paneWorkflows
 ) {
-  shared.workflowRefs.emailSnapshotSync = context.contentInboxWorkflows.createWorkflowEmailSnapshotSync(
-    context.emailSnapshotSync,
-    context.debugApi,
-    context.mergedLinkLabPipeline,
-    paneWorkflows.workflowPaneSnapshot,
-    paneWorkflows.workflowPaneLayout,
-    function getLatestSnapshot() {
+  shared.workflowRefs.emailSnapshotSync = context.contentInboxWorkflows.createWorkflowEmailSnapshotSync({
+    emailSnapshotSync: context.emailSnapshotSync,
+    debugApi: context.debugApi,
+    mergedLinkLabPipeline: context.mergedLinkLabPipeline,
+    workflowPaneSnapshot: paneWorkflows.workflowPaneSnapshot,
+    workflowPaneLayout: paneWorkflows.workflowPaneLayout,
+    getLatestSnapshot: function getLatestSnapshot() {
       return state.latestSnapshot;
     },
-    function getLastPublishedSnapshotSignature() {
+    getLastPublishedSnapshotSignature: function getLastPublishedSnapshotSignature() {
       return state.lastPublishedSnapshotSignature;
     },
-    function getLatestDetectedEmailRoot() {
+    getLatestDetectedEmailRoot: function getLatestDetectedEmailRoot() {
       return state.latestDetectedEmailRoot;
     },
-    function setLatestDetectedEmailRoot(nextLatestDetectedEmailRoot) {
+    setLatestDetectedEmailRoot: function setLatestDetectedEmailRoot(nextLatestDetectedEmailRoot) {
       state.latestDetectedEmailRoot = nextLatestDetectedEmailRoot;
     },
-    function getLatestDetectedEmailMode() {
+    getLatestDetectedEmailMode: function getLatestDetectedEmailMode() {
       return state.latestDetectedEmailMode;
     },
-    function setLatestDetectedEmailMode(nextLatestDetectedEmailMode) {
+    setLatestDetectedEmailMode: function setLatestDetectedEmailMode(nextLatestDetectedEmailMode) {
       state.latestDetectedEmailMode = String(nextLatestDetectedEmailMode || "");
     },
-    function getLatestInboxCandidateSeenAt() {
+    getLatestInboxCandidateSeenAt: function getLatestInboxCandidateSeenAt() {
       return state.latestInboxCandidateSeenAt;
     },
-    function setLatestInboxCandidateSeenAt(nextLatestInboxCandidateSeenAt) {
+    setLatestInboxCandidateSeenAt: function setLatestInboxCandidateSeenAt(nextLatestInboxCandidateSeenAt) {
       state.latestInboxCandidateSeenAt = Number(nextLatestInboxCandidateSeenAt) || 0;
     },
-    function getInboxCandidateMissingSince() {
+    getInboxCandidateMissingSince: function getInboxCandidateMissingSince() {
       return state.inboxCandidateMissingSince;
     },
-    function setInboxCandidateMissingSince(nextInboxCandidateMissingSince) {
+    setInboxCandidateMissingSince: function setInboxCandidateMissingSince(nextInboxCandidateMissingSince) {
       state.inboxCandidateMissingSince = Number(nextInboxCandidateMissingSince) || 0;
     },
-    function getLastObservedLocationHref() {
+    getLastObservedLocationHref: function getLastObservedLocationHref() {
       return state.lastObservedLocationHref;
     },
-    function setLastObservedLocationHref(nextLastObservedLocationHref) {
+    setLastObservedLocationHref: function setLastObservedLocationHref(nextLastObservedLocationHref) {
       state.lastObservedLocationHref = String(nextLastObservedLocationHref || "");
     },
-    paneWorkflows.resetLatestEmailDetectionState,
-    paneWorkflows.isPageCurrentlyVisible,
-    paneWorkflows.getCurrentLocationHref,
-    shared.workflowContentAccessors.getInboxRootCandidates,
-    shared.workflowContentAccessors.getInboxDetectionFailure,
-    shared.workflowContentAccessors.observeEmailRoot,
-    shared.workflowContentAccessors.choosePrimaryEmailCandidate,
-    shared.workflowContentAccessors.getCandidateMissingGraceWindow,
-    shared.workflowContentAccessors.summarizeEmailRoot,
-    paneWorkflows.createSnapshotSignature
-  );
-  shared.workflowRefs.emailRootRuntime = context.contentInboxWorkflows.createWorkflowEmailRootRuntime(
-    context.emailRootRuntime,
-    shared.workflowRefs.emailRootSummary,
-    paneWorkflows.workflowPaneSnapshot,
-    function getLatestSnapshot() {
+    resetLatestEmailDetectionState: paneWorkflows.resetLatestEmailDetectionState,
+    isPageCurrentlyVisible: paneWorkflows.isPageCurrentlyVisible,
+    getCurrentLocationHref: paneWorkflows.getCurrentLocationHref,
+    getInboxRootCandidates: shared.workflowContentAccessors.getInboxRootCandidates,
+    getInboxDetectionFailure: shared.workflowContentAccessors.getInboxDetectionFailure,
+    observeEmailRoot: shared.workflowContentAccessors.observeEmailRoot,
+    choosePrimaryEmailCandidate: shared.workflowContentAccessors.choosePrimaryEmailCandidate,
+    getCandidateMissingGraceWindow: shared.workflowContentAccessors.getCandidateMissingGraceWindow,
+    summarizeEmailRoot: shared.workflowContentAccessors.summarizeEmailRoot,
+    createSnapshotSignature: paneWorkflows.createSnapshotSignature
+  });
+  shared.workflowRefs.emailRootRuntime = context.contentInboxWorkflows.createWorkflowEmailRootRuntime({
+    emailRootRuntime: context.emailRootRuntime,
+    workflowEmailRootSummary: shared.workflowRefs.emailRootSummary,
+    workflowPaneSnapshot: paneWorkflows.workflowPaneSnapshot,
+    debugApi: context.debugApi,
+    getLatestSnapshot: function getLatestSnapshot() {
       return state.latestSnapshot;
     },
-    function getLatestDetectedEmailRoot() {
+    getLatestDetectedEmailRoot: function getLatestDetectedEmailRoot() {
       return state.latestDetectedEmailRoot;
     },
-    function setLatestDetectedEmailRoot(nextLatestDetectedEmailRoot) {
+    setLatestDetectedEmailRoot: function setLatestDetectedEmailRoot(nextLatestDetectedEmailRoot) {
       state.latestDetectedEmailRoot = nextLatestDetectedEmailRoot;
     },
-    function getLatestDetectedEmailMode() {
+    getLatestDetectedEmailMode: function getLatestDetectedEmailMode() {
       return state.latestDetectedEmailMode;
     },
-    function setLatestDetectedEmailMode(nextLatestDetectedEmailMode) {
+    setLatestDetectedEmailMode: function setLatestDetectedEmailMode(nextLatestDetectedEmailMode) {
       state.latestDetectedEmailMode = String(nextLatestDetectedEmailMode || "");
     },
-    shared.workflowContentAccessors.choosePrimaryEmailCandidate,
-    shared.workflowContentAccessors.getInboxRootCandidates,
-    paneWorkflows.syncEmailSnapshot,
-    paneWorkflows.scheduleSnapshotSync,
-    shared.workflowContentAccessors.summarizeEmailRoot,
-    shared.workflowContentAccessors.shouldReplaceEmailBodyWithMirrorContent,
-    workflowContentUiHelpers.replaceElementMarkup
-  );
+    choosePrimaryEmailCandidate: shared.workflowContentAccessors.choosePrimaryEmailCandidate,
+    getInboxRootCandidates: shared.workflowContentAccessors.getInboxRootCandidates,
+    syncEmailSnapshot: paneWorkflows.syncEmailSnapshot,
+    scheduleSnapshotSync: paneWorkflows.scheduleSnapshotSync,
+    summarizeEmailRoot: shared.workflowContentAccessors.summarizeEmailRoot,
+    shouldReplaceEmailBodyWithMirrorContent: shared.workflowContentAccessors.shouldReplaceEmailBodyWithMirrorContent,
+    replaceElementMarkup: workflowContentUiHelpers.replaceElementMarkup
+  });
 }
 
 function urlForensicsContentScriptRuntimeCreateAutoReplaceAndCandidateWorkflows(context, state, shared) {
@@ -728,6 +808,7 @@ function urlForensicsContentScriptRuntimeCreateAutoReplaceAndCandidateWorkflows(
     context.emailCandidateDiscovery,
     context.mergedLinkLabPipeline,
     context.inboxDetectors,
+    context.debugApi,
     shared.workflowContentAccessors.getEmailRootContentElement,
     shared.workflowContentAccessors.measureElementText,
     state.inboxCandidateMissingGraceMs,
@@ -790,6 +871,7 @@ function initializeMergedLinkLabContentScriptRuntime(options) {
     context.extensionApi,
     context.mergedLinkLabPipeline
   );
+  urlForensicsContentScriptRuntimeResetStalePaneDom(context);
   const state = urlForensicsContentScriptRuntimeBuildState(context);
   const workflowContentPageContext = urlForensicsContentScriptRuntimeCreatePageContext(context, state);
   const shared = urlForensicsContentScriptRuntimeCreateSharedWorkflowState(context, state);

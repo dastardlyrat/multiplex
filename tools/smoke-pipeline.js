@@ -11,6 +11,7 @@ const pipelineDetectorRegistry = require("../lab/firefox-extension/pipeline-dete
 const pipelineDetection = require("../lab/firefox-extension/pipeline-detection.js");
 const pipelineResolution = require("../lab/firefox-extension/pipeline-resolution.js");
 const pipelinePluginRegistry = require("../lab/firefox-extension/pipeline-plugin-registry.js");
+const pipelineHtmlRewriterFactory = require("../lab/firefox-extension/pipeline-html-rewriter.js");
 const pipelineStageRunner = require("../lab/firefox-extension/pipeline-stage-runner.js");
 const pipelineAssembly = require("../lab/firefox-extension/pipeline-assembly.js");
 const pipelineDiagnostics = require("../lab/firefox-extension/pipeline-diagnostics.js");
@@ -62,6 +63,13 @@ const generatedDiagnosticsHealthDataPath = path.resolve(__dirname, "..", "lab", 
 const diagnosticsPageHtmlPath = path.resolve(__dirname, "..", "lab", "firefox-extension", "diagnostics.html");
 const generatedSampleReviewDataPath = path.resolve(__dirname, "..", "lab", "firefox-extension", "sample-review-data.js");
 const sampleReviewPageHtmlPath = path.resolve(__dirname, "..", "lab", "firefox-extension", "sample-review.html");
+const appScriptPath = path.resolve(__dirname, "..", "lab", "firefox-extension", "app.js");
+const componentKitScriptPath = path.resolve(__dirname, "..", "lab", "firefox-extension", "core-components", "components.js");
+const debugConfigScriptPath = path.resolve(__dirname, "..", "lab", "firefox-extension", "debug-config.js");
+const debugScriptPath = path.resolve(__dirname, "..", "lab", "firefox-extension", "debug.js");
+const mobileDeviceScriptPath = path.resolve(__dirname, "..", "lab", "firefox-extension", "mobile-device.js");
+const pageNavigationScriptPath = path.resolve(__dirname, "..", "lab", "firefox-extension", "page-navigation.js");
+const backgroundScriptPath = path.resolve(__dirname, "..", "lab", "firefox-extension", "background.js");
 const shouldSaveReports = process.argv.includes("--save");
 
 function arrayEquals(leftValue, rightValue) {
@@ -288,6 +296,108 @@ function runDebugRedactionRegression() {
       sourceHtml: "[redacted]",
       nestedRawText: "[redacted]",
       safe: "ok"
+    },
+    targetExpected: null,
+    actual: actual,
+    failures: failures
+  };
+}
+
+function runDebugHelperGatingRegression() {
+  const debugConfigSource = fs.readFileSync(debugConfigScriptPath, "utf8");
+  const debugSource = fs.readFileSync(debugScriptPath, "utf8");
+  const sentMessages = [];
+  let storageListener = null;
+  const sandbox = {
+    urlForensicsDebugRedaction: redaction,
+    browser: {
+      runtime: {
+        sendMessage: function sendMessage(message) {
+          sentMessages.push(message);
+          return Promise.resolve({ ok: true });
+        }
+      },
+      storage: {
+        local: {
+          get: function getStoredDebugConfig() {
+            return Promise.resolve({
+              programDebugConfig: {
+                level: "off",
+                categories: {}
+              }
+            });
+          }
+        },
+        onChanged: {
+          addListener: function addDebugStorageListener(listener) {
+            storageListener = listener;
+          }
+        }
+      }
+    }
+  };
+  sandbox.globalThis = sandbox;
+  sandbox.window = sandbox;
+
+  vm.runInNewContext(debugConfigSource, sandbox, { filename: debugConfigScriptPath });
+  vm.runInNewContext(debugSource, sandbox, { filename: debugScriptPath });
+
+  const debugApi = sandbox.mergedLinkLabDebug;
+  const offResult = debugApi.runtime("debug off runtime event");
+  debugApi.applyConfig({
+    level: "trace",
+    categories: {
+      runtime: true,
+      variable: false
+    }
+  });
+  const runtimeResult = debugApi.runtime("debug enabled runtime event");
+  debugApi.variable("debug disabled variable event");
+
+  if (typeof storageListener === "function") {
+    storageListener({
+      programDebugConfig: {
+        newValue: {
+          level: "trace",
+          categories: {
+            variable: true
+          }
+        }
+      }
+    }, "local");
+  }
+
+  const variableResult = debugApi.variable("debug enabled variable event");
+  const actual = {
+    offResultIsNull: offResult === null,
+    runtimeResultSent: !!runtimeResult,
+    variableResultSent: !!variableResult,
+    sentMessageCount: sentMessages.length,
+    sentMessages: sentMessages.map(function mapSentDebugMessage(message) {
+      return message && message.event ? message.event.message : "";
+    })
+  };
+  const failures = [];
+
+  if (
+    actual.offResultIsNull !== true ||
+    actual.runtimeResultSent !== true ||
+    actual.variableResultSent !== true ||
+    !arrayEquals(actual.sentMessages, ["debug enabled runtime event", "debug enabled variable event"])
+  ) {
+    failures.push("Expected debug helper to avoid runtime.sendMessage while debugging is off or while a category is disabled.");
+  }
+
+  return {
+    id: "module-debug-helper-gating",
+    title: "Debug helper gates content-script debug sends by saved debug config",
+    mode: "active",
+    status: failures.length ? "failed" : "passed",
+    sectionId: "module-regressions",
+    sectionTitle: "Module Regressions",
+    expected: {
+      offResultIsNull: true,
+      sentMessages: ["debug enabled runtime event", "debug enabled variable event"]
     },
     targetExpected: null,
     actual: actual,
@@ -534,6 +644,383 @@ function runExtensionPageHelperCouplingRegression() {
         return pageScriptName + ".js";
       }),
       forbiddenMatches: []
+    },
+    targetExpected: null,
+    actual: actual,
+    failures: failures
+  };
+}
+
+function runWorkbenchAppSanitizerRegression() {
+  const appSource = fs.readFileSync(appScriptPath, "utf8");
+  const actual = {
+    removesInlineStyleAttributes: appSource.includes('attributeName === "style"'),
+    removesSrcsetAttributes: appSource.includes('attributeName === "srcset"'),
+    removesRemoteMediaNodes: appSource.includes("img, picture, source, video, audio, track, canvas, svg, math"),
+    stripsUnsafeUrlSchemes:
+      appSource.includes("/^javascript:/i.test(normalizedLowerValue)") &&
+      appSource.includes("/^data:/i.test(normalizedLowerValue)") &&
+      appSource.includes("/^blob:/i.test(normalizedLowerValue)") &&
+      appSource.includes("/^file:/i.test(normalizedLowerValue)"),
+    preservesAnchorHrefOnly: appSource.includes('attributeName === "href"') && appSource.includes('elementTagName === "a"'),
+    copyButtonsResolveConcreteTargets:
+      appSource.includes('const targetElement = document.getElementById(targetId);') &&
+      appSource.includes("if (!targetId)") &&
+      appSource.includes("if (!targetElement)") &&
+      appSource.includes("copyElementRichThenPlain(targetElement);"),
+    debugsOriginalBackupSourceSelection:
+      appSource.includes("workbench editor source selected from snapshot") &&
+      appSource.includes('source: originalBackup ? "originalEmailBackup" : "snapshot"')
+  };
+  const failures = [];
+
+  if (!actual.removesInlineStyleAttributes) {
+    failures.push("Expected workbench app sanitizer to remove inline style attributes so pasted email HTML cannot trigger extension-page style-src-attr CSP errors.");
+  }
+
+  if (!actual.removesSrcsetAttributes) {
+    failures.push("Expected workbench app sanitizer to remove srcset-style resource attributes so pasted email HTML cannot trigger remote asset fetches.");
+  }
+
+  if (!actual.removesRemoteMediaNodes) {
+    failures.push("Expected workbench app sanitizer to remove remote media nodes from pasted HTML before rendering inside the extension page.");
+  }
+
+  if (!actual.stripsUnsafeUrlSchemes) {
+    failures.push("Expected workbench app sanitizer to strip unsafe URL schemes from pasted HTML attributes.");
+  }
+
+  if (!actual.preservesAnchorHrefOnly) {
+    failures.push("Expected workbench app sanitizer to preserve navigational href values only for anchor tags.");
+  }
+
+  if (!actual.copyButtonsResolveConcreteTargets) {
+    failures.push("Expected workbench app copy-button binding to resolve concrete target elements and skip empty or missing ids before invoking ComponentKit copy helpers.");
+  }
+
+  if (!actual.debugsOriginalBackupSourceSelection) {
+    failures.push("Expected workbench app snapshot application to debug whether the editor source came from the original backup.");
+  }
+
+  return {
+    id: "module-workbench-app-sanitizer",
+    title: "Workbench app sanitizer strips inline styles and remote-loading HTML from pasted email content",
+    mode: "active",
+    status: failures.length ? "failed" : "passed",
+    sectionId: "module-regressions",
+    sectionTitle: "Module Regressions",
+    expected: {
+      removesInlineStyleAttributes: true,
+      removesSrcsetAttributes: true,
+      removesRemoteMediaNodes: true,
+      stripsUnsafeUrlSchemes: true,
+      preservesAnchorHrefOnly: true,
+      copyButtonsResolveConcreteTargets: true,
+      debugsOriginalBackupSourceSelection: true
+    },
+    targetExpected: null,
+    actual: actual,
+    failures: failures
+  };
+}
+
+function runComponentKitEmptyIdGuardRegression() {
+  const componentKitSource = fs.readFileSync(componentKitScriptPath, "utf8");
+  const actual = {
+    resolveElementTargetGuardsEmptyString:
+      componentKitSource.includes('const normalizedTarget = String(target || "").trim();') &&
+      componentKitSource.includes("if (!normalizedTarget)") &&
+      componentKitSource.includes("return null;"),
+    byIdGuardsEmptyString:
+      componentKitSource.includes('const normalizedId = String(id || "").trim();') &&
+      componentKitSource.includes("return normalizedId ? document.getElementById(normalizedId) : null;")
+  };
+  const failures = [];
+
+  if (!actual.resolveElementTargetGuardsEmptyString) {
+    failures.push("Expected ComponentKit resolveElementTarget to guard empty string ids before calling document.getElementById.");
+  }
+
+  if (!actual.byIdGuardsEmptyString) {
+    failures.push("Expected ComponentKit.byId to guard empty string ids before calling document.getElementById.");
+  }
+
+  return {
+    id: "module-component-kit-empty-id-guard",
+    title: "ComponentKit guards empty element ids before calling getElementById",
+    mode: "active",
+    status: failures.length ? "failed" : "passed",
+    sectionId: "module-regressions",
+    sectionTitle: "Module Regressions",
+    expected: {
+      resolveElementTargetGuardsEmptyString: true,
+      byIdGuardsEmptyString: true
+    },
+    targetExpected: null,
+    actual: actual,
+    failures: failures
+  };
+}
+
+function runPageNavigationMobileVisibilityRegression() {
+  function createNavigationButton(pageHref) {
+    const attributes = {
+      "data-page-href": pageHref
+    };
+
+    return {
+      disabled: false,
+      hidden: false,
+      getAttribute: function getAttribute(attributeName) {
+        return Object.prototype.hasOwnProperty.call(attributes, attributeName) ? attributes[attributeName] : "";
+      },
+      setAttribute: function setAttribute(attributeName, value) {
+        attributes[attributeName] = String(value);
+      }
+    };
+  }
+
+  const navigationButtons = [
+    createNavigationButton("./settings.html"),
+    createNavigationButton("./tracking-parameters.html"),
+    createNavigationButton("./test-suite.html"),
+    createNavigationButton("./sample-review.html"),
+    createNavigationButton("./diagnostics.html"),
+    createNavigationButton("./debugging.html"),
+    createNavigationButton("./storage.html"),
+    createNavigationButton("./help.html"),
+    createNavigationButton("./about.html")
+  ];
+  const mobileDeviceSource = fs.readFileSync(mobileDeviceScriptPath, "utf8");
+  const pageNavigationSource = fs.readFileSync(pageNavigationScriptPath, "utf8");
+  const sandbox = {
+    document: {
+      addEventListener: function addEventListener() {},
+      querySelectorAll: function querySelectorAll(selector) {
+        return selector === "button[data-page-href]" ? navigationButtons.slice() : [];
+      }
+    },
+    window: {
+      location: {
+        href: "settings.html"
+      },
+      matchMedia: function matchMedia(mediaQuery) {
+        return {
+          matches: /\bpointer:\s*coarse\b/.test(mediaQuery) || /\bhover:\s*none\b/.test(mediaQuery)
+        };
+      },
+      innerWidth: 390,
+      innerHeight: 844,
+      screen: {
+        width: 390,
+        height: 844,
+        availWidth: 390,
+        availHeight: 844
+      }
+    },
+    navigator: {
+      maxTouchPoints: 5,
+      userAgent: "Mozilla/5.0 Mobile",
+      platform: "Android"
+    }
+  };
+  sandbox.globalThis = sandbox;
+
+  vm.runInNewContext(mobileDeviceSource, sandbox, { filename: mobileDeviceScriptPath });
+  vm.runInNewContext(pageNavigationSource, sandbox, { filename: pageNavigationScriptPath });
+
+  const hiddenHrefs = navigationButtons.filter(function keepHiddenButton(button) {
+    return button.hidden === true;
+  }).map(function mapHiddenButton(button) {
+    return button.getAttribute("data-page-href");
+  });
+  const visibleHrefs = navigationButtons.filter(function keepVisibleButton(button) {
+    return button.hidden !== true;
+  }).map(function mapVisibleButton(button) {
+    return button.getAttribute("data-page-href");
+  });
+  const actual = {
+    mobileDetected: sandbox.urlForensicsPageNavigation.isMobileDeviceDetected(),
+    hiddenHrefs: hiddenHrefs,
+    visibleHrefs: visibleHrefs,
+    hiddenButtonDisabled: navigationButtons
+      .filter(function keepMobileHiddenTarget(button) {
+        return hiddenHrefs.indexOf(button.getAttribute("data-page-href")) !== -1;
+      })
+      .every(function everyHiddenButtonDisabled(button) {
+        return button.disabled === true && button.getAttribute("aria-hidden") === "true";
+      }),
+    settingsVisible: navigationButtons[0].hidden === false
+  };
+  const failures = [];
+
+  if (actual.mobileDetected !== true) {
+    failures.push("Expected page navigation mobile detector to identify the mobile test viewport.");
+  }
+
+  if (!arrayEquals(actual.hiddenHrefs, ["./test-suite.html", "./sample-review.html", "./debugging.html", "./help.html"])) {
+    failures.push("Expected mobile page navigation to hide only Test Suite, Samples, Debugging, and Help links.");
+  }
+
+  if (!actual.hiddenButtonDisabled || !actual.settingsVisible) {
+    failures.push("Expected mobile-hidden page navigation buttons to be disabled and ordinary page links to remain visible.");
+  }
+
+  return {
+    id: "module-page-navigation-mobile-visibility",
+    title: "Page navigation hides support/developer links on mobile devices",
+    mode: "active",
+    status: failures.length ? "failed" : "passed",
+    sectionId: "module-regressions",
+    sectionTitle: "Module Regressions",
+    expected: {
+      mobileDetected: true,
+      hiddenHrefs: ["./test-suite.html", "./sample-review.html", "./debugging.html", "./help.html"],
+      settingsVisible: true
+    },
+    targetExpected: null,
+    actual: actual,
+    failures: failures
+  };
+}
+
+async function runBackgroundMobileToolbarActionRegression() {
+  const setPopupCalls = [];
+  const setTitleCalls = [];
+  const createdWindows = [];
+  const createdTabs = [];
+  let toolbarActionClickListener = null;
+  const debugConfigSource = fs.readFileSync(debugConfigScriptPath, "utf8");
+  const backgroundSource = fs.readFileSync(backgroundScriptPath, "utf8");
+  const sandbox = {
+    browser: {
+      action: {
+        onClicked: {
+          addListener: function addListener(listener) {
+            toolbarActionClickListener = listener;
+          }
+        },
+        setPopup: async function setPopup(options) {
+          setPopupCalls.push(options || {});
+        },
+        setTitle: function setTitle(options) {
+          setTitleCalls.push(options || {});
+        }
+      },
+      runtime: {
+        getPlatformInfo: async function getPlatformInfo() {
+          return { os: "android" };
+        },
+        getURL: function getURL(pagePath) {
+          return "moz-extension://url-forensics/" + pagePath;
+        },
+        onMessage: {
+          addListener: function addListener() {}
+        }
+      },
+      storage: {
+        local: {
+          get: async function get() {
+            return {};
+          }
+        }
+      },
+      tabs: {
+        create: async function create(options) {
+          createdTabs.push(options || {});
+        },
+        onActivated: {
+          addListener: function addListener() {}
+        },
+        onUpdated: {
+          addListener: function addListener() {}
+        },
+        onRemoved: {
+          addListener: function addListener() {}
+        }
+      },
+      windows: {
+        create: async function create(options) {
+          createdWindows.push(options || {});
+        },
+        getAll: async function getAll() {
+          return [];
+        },
+        onFocusChanged: {
+          addListener: function addListener() {}
+        }
+      }
+    },
+    console: {
+      error: function error() {}
+    },
+    urlForensicsDebugRedaction: {
+      sanitizeDetails: function sanitizeDetails(details) {
+        return details;
+      }
+    }
+  };
+  sandbox.globalThis = sandbox;
+
+  vm.runInNewContext(debugConfigSource, sandbox, { filename: debugConfigScriptPath });
+  vm.runInNewContext(backgroundSource, sandbox, { filename: backgroundScriptPath });
+  await new Promise(function waitForBootstrap(resolve) {
+    setImmediate(resolve);
+  });
+  await new Promise(function waitForPopupSync(resolve) {
+    setImmediate(resolve);
+  });
+
+  if (typeof toolbarActionClickListener === "function") {
+    toolbarActionClickListener();
+    await new Promise(function waitForToolbarClick(resolve) {
+      setImmediate(resolve);
+    });
+  }
+
+  const actual = {
+    hasToolbarActionClickListener: typeof toolbarActionClickListener === "function",
+    setPopupCalls: setPopupCalls,
+    popupClearedOnMobile: setPopupCalls.some(function hasClearedPopup(call) {
+      return call && call.popup === "";
+    }),
+    createdWindows: createdWindows,
+    createdTabs: createdTabs,
+    latestToolbarTitle: setTitleCalls.length ? setTitleCalls[setTitleCalls.length - 1].title : ""
+  };
+  const failures = [];
+
+  if (!actual.hasToolbarActionClickListener) {
+    failures.push("Expected background script to register a toolbar action click listener.");
+  }
+
+  if (!actual.popupClearedOnMobile) {
+    failures.push("Expected background script to clear the action popup on Android so action clicks are delivered.");
+  }
+
+  if (createdWindows.length !== 1 || createdWindows[0].url !== "moz-extension://url-forensics/popup.html" || createdWindows[0].type !== "normal") {
+    failures.push("Expected mobile toolbar action click to open popup.html as a normal standalone extension window.");
+  }
+
+  if (createdTabs.length !== 0) {
+    failures.push("Expected the window opener to be preferred over the tab fallback when windows.create is available.");
+  }
+
+  if (!/full page/.test(actual.latestToolbarTitle)) {
+    failures.push("Expected mobile toolbar title to describe the full-page control surface instead of a browser popup.");
+  }
+
+  return {
+    id: "module-background-mobile-toolbar-action",
+    title: "Background opens popup content as a standalone page on mobile toolbar clicks",
+    mode: "active",
+    status: failures.length ? "failed" : "passed",
+    sectionId: "module-regressions",
+    sectionTitle: "Module Regressions",
+    expected: {
+      popupClearedOnMobile: true,
+      popupPageUrl: "moz-extension://url-forensics/popup.html",
+      popupPageType: "normal"
     },
     targetExpected: null,
     actual: actual,
@@ -1222,6 +1709,157 @@ function runPipelineAssemblyRegression() {
   };
 }
 
+function runPipelineHtmlRewriterAnchorLookupRegression() {
+  const anchorAttributes = {
+    href: "https://example.com/landing?utm_source=news&keep=yes"
+  };
+  const anchorElement = {
+    nodeType: 1,
+    tagName: "A",
+    textContent: "https://example.com/landing?utm_source=news&keep=yes",
+    getAttribute: function getAttribute(attributeName) {
+      return Object.prototype.hasOwnProperty.call(anchorAttributes, attributeName)
+        ? anchorAttributes[attributeName]
+        : "";
+    },
+    setAttribute: function setAttribute(attributeName, value) {
+      anchorAttributes[attributeName] = String(value);
+    }
+  };
+  const fakeDocument = {
+    createTreeWalker: function createTreeWalker() {
+      return {
+        nextNode: function nextNode() {
+          return null;
+        }
+      };
+    }
+  };
+  const rootNode = {
+    ownerDocument: fakeDocument,
+    querySelectorAll: function querySelectorAll(selector) {
+      return selector === "a[href]" ? [anchorElement] : [];
+    }
+  };
+  Object.defineProperty(rootNode, "innerHTML", {
+    get: function getInnerHTML() {
+      const dataAttribute = anchorAttributes["data-merged-link-lab"]
+        ? ' data-merged-link-lab="' + anchorAttributes["data-merged-link-lab"] + '"'
+        : "";
+      return '<a href="' + anchorAttributes.href + '"' + dataAttribute + ">" + anchorElement.textContent + "</a>";
+    }
+  });
+  fakeDocument.body = rootNode;
+  fakeDocument.documentElement = rootNode;
+
+  const urlResolver = pipelineUrlResolver.create(pipelineBase);
+  const htmlRewriter = pipelineHtmlRewriterFactory.create({
+    pipelineBase: Object.assign({}, pipelineBase, {
+      createHtmlParserDocument: function createHtmlParserDocument() {
+        return fakeDocument;
+      }
+    }),
+    urlResolver: urlResolver,
+    detectTokenMatches: function detectTokenMatches() {
+      return [];
+    },
+    getPreferredReplacementUrl: function getPreferredReplacementUrl(item) {
+      return item && item.replacementUrl ? item.replacementUrl : "";
+    },
+    getItemDisplayType: function getItemDisplayType() {
+      return "tracker cleaned";
+    }
+  });
+  const rewriteResult = htmlRewriter.rewriteHtml("", [{
+    original: "https://example.com/landing?utm_source=news&keep=yes",
+    normalized: "https://example.com/landing?utm_source=news&keep=yes",
+    replacementUrl: "https://example.com/landing?keep=yes"
+  }], {
+    enableUrlNormalizationRepair: true,
+    stripKnownTrackingParameters: true,
+    trackingParameterFilters: ["utm_source"]
+  });
+  const actual = {
+    rewrittenHtml: rewriteResult.html,
+    rewrittenCount: rewriteResult.count,
+    href: anchorAttributes.href,
+    linkText: anchorElement.textContent,
+    linkType: anchorAttributes["data-merged-link-lab"] || "",
+    tokenDetectorWasBypassed: true
+  };
+  const failures = [];
+
+  if (
+    actual.rewrittenCount !== 1 ||
+    actual.href !== "https://example.com/landing?keep=yes" ||
+    actual.linkText !== "https://example.com (tracker cleaned)" ||
+    actual.linkType !== "tracker cleaned"
+  ) {
+    failures.push("Expected HTML anchor rewriting to use the pipeline item replacement lookup without requiring a second token-detector match.");
+  }
+
+  return {
+    id: "module-pipeline-html-rewriter-anchor-lookup",
+    title: "Pipeline HTML rewriter rewrites anchors from detected item replacements",
+    mode: "active",
+    status: failures.length ? "failed" : "passed",
+    sectionId: "module-regressions",
+    sectionTitle: "Module Regressions",
+    expected: {
+      rewrittenCount: 1,
+      href: "https://example.com/landing?keep=yes",
+      linkText: "https://example.com (tracker cleaned)",
+      linkType: "tracker cleaned"
+    },
+    targetExpected: null,
+    actual: actual,
+    failures: failures
+  };
+}
+
+function runPipelineRewriteFallbackWiringRegression() {
+  const pipelineSource = fs.readFileSync(path.resolve(__dirname, "..", "lab", "firefox-extension", "pipeline.js"), "utf8");
+  const actual = {
+    hasFallbackChooser: pipelineSource.includes("function chooseRewrittenMarkupResult("),
+    normalRewriteRunsFirst: pipelineSource.includes("const rewrittenMarkupResult = rewriteHtml(sourceMarkup, detectedItems, pipelineSettings);"),
+    fallbackRequiresChangedUrls: pipelineSource.includes("if (rewrittenMarkupResult.count || !changedUrls.length)"),
+    fallbackUsesStandalonePreview:
+      pipelineSource.includes("const standalonePreviewResult = rewriteHtmlForStandalonePreview(sourceMarkup, detectedItems, pipelineSettings);") &&
+      pipelineSource.includes("return standalonePreviewResult.count ? standalonePreviewResult : rewrittenMarkupResult;"),
+    assemblePassesChangedUrls:
+      pipelineSource.includes("stageState.rewrittenMarkupResult = chooseRewrittenMarkupResult(") &&
+      pipelineSource.includes("stageState.changedUrls,")
+  };
+  const failures = [];
+
+  if (
+    !actual.hasFallbackChooser ||
+    !actual.normalRewriteRunsFirst ||
+    !actual.fallbackRequiresChangedUrls ||
+    !actual.fallbackUsesStandalonePreview ||
+    !actual.assemblePassesChangedUrls
+  ) {
+    failures.push("Expected pipeline analyzeInput to fall back to standalone preview markup when changed URLs exist but normal HTML rewriting applies none.");
+  }
+
+  return {
+    id: "module-pipeline-rewrite-fallback-wiring",
+    title: "Pipeline routes unchanged normal rewrites through standalone preview fallback",
+    mode: "active",
+    status: failures.length ? "failed" : "passed",
+    sectionId: "module-regressions",
+    sectionTitle: "Module Regressions",
+    expected: {
+      hasFallbackChooser: true,
+      fallbackUsesStandalonePreview: true,
+      assemblePassesChangedUrls: true
+    },
+    targetExpected: null,
+    actual: actual,
+    failures: failures
+  };
+}
+
 function runPipelineDiagnosticsRegression() {
   const detectorRegistry = pipelineDetectorRegistry.create({
     pipelineBase: pipelineBase
@@ -1672,6 +2310,7 @@ function runContentPageContextRegression() {
 async function runContentInboxWorkflowsRegression() {
   const extensionSettings = {
     replaceEmailBodyWithMirrorContent: false,
+    autoApplyMirrorOnMobileDevice: false,
     autoApplyMirrorForConfiguredSenders: false,
     autoApplyMirrorSenderEmailList: ["default@example.com"]
   };
@@ -1682,7 +2321,11 @@ async function runContentInboxWorkflowsRegression() {
   };
   const fakeInboxDetectors = {
     patterns: {
-      inboxHost: /mail\.example\.com/i,
+      inboxHost: Object.freeze({
+        test: function testInboxHostPattern(hostnameValue) {
+          return String(hostnameValue || "").toLowerCase() === "mail.example.com";
+        }
+      }),
       readViewHint: /read/i,
       composeContextHint: /compose/i,
       standaloneEmailHint: /message/i
@@ -1733,6 +2376,7 @@ async function runContentInboxWorkflowsRegression() {
       }
     },
     fakeInboxDetectors,
+    null,
     function getEmailRootContentElement(element) {
       return element || null;
     },
@@ -1808,6 +2452,7 @@ async function runContentInboxWorkflowsRegression() {
     "filters",
     "replaceEmailBody",
     "allowHelperOpenWithoutDetectedEmailBody",
+    "autoApplyMobile",
     "autoApplySenders",
     "senderList",
     "legacyAutoApply",
@@ -1910,6 +2555,7 @@ async function runContentInboxWorkflowsRegression() {
     candidateSearchRootCount: captured.candidate ? captured.candidate.getDetectionSearchRoots({ id: "x" }).length : 0,
     candidateInboxSelector: captured.candidate ? captured.candidate.outlookMailBodySelector : "",
     candidatePrimarySelectorCount: captured.candidate ? captured.candidate.getPrimaryInboxBodySelectors().length : 0,
+    candidateInboxPatternMatches: captured.candidate ? captured.candidate.inboxHostPattern.test("mail.example.com") : false,
     candidateIsOutlookHost: captured.candidate ? captured.candidate.isOutlookHost("outlook.office.com") : false,
     candidateIsProtonHost: captured.candidate ? captured.candidate.isProtonHost("mail.proton.me") : false,
     candidateRootIds: candidateWorkflow.getInboxRootCandidates().map(function mapCandidateRoot(candidate) {
@@ -1938,6 +2584,7 @@ async function runContentInboxWorkflowsRegression() {
     actual.candidateSearchRootCount !== 2 ||
     actual.candidateInboxSelector !== ".outlook-body" ||
     actual.candidatePrimarySelectorCount !== 1 ||
+    actual.candidateInboxPatternMatches !== true ||
     actual.candidateIsOutlookHost !== true ||
     actual.candidateIsProtonHost !== true ||
     !arrayEquals(actual.candidateRootIds, ["primary-root", "secondary-root"])
@@ -1980,7 +2627,9 @@ async function runContentInboxWorkflowsRegression() {
     sectionTitle: "Module Regressions",
     expected: {
       candidateGraceWindow: 12000,
+      candidateInboxPatternMatches: true,
       candidateRootIds: ["primary-root", "secondary-root"],
+      summaryInboxPatternMatches: true,
       summaryPipelineSetting: true,
       autoReplaceFallbackList: ["default@example.com"],
       snapshotScheduleFallbackResult: 0
@@ -2012,6 +2661,9 @@ async function runContentPaneWorkflowsRegression() {
         return { ok: true, echoed: message && message.type ? message.type : "" };
       }
     }
+  };
+  const debugApi = {
+    ui: function ui() {}
   };
   const workflowPaneBootstrap = contentPaneWorkflows.createWorkflowPaneBootstrap(null);
   const workflowPaneLayoutFallback = contentPaneWorkflows.createWorkflowPaneLayout(
@@ -2080,6 +2732,7 @@ async function runContentPaneWorkflowsRegression() {
     {},
     workflowPaneLayoutFallback,
     extensionApi,
+    debugApi,
     function getLatestSnapshot() {
       return { id: "snapshot-1" };
     },
@@ -2172,6 +2825,7 @@ async function runContentPaneWorkflowsRegression() {
     {},
     workflowPaneLayoutFallback,
     null,
+    debugApi,
     function getLatestSnapshot() {
       return null;
     },
@@ -2212,6 +2866,7 @@ async function runContentPaneWorkflowsRegression() {
     mirrorClassifyResult: captured.mirror ? captured.mirror.classifyUrlValue("mailto:test@example.com") : "",
     mirrorTrackingParameters: captured.mirror ? captured.mirror.extractKnownTrackingParameterNames() : [],
     snapshotBaseUrl: captured.snapshot ? captured.snapshot.getBaseUrl() : undefined,
+    snapshotDebugApiWired: captured.snapshot ? captured.snapshot.debugApi === debugApi : false,
     snapshotMessageResult: captured.snapshot ? await captured.snapshot.sendRuntimeMessage({ type: "snapshot-sync" }) : null,
     sentMessageType: captured.sentMessage ? captured.sentMessage.type : "",
     assemblyDocumentObject: captured.assembly ? captured.assembly.documentObject : undefined,
@@ -2249,6 +2904,7 @@ async function runContentPaneWorkflowsRegression() {
 
   if (
     actual.snapshotBaseUrl !== "" ||
+    actual.snapshotDebugApiWired !== true ||
     !actual.snapshotMessageResult ||
     actual.snapshotMessageResult.ok !== true ||
     actual.sentMessageType !== "snapshot-sync"
@@ -2280,6 +2936,7 @@ async function runContentPaneWorkflowsRegression() {
       assemblyLabFrameUrl: "moz-extension://test/core-components/extension-workbench.html",
       mirrorDefaultHoverMessage: "hover-default",
       snapshotBaseUrl: "",
+      snapshotDebugApiWired: true,
       assemblyFallbackActiveTabKey: "lab"
     },
     targetExpected: null,
@@ -3183,11 +3840,11 @@ function runPagePaneShellRegression() {
     },
     querySelectorAll: function querySelectorAll(selector) {
       if (selector === "[data-tab-button]") {
-        return [{ role: "button-converted" }, { role: "button-lab" }, { role: "button-diagnostics" }];
+        return [{ role: "button-converted" }, { role: "button-backup" }, { role: "button-lab" }, { role: "button-diagnostics" }];
       }
 
       if (selector === "[data-tab-panel]") {
-        return [{ role: "panel-converted" }, { role: "panel-lab" }, { role: "panel-diagnostics" }];
+        return [{ role: "panel-converted" }, { role: "panel-backup" }, { role: "panel-lab" }, { role: "panel-diagnostics" }];
       }
 
       return [];
@@ -3198,9 +3855,15 @@ function runPagePaneShellRegression() {
     markupIncludesHoverSummary: paneMarkup.indexOf("Hovered Link") !== -1,
     markupIncludesOpenHoverDetails: paneMarkup.indexOf("<details") !== -1 && paneMarkup.indexOf(" open") !== -1,
     markupIncludesDiagnosticsPane: paneMarkup.indexOf('data-role="diagnosticsPane"') !== -1,
+    markupIncludesBackupPane: paneMarkup.indexOf('data-role="backupPane"') !== -1,
+    markupIncludesBackupFrame: paneMarkup.indexOf('data-role="backupFrame"') !== -1,
+    markupIncludesBackupPayload: paneMarkup.indexOf('data-role="backupPayload"') !== -1,
     tabButtonCount: Array.isArray(collectedElements.tabButtons) ? collectedElements.tabButtons.length : 0,
     tabPanelCount: Array.isArray(collectedElements.tabPanels) ? collectedElements.tabPanels.length : 0,
     hasConvertedPaneSelector: !!(collectedElements.convertedPane && collectedElements.convertedPane.selector === '[data-role="convertedPane"]'),
+    hasBackupPaneSelector: !!(collectedElements.backupPane && collectedElements.backupPane.selector === '[data-role="backupPane"]'),
+    hasBackupFrameSelector: !!(collectedElements.backupFrame && collectedElements.backupFrame.selector === '[data-role="backupFrame"]'),
+    hasBackupPayloadSelector: !!(collectedElements.backupPayload && collectedElements.backupPayload.selector === '[data-role="backupPayload"]'),
     hasHoverLinkInfoSelector: !!(collectedElements.hoverLinkInfo && collectedElements.hoverLinkInfo.selector === '[data-role="hoverLinkInfo"]')
   };
   const failures = [];
@@ -3217,16 +3880,32 @@ function runPagePaneShellRegression() {
     failures.push("Expected page pane shell markup to include the diagnostics pane mount.");
   }
 
-  if (actual.tabButtonCount !== 3) {
-    failures.push("Expected page pane shell element collection to return three tab buttons.");
+  if (!actual.markupIncludesBackupPane) {
+    failures.push("Expected page pane shell markup to include the original email backup pane mount.");
   }
 
-  if (actual.tabPanelCount !== 3) {
-    failures.push("Expected page pane shell element collection to return three tab panels.");
+  if (!actual.markupIncludesBackupFrame || !actual.markupIncludesBackupPayload) {
+    failures.push("Expected page pane shell markup to include both the rich backup frame and hidden authoritative backup payload.");
+  }
+
+  if (actual.tabButtonCount !== 4) {
+    failures.push("Expected page pane shell element collection to return four tab buttons.");
+  }
+
+  if (actual.tabPanelCount !== 4) {
+    failures.push("Expected page pane shell element collection to return four tab panels.");
   }
 
   if (!actual.hasConvertedPaneSelector) {
     failures.push("Expected page pane shell element collection to expose the converted pane selector.");
+  }
+
+  if (!actual.hasBackupPaneSelector) {
+    failures.push("Expected page pane shell element collection to expose the backup pane selector.");
+  }
+
+  if (!actual.hasBackupFrameSelector || !actual.hasBackupPayloadSelector) {
+    failures.push("Expected page pane shell element collection to expose the rich backup frame and hidden payload selectors.");
   }
 
   if (!actual.hasHoverLinkInfoSelector) {
@@ -3244,9 +3923,15 @@ function runPagePaneShellRegression() {
       markupIncludesHoverSummary: true,
       markupIncludesOpenHoverDetails: true,
       markupIncludesDiagnosticsPane: true,
-      tabButtonCount: 3,
-      tabPanelCount: 3,
+      markupIncludesBackupPane: true,
+      markupIncludesBackupFrame: true,
+      markupIncludesBackupPayload: true,
+      tabButtonCount: 4,
+      tabPanelCount: 4,
       hasConvertedPaneSelector: true,
+      hasBackupPaneSelector: true,
+      hasBackupFrameSelector: true,
+      hasBackupPayloadSelector: true,
       hasHoverLinkInfoSelector: true
     },
     targetExpected: null,
@@ -3290,6 +3975,7 @@ function runPagePaneBootstrapRegression() {
     refreshButton: createFakeEventTarget("BUTTON"),
     tabButtons: [
       createFakeEventTarget("BUTTON", { "data-tab-button": "converted" }),
+      createFakeEventTarget("BUTTON", { "data-tab-button": "backup" }),
       createFakeEventTarget("BUTTON", { "data-tab-button": "lab" }),
       createFakeEventTarget("BUTTON", { "data-tab-button": "diagnostics" })
     ]
@@ -3337,6 +4023,7 @@ function runPagePaneBootstrapRegression() {
   elements.settingsButton.emit("click");
   elements.refreshButton.emit("click");
   elements.tabButtons[1].emit("click");
+  elements.tabButtons[2].emit("click");
 
   const actual = {
     labFrameSrc: elements.labFrame.src,
@@ -3358,6 +4045,7 @@ function runPagePaneBootstrapRegression() {
     "collapse",
     "settings",
     "refresh",
+    "tab:backup",
     "tab:lab"
   ].forEach(function requireObservedCall(callName) {
     if (actual.observedCalls.indexOf(callName) === -1) {
@@ -3384,6 +4072,7 @@ function runPagePaneBootstrapRegression() {
         "collapse",
         "settings",
         "refresh",
+        "tab:backup",
         "tab:lab"
       ]
     },
@@ -3479,11 +4168,13 @@ function runPagePaneAssemblyRegression() {
   };
   const tabButtons = [
     createFakeTabElement("data-tab-button", "converted"),
+    createFakeTabElement("data-tab-button", "backup"),
     createFakeTabElement("data-tab-button", "lab"),
     createFakeTabElement("data-tab-button", "diagnostics")
   ];
   const tabPanels = [
     createFakeTabElement("data-tab-panel", "converted"),
+    createFakeTabElement("data-tab-panel", "backup"),
     createFakeTabElement("data-tab-panel", "lab"),
     createFakeTabElement("data-tab-panel", "diagnostics")
   ];
@@ -3566,8 +4257,8 @@ function runPagePaneAssemblyRegression() {
   bootstrapOptions.onOpenSettings();
   bootstrapOptions.onRefresh();
   bootstrapOptions.onTabSelect("diagnostics");
-  const diagnosticsButtonAttributes = tabButtons[2].getAttributes();
-  const diagnosticsPanelAttributes = tabPanels[2].getAttributes();
+  const diagnosticsButtonAttributes = tabButtons[3].getAttributes();
+  const diagnosticsPanelAttributes = tabPanels[3].getAttributes();
   const hoverInfoHiddenOnDiagnostics = hoverLinkInfo.hidden === true;
 
   elements.isExpanded = true;
@@ -3866,6 +4557,46 @@ function runPagePaneLayoutRegression() {
     rootExpandedClass: fakeRoot.classList.contains("is-expanded"),
     rootPreDetectionVisibleClass: fakeRoot.classList.contains("is-pre-detection-visible")
   };
+  const suppressedLayout = pagePaneLayout.create({
+    elements: elements,
+    ensurePane: function ensureSuppressedPane() {
+      ensuredPaneCount += 1;
+      return fakeRoot;
+    },
+    getLatestSnapshot: function getLatestSnapshotForSuppressedLayout() {
+      return latestSnapshot;
+    },
+    getActiveEmailRoot: function getActiveEmailRootForSuppressedLayout() {
+      return null;
+    },
+    shouldAllowOpenWithoutSnapshot: function shouldAllowOpenWithoutSnapshotForSuppressedLayout() {
+      return false;
+    },
+    shouldSuppressPaneVisibility: function shouldSuppressPaneVisibilityForSuppressedLayout() {
+      return true;
+    },
+    getVisiblePaneReservedWidth: function getVisiblePaneReservedWidthForSuppressedLayout() {
+      return 0;
+    },
+    windowObject: {
+      innerWidth: 1280,
+      innerHeight: 900
+    },
+    documentObject: {
+      documentElement: fakeDocumentElement,
+      body: fakeBody
+    }
+  });
+  suppressedLayout.showPane();
+  const suppressedOpenPaneResult = suppressedLayout.openPane();
+  const suppressedToggleResult = suppressedLayout.togglePaneVisibility();
+  const afterSuppressedVisibilityGuard = {
+    rootHidden: fakeRoot.getAttribute("aria-hidden"),
+    railExpanded: fakeRailToggleButton.getAttribute("aria-expanded"),
+    rootExpandedClass: fakeRoot.classList.contains("is-expanded"),
+    rootHasSnapshotClass: fakeRoot.classList.contains("has-snapshot"),
+    rootPreDetectionVisibleClass: fakeRoot.classList.contains("is-pre-detection-visible")
+  };
   latestSnapshot = {
     id: "snapshot"
   };
@@ -3879,6 +4610,8 @@ function runPagePaneLayoutRegression() {
     blockedOpenPaneResult: blockedOpenPaneResult,
     permissiveOpenWithoutSnapshotResult: permissiveOpenWithoutSnapshotResult,
     permissiveHiddenResult: permissiveHiddenResult,
+    suppressedOpenPaneResult: suppressedOpenPaneResult,
+    suppressedToggleResult: suppressedToggleResult,
     openPaneResult: openPaneResult,
     ensuredPaneCount: ensuredPaneCount,
     rootHiddenAfterBlockedWithoutSnapshot: afterBlockedWithoutSnapshot.rootHidden,
@@ -3896,6 +4629,11 @@ function runPagePaneLayoutRegression() {
     railExpandedAfterPermissiveCollapseWithoutSnapshot: afterPermissiveCollapsedWithoutSnapshot.railExpanded,
     rootExpandedAfterPermissiveCollapseWithoutSnapshot: afterPermissiveCollapsedWithoutSnapshot.rootExpandedClass,
     rootPreDetectionVisibleAfterPermissiveCollapseWithoutSnapshot: afterPermissiveCollapsedWithoutSnapshot.rootPreDetectionVisibleClass,
+    rootHiddenAfterSuppressedVisibilityGuard: afterSuppressedVisibilityGuard.rootHidden,
+    railExpandedAfterSuppressedVisibilityGuard: afterSuppressedVisibilityGuard.railExpanded,
+    rootExpandedAfterSuppressedVisibilityGuard: afterSuppressedVisibilityGuard.rootExpandedClass,
+    rootHasSnapshotAfterSuppressedVisibilityGuard: afterSuppressedVisibilityGuard.rootHasSnapshotClass,
+    rootPreDetectionVisibleAfterSuppressedVisibilityGuard: afterSuppressedVisibilityGuard.rootPreDetectionVisibleClass,
     bodyReservedSpace: fakeBody.style.properties["--merged-link-lab-page-pane-reserved-space"] || ""
   };
   const failures = [];
@@ -3971,7 +4709,23 @@ function runPagePaneLayoutRegression() {
     failures.push("Expected permissive page pane layout to collapse back to a visible bubble without a snapshot.");
   }
 
-  if (actual.ensuredPaneCount !== 7) {
+  if (
+    !actual.suppressedOpenPaneResult ||
+    actual.suppressedOpenPaneResult.ok !== false ||
+    actual.suppressedOpenPaneResult.visible !== false ||
+    !actual.suppressedToggleResult ||
+    actual.suppressedToggleResult.ok !== false ||
+    actual.suppressedToggleResult.visible !== false ||
+    actual.rootHiddenAfterSuppressedVisibilityGuard !== "true" ||
+    actual.railExpandedAfterSuppressedVisibilityGuard !== "false" ||
+    actual.rootExpandedAfterSuppressedVisibilityGuard !== false ||
+    actual.rootHasSnapshotAfterSuppressedVisibilityGuard !== false ||
+    actual.rootPreDetectionVisibleAfterSuppressedVisibilityGuard !== false
+  ) {
+    failures.push("Expected page pane layout to suppress the helper bubble entirely when the current inbox location is not eligible for pane visibility.");
+  }
+
+  if (actual.ensuredPaneCount !== 10) {
     failures.push("Expected page pane layout visibility operations to ensure the helper pane on each open, toggle, and show path.");
   }
 
@@ -4148,6 +4902,10 @@ function runPagePaneMirrorRegression() {
     },
     hoverLinkPanelExpanded: false
   };
+  const backupFrame = {
+    tagName: "IFRAME",
+    srcdoc: ""
+  };
   const mirror = pagePaneMirror.create({
     elements: elements,
     DOMParserClass: FakeDOMParser,
@@ -4194,6 +4952,12 @@ function runPagePaneMirrorRegression() {
   );
   const disabledLinkSrcdoc = elements.convertedPane.srcdoc;
 
+  mirror.renderMarkup("<p>Original backup HTML</p>", {
+    targetElement: backupFrame,
+    baseUrl: "https://example.com/backup"
+  });
+  const backupFrameSrcdoc = backupFrame.srcdoc;
+
   mirror.bindHoverInspector();
   const defaultHoverValue = elements.hoverLinkInfoValue.textContent;
 
@@ -4213,6 +4977,8 @@ function runPagePaneMirrorRegression() {
     disabledSameDocumentLink: disabledLinkSrcdoc.indexOf('data-merged-link-lab-disabled-link="true"') !== -1,
     retainedExternalLink: disabledLinkSrcdoc.indexOf('href="https://example.com/next"') !== -1,
     baseHrefInjected: disabledLinkSrcdoc.indexOf('<base href="https://example.com/base/page#hash" target="_blank">') !== -1,
+    targetFrameRendered: backupFrameSrcdoc.indexOf("<p>Original backup HTML</p>") !== -1 &&
+      backupFrameSrcdoc.indexOf('<base href="https://example.com/backup" target="_blank">') !== -1,
     defaultHoverValue: defaultHoverValue,
     hoverSummary: hoverSummary,
     hoverTitleRemoved: hoverAnchor.getAttribute("title") === null,
@@ -4249,6 +5015,10 @@ function runPagePaneMirrorRegression() {
 
   if (!actual.baseHrefInjected) {
     failures.push("Expected page pane mirror to inject the mirror base URL into the iframe document.");
+  }
+
+  if (!actual.targetFrameRendered) {
+    failures.push("Expected page pane mirror to render markup into an explicit target iframe when requested.");
   }
 
   if (actual.defaultHoverValue !== "Hover over a link to reveal URL components") {
@@ -4291,6 +5061,7 @@ function runPagePaneMirrorRegression() {
       disabledSameDocumentLink: true,
       retainedExternalLink: true,
       baseHrefInjected: true,
+      targetFrameRendered: true,
       defaultHoverValue: "Hover over a link to reveal URL components",
       hoverSummary: "Detection Type: publisher",
       hoverTitleRemoved: true,
@@ -4322,6 +5093,8 @@ async function runPagePaneSnapshotRegression() {
   const hoverPanelStates = [];
   const syncEmailSnapshotCalls = [];
   const replacementSnapshots = [];
+  const backupRenderMarkupCalls = [];
+  const debugEvents = [];
   let latestSnapshot = null;
   let lastPublishedSnapshotSignature = "";
   let didAutoExpandBuiltInTestPagePane = false;
@@ -4342,6 +5115,15 @@ async function runPagePaneSnapshotRegression() {
     },
     railBadge: {
       textContent: ""
+    },
+    backupSummary: {
+      textContent: ""
+    },
+    backupFrame: {
+      srcdoc: ""
+    },
+    backupPayload: {
+      value: ""
     },
     diagnosticsPane: {},
     labFrameLoaded: true,
@@ -4374,6 +5156,16 @@ async function runPagePaneSnapshotRegression() {
           options: options
         });
       },
+      renderMarkup: function renderMarkup(htmlMarkup, options) {
+        backupRenderMarkupCalls.push({
+          htmlMarkup: htmlMarkup,
+          options: options
+        });
+
+        if (options && options.targetElement) {
+          options.targetElement.srcdoc = String(htmlMarkup || options.emptyMarkup || "");
+        }
+      },
       setHoverLinkPanelExpanded: function setHoverLinkPanelExpanded(isExpanded) {
         hoverPanelStates.push(!!isExpanded);
       }
@@ -4395,6 +5187,11 @@ async function runPagePaneSnapshotRegression() {
       },
       showPane: function showPane() {
         showPaneCallCount += 1;
+      }
+    },
+    debugApi: {
+      ui: function ui(message) {
+        debugEvents.push(message);
       }
     },
     formatMetricCount: function formatMetricCount(countValue) {
@@ -4449,12 +5246,21 @@ async function runPagePaneSnapshotRegression() {
   const publishedSnapshot = {
     id: "snap-1",
     isTopicDigest: true,
+    originalEmailBackup: {
+      capturedAt: 111,
+      rawText: "Original backup text",
+      sourceHtml: "<p>Original backup HTML</p>"
+    },
     pipeline: {
       finalUrls: ["https://one.example", "https://two.example"]
     }
   };
 
   await snapshotController.publishSnapshot(publishedSnapshot);
+  const backupSummaryAfterPublish = elements.backupSummary.textContent;
+  const backupFrameAfterPublish = elements.backupFrame.srcdoc;
+  const backupPayloadAfterPublish = elements.backupPayload.value;
+  const parsedBackupPayloadAfterPublish = JSON.parse(backupPayloadAfterPublish);
   snapshotController.forceRefreshCurrentSnapshot();
   await snapshotController.publishClear();
 
@@ -4573,6 +5379,27 @@ async function runPagePaneSnapshotRegression() {
     railStatusAfterClear: elements.railStatus.textContent,
     railCountAfterClear: elements.railCount.textContent,
     railBadgeAfterClear: elements.railBadge.textContent,
+    backupSummaryAfterPublish: backupSummaryAfterPublish,
+    backupFrameAfterPublish: backupFrameAfterPublish,
+    backupPayloadAfterPublish: backupPayloadAfterPublish,
+    parsedBackupPayloadRawText: parsedBackupPayloadAfterPublish.rawText || "",
+    parsedBackupPayloadSourceHtml: parsedBackupPayloadAfterPublish.sourceHtml || "",
+    backupRenderMarkupCallCount: backupRenderMarkupCalls.length,
+    backupRenderTargetIsFrame: !!(
+      backupRenderMarkupCalls[0] &&
+      backupRenderMarkupCalls[0].options &&
+      backupRenderMarkupCalls[0].options.targetElement === elements.backupFrame
+    ),
+    backupRenderDisablesSameDocumentLinks: !!(
+      backupRenderMarkupCalls[0] &&
+      backupRenderMarkupCalls[0].options &&
+      backupRenderMarkupCalls[0].options.disableSameDocumentLinks === true
+    ),
+    debugRenderedBackup: debugEvents.indexOf("content backup tab rendered from original backup") !== -1,
+    debugClearedBackup: debugEvents.indexOf("content backup tab cleared") !== -1,
+    backupSummaryAfterClear: elements.backupSummary.textContent,
+    backupFrameAfterClear: elements.backupFrame.srcdoc,
+    backupPayloadAfterClear: elements.backupPayload.value,
     ensuredPaneCount: ensuredPaneCount,
     clearRenderedPaneCallCount: clearRenderedPaneCallCount,
     showPaneCallCount: showPaneCallCount,
@@ -4623,6 +5450,28 @@ async function runPagePaneSnapshotRegression() {
 
   if (actual.railBadgeAfterClear !== "0") {
     failures.push("Expected page pane snapshot clear to restore the empty rail badge.");
+  }
+
+  if (
+    actual.backupSummaryAfterPublish !== "Authoritative original email body backup captured with this snapshot." ||
+    actual.backupFrameAfterPublish.indexOf("<p>Original backup HTML</p>") === -1 ||
+    actual.parsedBackupPayloadRawText !== "Original backup text" ||
+    actual.parsedBackupPayloadSourceHtml !== "<p>Original backup HTML</p>" ||
+    actual.backupRenderMarkupCallCount < 2 ||
+    !actual.backupRenderTargetIsFrame ||
+    !actual.backupRenderDisablesSameDocumentLinks ||
+    !actual.debugRenderedBackup
+  ) {
+    failures.push("Expected page pane snapshot publish to render a rich backup preview while keeping the authoritative original backup hidden.");
+  }
+
+  if (
+    actual.backupSummaryAfterClear !== "No original email backup captured yet." ||
+    actual.backupFrameAfterClear.indexOf("Open an inbox email to capture an original body backup.") === -1 ||
+    actual.backupPayloadAfterClear !== "" ||
+    !actual.debugClearedBackup
+  ) {
+    failures.push("Expected page pane snapshot clear to reset the original email backup tab.");
   }
 
   if (actual.ensuredPaneCount !== 1) {
@@ -4723,6 +5572,13 @@ async function runPagePaneSnapshotRegression() {
       railStatusAfterClear: "No email",
       railCountAfterClear: "0 URLs",
       railBadgeAfterClear: "0",
+      backupSummaryAfterPublish: "Authoritative original email body backup captured with this snapshot.",
+      parsedBackupPayloadRawText: "Original backup text",
+      parsedBackupPayloadSourceHtml: "<p>Original backup HTML</p>",
+      backupRenderMarkupCallCount: 2,
+      backupRenderTargetIsFrame: true,
+      backupSummaryAfterClear: "No original email backup captured yet.",
+      backupPayloadAfterClear: "",
       ensuredPaneCount: 1,
       clearRenderedPaneCallCount: 1,
       showPaneCallCount: 1,
@@ -4770,6 +5626,7 @@ function runEmailSnapshotSyncRegression() {
   let nextTimerId = 1;
   let visible = true;
   let currentGraceWindow = 0;
+  let currentFailureKind = "selector-empty-match";
   let currentLocationHref = "https://mail.google.com/mail/u/0/#inbox";
   let inboxRootCandidates = [];
   let latestSnapshot = {
@@ -4831,7 +5688,7 @@ function runEmailSnapshotSyncRegression() {
       return Array.isArray(candidates) && candidates.length
         ? null
         : {
-          kind: "selector-empty-match",
+          kind: currentFailureKind,
           providerId: "gmail"
         };
     },
@@ -4966,9 +5823,24 @@ function runEmailSnapshotSyncRegression() {
     }
   };
   currentGraceWindow = 0;
+  currentFailureKind = "selector-empty-match";
   latestDetectedEmailRoot = createFakeRoot("fallback-root", "Fallback body", true);
   latestDetectedEmailMode = "fallback";
   lastPublishedSignature = "sig:other";
+  syncController.syncEmailSnapshot();
+
+  latestSnapshot = {
+    id: "mismatch-base",
+    detectedAt: Date.now() - 7000,
+    pipeline: {
+      finalUrls: []
+    }
+  };
+  currentGraceWindow = 5000;
+  currentFailureKind = "provider-path-mismatch";
+  latestDetectedEmailRoot = createFakeRoot("mismatch-root", "Mismatch body", true);
+  latestDetectedEmailMode = "mismatch";
+  lastPublishedSignature = "sig:mismatch";
   syncController.syncEmailSnapshot();
 
   inboxRootCandidates = [{
@@ -4976,6 +5848,7 @@ function runEmailSnapshotSyncRegression() {
     detectionMode: "primary",
     score: 9
   }];
+  currentFailureKind = "selector-empty-match";
   lastPublishedSignature = "sig:summary:primary-root";
   syncController.syncEmailSnapshot();
 
@@ -5009,12 +5882,12 @@ function runEmailSnapshotSyncRegression() {
     failures.push("Expected email snapshot sync to clear the previous timer when re-scheduling.");
   }
 
-  if (!arrayEquals(actual.clearEvents, ["clear"])) {
-    failures.push("Expected email snapshot sync to publish a clear event when location changes and no primary candidate exists.");
+  if (!arrayEquals(actual.clearEvents, ["clear", "clear"])) {
+    failures.push("Expected email snapshot sync to clear once on location change and again immediately when a provider-path mismatch invalidates the current view.");
   }
 
-  if (!arrayEquals(actual.emptyPaneRenderEvents, ["render-empty"])) {
-    failures.push("Expected email snapshot sync to render the explicit empty-pane diagnostics state when no snapshot and no primary candidate exist.");
+  if (!arrayEquals(actual.emptyPaneRenderEvents, ["render-empty", "render-empty"])) {
+    failures.push("Expected email snapshot sync to render the empty-pane diagnostics state both for the initial no-snapshot case and again when stale fallback reuse is blocked.");
   }
 
   if (!arrayEquals(actual.publishedSnapshots, ["summary:fallback-root", "summary:primary-root"])) {
@@ -5065,8 +5938,8 @@ function runEmailSnapshotSyncRegression() {
     sectionId: "module-regressions",
     sectionTitle: "Module Regressions",
     expected: {
-      clearEvents: ["clear"],
-      emptyPaneRenderEvents: ["render-empty"],
+      clearEvents: ["clear", "clear"],
+      emptyPaneRenderEvents: ["render-empty", "render-empty"],
       publishedSnapshots: ["summary:fallback-root", "summary:primary-root"],
       observedRootIds: ["primary-root", "primary-root"],
       latestDetectedEmailRootId: "primary-root",
@@ -5164,6 +6037,10 @@ function runEmailRootSummaryRegression() {
     digestEntries: [{}, {}, {}]
   });
   const summary = summaryController.summarizeEmailRoot(iframeRoot, "");
+  iframeBody.innerHTML = "<p>Rewritten body</p>";
+  iframeBody.innerText = "Rewritten body";
+  iframeBody.textContent = "Rewritten body";
+  const preservedSummary = summaryController.summarizeEmailRoot(iframeRoot, "");
   const actual = {
     iframeContentResolved: iframeContentElement === iframeBody,
     contentElementResolved: contentElement === iframeBody,
@@ -5175,6 +6052,13 @@ function runEmailRootSummaryRegression() {
     summaryDetectionMode: summary.detectionMode,
     summarySectionLabel: summary.sectionLabel,
     summaryIsTopicDigest: summary.isTopicDigest,
+    summaryHasOriginalBackup: !!(summary.originalEmailBackup && summary.originalEmailBackup.sourceHtml === htmlMarkup),
+    preservedSummarySourceHtml: preservedSummary.sourceHtml,
+    preservedSummaryRawText: preservedSummary.rawText,
+    preservedSummaryBackupSourceHtml:
+      preservedSummary.originalEmailBackup && preservedSummary.originalEmailBackup.sourceHtml
+        ? preservedSummary.originalEmailBackup.sourceHtml
+        : "",
     summaryFinalUrlCount:
       summary && summary.pipeline && Array.isArray(summary.pipeline.finalUrls)
         ? summary.pipeline.finalUrls.length
@@ -5182,7 +6066,11 @@ function runEmailRootSummaryRegression() {
     analyzeCallCount: analyzeCalls.length,
     analyzeRawText: analyzeCalls.length ? analyzeCalls[0].rawText : "",
     analyzeSourceHtml: analyzeCalls.length ? analyzeCalls[0].sourceHtml : "",
+    preservedAnalyzeRawText: analyzeCalls[1] ? analyzeCalls[1].rawText : "",
+    preservedAnalyzeSourceHtml: analyzeCalls[1] ? analyzeCalls[1].sourceHtml : "",
     analyzeOptions: analyzeCalls.length ? analyzeCalls[0].options : null,
+    debugCapturedBackup: debugEvents.indexOf("variable:content original email backup captured") !== -1,
+    debugReusedBackup: debugEvents.indexOf("variable:content original email backup reused") !== -1,
     debugEventCount: debugEvents.length
   };
   const failures = [];
@@ -5195,7 +6083,7 @@ function runEmailRootSummaryRegression() {
     failures.push("Expected email root summary to surface the iframe body through getEmailRootContentElement.");
   }
 
-  if (actual.htmlMarkup !== iframeBody.innerHTML) {
+  if (actual.htmlMarkup !== htmlMarkup) {
     failures.push("Expected email root summary to return iframe innerHTML for the email root HTML markup.");
   }
 
@@ -5227,16 +6115,27 @@ function runEmailRootSummaryRegression() {
     failures.push("Expected email root summary to retain the pipeline final URL count from analyzeInput.");
   }
 
-  if (actual.analyzeCallCount !== 1) {
-    failures.push("Expected email root summary to call analyzeInput exactly once while summarizing.");
+  if (actual.analyzeCallCount !== 2) {
+    failures.push("Expected email root summary to call analyzeInput once per summarization.");
   }
 
   if (actual.analyzeRawText !== textMetrics.text) {
     failures.push("Expected email root summary to pass the measured text into analyzeInput.");
   }
 
-  if (actual.analyzeSourceHtml !== iframeBody.innerHTML) {
-    failures.push("Expected email root summary to pass the resolved HTML markup into analyzeInput.");
+  if (actual.analyzeSourceHtml !== htmlMarkup) {
+    failures.push("Expected email root summary to pass the original resolved HTML markup into analyzeInput.");
+  }
+
+  if (
+    !actual.summaryHasOriginalBackup ||
+    actual.preservedSummarySourceHtml !== htmlMarkup ||
+    actual.preservedSummaryRawText !== textMetrics.text ||
+    actual.preservedSummaryBackupSourceHtml !== htmlMarkup ||
+    actual.preservedAnalyzeRawText !== textMetrics.text ||
+    actual.preservedAnalyzeSourceHtml !== htmlMarkup
+  ) {
+    failures.push("Expected email root summary to keep using the original backup after the visible email body is rewritten.");
   }
 
   if (!actual.analyzeOptions || actual.analyzeOptions.stripKnownTrackingParameters !== true) {
@@ -5245,6 +6144,10 @@ function runEmailRootSummaryRegression() {
 
   if (actual.debugEventCount < 3) {
     failures.push("Expected email root summary to emit debug events during summarization.");
+  }
+
+  if (!actual.debugCapturedBackup || !actual.debugReusedBackup) {
+    failures.push("Expected email root summary to emit debug events when capturing and reusing the original backup.");
   }
 
   return {
@@ -5260,8 +6163,10 @@ function runEmailRootSummaryRegression() {
       summaryDetectionMode: "inbox-read",
       summarySectionLabel: "Digest mail",
       summaryIsTopicDigest: true,
+      summaryHasOriginalBackup: true,
+      preservedSummarySourceHtml: htmlMarkup,
       summaryFinalUrlCount: 1,
-      analyzeCallCount: 1
+      analyzeCallCount: 2
     },
     targetExpected: null,
     actual: actual,
@@ -5274,6 +6179,7 @@ function runEmailRootRuntimeRegression() {
   const replaceCalls = [];
   const publishedSnapshots = [];
   const scheduledSyncReasons = [];
+  const debugEvents = [];
   const loadListeners = [];
   let syncEmailSnapshotCallCount = 0;
   let latestSnapshot = null;
@@ -5316,10 +6222,23 @@ function runEmailRootRuntimeRegression() {
       targetElement.innerText = "Rewritten body";
       targetElement.textContent = "Rewritten body";
     },
+    debugApi: {
+      variable: function variable(message) {
+        debugEvents.push(message);
+      }
+    },
     syncEmailSnapshot: function syncEmailSnapshot() {
       syncEmailSnapshotCallCount += 1;
       latestSnapshot = {
         id: "snap-1",
+        detectedAt: 42,
+        sourceHtml: "<p>Original body</p>",
+        rawText: "Original body",
+        originalEmailBackup: {
+          capturedAt: 42,
+          sourceHtml: "<p>Original body</p>",
+          rawText: "Original body"
+        },
         pipeline: {
           rewrittenHtml: "<section>Rewritten body</section>"
         }
@@ -5413,6 +6332,19 @@ function runEmailRootRuntimeRegression() {
         replaceCallCount: replaceCalls.length,
         replacedHtml: replaceCalls.length ? replaceCalls[0].htmlMarkup : "",
         replacedTargetIsIframeBody: !!(replaceCalls.length && replaceCalls[0].targetElement === iframeBody),
+        rootBackupRawText:
+          iframeRoot.__urlForensicsOriginalEmailBackup && iframeRoot.__urlForensicsOriginalEmailBackup.rawText
+            ? iframeRoot.__urlForensicsOriginalEmailBackup.rawText
+            : "",
+        contentBackupRawText:
+          iframeBody.__urlForensicsOriginalEmailBackup && iframeBody.__urlForensicsOriginalEmailBackup.rawText
+            ? iframeBody.__urlForensicsOriginalEmailBackup.rawText
+            : "",
+        contentBackupSourceHtml:
+          iframeBody.__urlForensicsOriginalEmailBackup && iframeBody.__urlForensicsOriginalEmailBackup.sourceHtml
+            ? iframeBody.__urlForensicsOriginalEmailBackup.sourceHtml
+            : "",
+        debugPreservedBackup: debugEvents.indexOf("content original email backup preserved before rewrite") !== -1,
         latestDetectedEmailRootId: latestDetectedEmailRoot && latestDetectedEmailRoot.id ? latestDetectedEmailRoot.id : "",
         latestDetectedEmailMode: latestDetectedEmailMode,
         publishedSnapshotIds: publishedSnapshots.map(function mapPublishedSnapshotId(snapshot) {
@@ -5456,6 +6388,15 @@ function runEmailRootRuntimeRegression() {
         failures.push("Expected email root runtime to rewrite the iframe body content rather than the iframe element shell.");
       }
 
+      if (
+        actual.rootBackupRawText !== "Original body" ||
+        actual.contentBackupRawText !== "Original body" ||
+        actual.contentBackupSourceHtml !== "<p>Original body</p>" ||
+        !actual.debugPreservedBackup
+      ) {
+        failures.push("Expected email root runtime to preserve the original email backup on the root and content element while rewriting.");
+      }
+
       if (actual.latestDetectedEmailRootId !== "iframe-root") {
         failures.push("Expected email root runtime to retain the rewritten iframe root as the latest detected email root.");
       }
@@ -5493,6 +6434,8 @@ function runEmailRootRuntimeRegression() {
           observedTargetKinds: ["iframe-root", "iframe-body", "iframe-body"],
           syncEmailSnapshotCallCount: 1,
           replaceCallCount: 1,
+          rootBackupRawText: "Original body",
+          contentBackupRawText: "Original body",
           latestDetectedEmailRootId: "iframe-root",
           latestDetectedEmailMode: "inbox-read",
           publishedSnapshotIds: ["summary:iframe-root"],
@@ -5541,6 +6484,8 @@ function runEmailAutoReplaceRegression() {
 
   let directReplaceEnabled = false;
   let autoReplaceEnabled = true;
+  let mobileAutoApplyEnabled = false;
+  let mobileDeviceDetected = false;
   let senderElementPresent = false;
   let controlElements = [];
   const senderEmailList = ["alerts@example.com"];
@@ -5586,8 +6531,14 @@ function runEmailAutoReplaceRegression() {
     getAutoApplyMirrorForConfiguredSendersEnabled: function getAutoApplyMirrorForConfiguredSendersEnabled() {
       return autoReplaceEnabled;
     },
+    getAutoApplyMirrorOnMobileDeviceEnabled: function getAutoApplyMirrorOnMobileDeviceEnabled() {
+      return mobileAutoApplyEnabled;
+    },
     getAutoApplyMirrorSenderEmailList: function getAutoApplyMirrorSenderEmailList() {
       return senderEmailList.slice();
+    },
+    isMobileDevice: function isMobileDevice() {
+      return mobileDeviceDetected;
     }
   });
   const snapshot = {
@@ -5599,6 +6550,15 @@ function runEmailAutoReplaceRegression() {
   const initialAutoReplace = autoReplaceController.shouldAutoReplaceEmailBodyWithMirrorContent(snapshot);
   const initialShouldReplace = autoReplaceController.shouldReplaceEmailBodyWithMirrorContent(snapshot);
 
+  autoReplaceEnabled = false;
+  mobileAutoApplyEnabled = true;
+  mobileDeviceDetected = true;
+  const mobileAutoReplace = autoReplaceController.shouldAutoReplaceEmailBodyWithMirrorContent(snapshot);
+  const mobileShouldReplace = autoReplaceController.shouldReplaceEmailBodyWithMirrorContent(snapshot);
+  mobileDeviceDetected = false;
+  const nonMobileAutoReplace = autoReplaceController.shouldAutoReplaceEmailBodyWithMirrorContent(snapshot);
+  mobileDeviceDetected = true;
+
   senderElementPresent = true;
   const senderElementDetection = autoReplaceController.hasConfiguredSenderElement();
 
@@ -5609,6 +6569,7 @@ function runEmailAutoReplaceRegression() {
       : [];
   };
   const blockedAutoReplace = autoReplaceController.shouldAutoReplaceEmailBodyWithMirrorContent(snapshot);
+  const blockedMobileAutoReplace = autoReplaceController.shouldReplaceEmailBodyWithMirrorContent(snapshot);
 
   directReplaceEnabled = true;
   const forcedReplace = autoReplaceController.shouldReplaceEmailBodyWithMirrorContent(snapshot);
@@ -5617,9 +6578,13 @@ function runEmailAutoReplaceRegression() {
     initialSenderDetection: initialSenderDetection,
     initialAutoReplace: initialAutoReplace,
     initialShouldReplace: initialShouldReplace,
+    mobileAutoReplace: mobileAutoReplace,
+    mobileShouldReplace: mobileShouldReplace,
+    nonMobileAutoReplace: nonMobileAutoReplace,
     senderElementDetection: senderElementDetection,
     nativeExpansionControlDetected: autoReplaceController.hasNativeEmailExpansionControl(activeEmailRoot),
     blockedAutoReplace: blockedAutoReplace,
+    blockedMobileAutoReplace: blockedMobileAutoReplace,
     forcedReplace: forcedReplace,
     unrelatedSenderTextMatch: autoReplaceController.hasConfiguredSenderText("newsletter@example.org")
   };
@@ -5641,6 +6606,10 @@ function runEmailAutoReplaceRegression() {
     failures.push("Expected email auto-replace shouldReplace to be true when auto-replace is permitted.");
   }
 
+  if (!actual.mobileAutoReplace || !actual.mobileShouldReplace || actual.nonMobileAutoReplace) {
+    failures.push("Expected email auto-replace to apply automatically only when the mobile-device setting and detection are both active.");
+  }
+
   if (!actual.senderElementDetection) {
     failures.push("Expected email auto-replace to detect configured sender elements through the compiled selector.");
   }
@@ -5651,6 +6620,10 @@ function runEmailAutoReplaceRegression() {
 
   if (actual.blockedAutoReplace) {
     failures.push("Expected email auto-replace to block automatic replacement when a native expansion control is present.");
+  }
+
+  if (actual.blockedMobileAutoReplace) {
+    failures.push("Expected mobile-device auto-replace to respect the native expansion-control guard.");
   }
 
   if (!actual.forcedReplace) {
@@ -5672,9 +6645,12 @@ function runEmailAutoReplaceRegression() {
       initialSenderTextMatch: true,
       initialSenderDetection: true,
       initialAutoReplace: true,
+      mobileAutoReplace: true,
+      nonMobileAutoReplace: false,
       senderElementDetection: true,
       nativeExpansionControlDetected: true,
       blockedAutoReplace: false,
+      blockedMobileAutoReplace: false,
       forcedReplace: true,
       unrelatedSenderTextMatch: false
     },
@@ -5817,6 +6793,7 @@ async function runContentSettingsStorageRegression() {
         stripKnownTrackingParameters: true,
         trackingParameterFilters: ["utm_source"],
         allowHelperOpenWithoutDetectedEmailBody: false,
+        autoApplyMirrorOnMobileDevice: false,
         autoApplyMirrorForConfiguredSenders: false
       },
       normalizeStoredSettings: function normalizeStoredSettings(storedSettings) {
@@ -5829,6 +6806,7 @@ async function runContentSettingsStorageRegression() {
           "trackingFilters",
           "replaceEmailBody",
           "allowHelperOpenWithoutDetectedEmailBody",
+          "autoApplyMobile",
           "autoApplySenders",
           "senderList"
         ];
@@ -5852,6 +6830,7 @@ async function runContentSettingsStorageRegression() {
       trackingParameterFilters: ["utm_source"],
       replaceEmailBodyWithMirrorContent: false,
       allowHelperOpenWithoutDetectedEmailBody: false,
+      autoApplyMirrorOnMobileDevice: false,
       autoApplyMirrorForConfiguredSenders: false,
       autoApplyMirrorSenderEmailList: ["default@example.com"]
     };
@@ -5890,6 +6869,7 @@ async function runContentSettingsStorageRegression() {
               trackingFilters: ["utm_medium", "utm_campaign"],
               replaceEmailBody: true,
               allowHelperOpenWithoutDetectedEmailBody: true,
+              autoApplyMobile: true,
               autoApplySenders: true,
               senderList: ["alerts@example.com"]
             };
@@ -5936,6 +6916,7 @@ async function runContentSettingsStorageRegression() {
     trackingParameterFiltersStorageKey: "trackingFilters",
     replaceEmailBodyWithMirrorContentStorageKey: "replaceEmailBody",
     allowHelperOpenWithoutDetectedEmailBodyStorageKey: "allowHelperOpenWithoutDetectedEmailBody",
+    autoApplyMirrorOnMobileDeviceStorageKey: "autoApplyMobile",
     autoApplyMirrorForConfiguredSendersStorageKey: "autoApplySenders",
     autoApplyMirrorSenderEmailListStorageKey: "senderList",
     legacyAutoApplyMirrorForNamedSenderStorageKey: "legacyAutoApply",
@@ -5961,6 +6942,7 @@ async function runContentSettingsStorageRegression() {
     trackingParameterFilters: extensionSettings.trackingParameterFilters.slice(),
     replaceEmailBodyWithMirrorContent: extensionSettings.replaceEmailBodyWithMirrorContent,
     allowHelperOpenWithoutDetectedEmailBody: extensionSettings.allowHelperOpenWithoutDetectedEmailBody,
+    autoApplyMirrorOnMobileDevice: extensionSettings.autoApplyMirrorOnMobileDevice,
     autoApplyMirrorForConfiguredSenders: extensionSettings.autoApplyMirrorForConfiguredSenders,
     autoApplyMirrorSenderEmailList: extensionSettings.autoApplyMirrorSenderEmailList.slice()
   };
@@ -5975,6 +6957,7 @@ async function runContentSettingsStorageRegression() {
     stripTracking: { newValue: true },
     replaceEmailBody: { newValue: false },
     allowHelperOpenWithoutDetectedEmailBody: { newValue: false },
+    autoApplyMobile: { newValue: false },
     senderList: { newValue: ["news@example.com"] }
   }, "local");
   const ignoredUpdateResult = successController.handlePipelineStorageChange({}, "sync");
@@ -5999,6 +6982,7 @@ async function runContentSettingsStorageRegression() {
     trackingParameterFiltersStorageKey: "trackingFilters",
     replaceEmailBodyWithMirrorContentStorageKey: "replaceEmailBody",
     allowHelperOpenWithoutDetectedEmailBodyStorageKey: "allowHelperOpenWithoutDetectedEmailBody",
+    autoApplyMirrorOnMobileDeviceStorageKey: "autoApplyMobile",
     autoApplyMirrorForConfiguredSendersStorageKey: "autoApplySenders",
     autoApplyMirrorSenderEmailListStorageKey: "senderList",
     legacyAutoApplyMirrorForNamedSenderStorageKey: "legacyAutoApply",
@@ -6036,6 +7020,7 @@ async function runContentSettingsStorageRegression() {
     trackingParameterFiltersStorageKey: "trackingFilters",
     replaceEmailBodyWithMirrorContentStorageKey: "replaceEmailBody",
     allowHelperOpenWithoutDetectedEmailBodyStorageKey: "allowHelperOpenWithoutDetectedEmailBody",
+    autoApplyMirrorOnMobileDeviceStorageKey: "autoApplyMobile",
     autoApplyMirrorForConfiguredSendersStorageKey: "autoApplySenders",
     autoApplyMirrorSenderEmailListStorageKey: "senderList",
     legacyAutoApplyMirrorForNamedSenderStorageKey: "legacyAutoApply",
@@ -6056,6 +7041,7 @@ async function runContentSettingsStorageRegression() {
       stripKnownTrackingParameters: extensionSettings.stripKnownTrackingParameters,
       replaceEmailBodyWithMirrorContent: extensionSettings.replaceEmailBodyWithMirrorContent,
       allowHelperOpenWithoutDetectedEmailBody: extensionSettings.allowHelperOpenWithoutDetectedEmailBody,
+      autoApplyMirrorOnMobileDevice: extensionSettings.autoApplyMirrorOnMobileDevice,
       autoApplyMirrorSenderEmailList: extensionSettings.autoApplyMirrorSenderEmailList.slice()
     },
     successSnapshotSourceAfterChange: extensionStorageSnapshot.source,
@@ -6086,6 +7072,7 @@ async function runContentSettingsStorageRegression() {
     !arrayEquals(actual.successSettingsAfterLoad.trackingParameterFilters, ["utm_medium", "utm_campaign"]) ||
     actual.successSettingsAfterLoad.replaceEmailBodyWithMirrorContent !== true ||
     actual.successSettingsAfterLoad.allowHelperOpenWithoutDetectedEmailBody !== true ||
+    actual.successSettingsAfterLoad.autoApplyMirrorOnMobileDevice !== true ||
     actual.successSettingsAfterLoad.autoApplyMirrorForConfiguredSenders !== true ||
     !arrayEquals(actual.successSettingsAfterLoad.autoApplyMirrorSenderEmailList, ["alerts@example.com"])
   ) {
@@ -6108,6 +7095,7 @@ async function runContentSettingsStorageRegression() {
     actual.successSettingsAfterChange.stripKnownTrackingParameters !== true ||
     actual.successSettingsAfterChange.replaceEmailBodyWithMirrorContent !== false ||
     actual.successSettingsAfterChange.allowHelperOpenWithoutDetectedEmailBody !== false ||
+    actual.successSettingsAfterChange.autoApplyMirrorOnMobileDevice !== false ||
     !arrayEquals(actual.successSettingsAfterChange.autoApplyMirrorSenderEmailList, ["news@example.com"])
   ) {
     failures.push("Expected content settings storage handlePipelineStorageChange to apply incoming local changes.");
@@ -6161,6 +7149,7 @@ async function runContentSettingsStorageRegression() {
         trackingParameterFilters: ["utm_medium", "utm_campaign"],
         replaceEmailBodyWithMirrorContent: true,
         allowHelperOpenWithoutDetectedEmailBody: true,
+        autoApplyMirrorOnMobileDevice: true,
         autoApplyMirrorForConfiguredSenders: true,
         autoApplyMirrorSenderEmailList: ["alerts@example.com"]
       },
@@ -6191,6 +7180,7 @@ async function runContentRuntimeLifecycleRegression() {
   const resizeCalls = [];
   const historyCalls = [];
   const observerInstances = [];
+  const intervalCalls = [];
   let latestSnapshot = null;
 
   function createListenerRecorder(targetCollection) {
@@ -6223,6 +7213,13 @@ async function runContentRuntimeLifecycleRegression() {
   };
   const windowObject = {
     addEventListener: createListenerRecorder(windowListeners),
+    setInterval: function setInterval(callback, delayMs) {
+      intervalCalls.push({
+        callback: callback,
+        delayMs: delayMs
+      });
+      return intervalCalls.length;
+    },
     history: {
       pushState: function pushState() {
         historyCalls.push("pushState");
@@ -6340,6 +7337,22 @@ async function runContentRuntimeLifecycleRegression() {
   const registeredDocumentEvents = documentListeners.map(function mapDocumentEvent(listenerDefinition) {
     return listenerDefinition.eventName;
   }).sort();
+  const snapshotAfterInitialize = latestSnapshot;
+  latestSnapshot = null;
+  const scheduleCountBeforePolling = scheduleCalls.length;
+
+  if (intervalCalls[0]) {
+    intervalCalls[0].callback();
+  }
+
+  const scheduleCountAfterPollingWithoutSnapshot = scheduleCalls.length;
+  latestSnapshot = snapshotAfterInitialize;
+
+  if (intervalCalls[0]) {
+    intervalCalls[0].callback();
+  }
+
+  const scheduleCountAfterPollingWithSnapshot = scheduleCalls.length;
 
   if (runtimeListeners[0]) {
     await runtimeListeners[0]({ type: "merged-link-lab:get-email-snapshot" });
@@ -6388,6 +7401,13 @@ async function runContentRuntimeLifecycleRegression() {
     observerCount: observerInstances.length,
     observerObservedTarget: observerInstances[0] ? observerInstances[0].observedTarget : null,
     observerObservedOptions: observerInstances[0] ? observerInstances[0].observedOptions : null,
+    intervalCalls: intervalCalls.map(function mapIntervalCall(intervalCall) {
+      return intervalCall.delayMs;
+    }),
+    snapshotRetryPollingInstalled: initializeResult && initializeResult.snapshotRetryPollingInstalled === true,
+    scheduleCountBeforePolling: scheduleCountBeforePolling,
+    scheduleCountAfterPollingWithoutSnapshot: scheduleCountAfterPollingWithoutSnapshot,
+    scheduleCountAfterPollingWithSnapshot: scheduleCountAfterPollingWithSnapshot,
     loadCallCount: loadCalls.length,
     storageChangeCalls: storageChangeCalls.slice(),
     resizeCallCount: resizeCalls.length,
@@ -6432,9 +7452,10 @@ async function runContentRuntimeLifecycleRegression() {
     actual.initializeResult.initialized !== true ||
     actual.initializeResult.alreadyInitialized !== false ||
     actual.initializeResult.historyWrapped !== true ||
-    actual.initializeResult.hasObserver !== true
+    actual.initializeResult.hasObserver !== true ||
+    actual.initializeResult.snapshotRetryPollingInstalled !== true
   ) {
-    failures.push("Expected content runtime lifecycle initialize to wire observers, history wrapping, and first-load setup.");
+    failures.push("Expected content runtime lifecycle initialize to wire observers, history wrapping, snapshot retry polling, and first-load setup.");
   }
 
   if (
@@ -6446,8 +7467,8 @@ async function runContentRuntimeLifecycleRegression() {
     failures.push("Expected content runtime lifecycle initialize to be idempotent and avoid duplicate listener registration.");
   }
 
-  if (!arrayEquals(actual.registeredDocumentEvents, ["visibilitychange"])) {
-    failures.push("Expected content runtime lifecycle to register the document visibilitychange listener.");
+  if (!arrayEquals(actual.registeredDocumentEvents, ["click", "visibilitychange"])) {
+    failures.push("Expected content runtime lifecycle to register the document visibilitychange and click listeners.");
   }
 
   if (!arrayEquals(actual.registeredWindowEvents, ["focus", "hashchange", "load", "pageshow", "popstate", "resize"])) {
@@ -6463,9 +7484,22 @@ async function runContentRuntimeLifecycleRegression() {
     actual.observerObservedTarget !== documentObject.documentElement ||
     !actual.observerObservedOptions ||
     actual.observerObservedOptions.childList !== true ||
-    actual.observerObservedOptions.subtree !== true
+    actual.observerObservedOptions.subtree !== true ||
+    actual.observerObservedOptions.attributes !== true ||
+    !arrayEquals(actual.observerObservedOptions.attributeFilter, ["class", "style", "hidden", "aria-hidden", "role", "data-message-id"])
   ) {
-    failures.push("Expected content runtime lifecycle to observe document mutations through a MutationObserver.");
+    failures.push("Expected content runtime lifecycle to observe document mutations and relevant visibility attributes through a MutationObserver.");
+  }
+
+  if (!arrayEquals(actual.intervalCalls, [2000]) || !actual.snapshotRetryPollingInstalled) {
+    failures.push("Expected content runtime lifecycle to install snapshot retry polling for Gmail-style delayed body detection.");
+  }
+
+  if (
+    actual.scheduleCountAfterPollingWithoutSnapshot !== actual.scheduleCountBeforePolling + 1 ||
+    actual.scheduleCountAfterPollingWithSnapshot !== actual.scheduleCountAfterPollingWithoutSnapshot
+  ) {
+    failures.push("Expected snapshot retry polling to schedule a sync only while no snapshot is available.");
   }
 
   if (actual.loadCallCount !== 1 || actual.storageChangeCalls.length !== 1) {
@@ -6498,9 +7532,10 @@ async function runContentRuntimeLifecycleRegression() {
     expected: {
       runtimeListenerCount: 1,
       storageListenerCount: 1,
-      registeredDocumentEvents: ["visibilitychange"],
+      registeredDocumentEvents: ["click", "visibilitychange"],
       registeredWindowEvents: ["focus", "hashchange", "load", "pageshow", "popstate", "resize"],
       historyCalls: ["pushState", "replaceState"],
+      intervalCalls: [2000],
       loadCallCount: 1,
       resizeCallCount: 1,
       syncCallCount: 2,
@@ -6524,6 +7559,7 @@ function runEmailCandidateDiscoveryRegression() {
     return {
       id: String(optionBag.id || ""),
       isConnected: optionBag.isConnected !== false,
+      hidden: optionBag.hidden === true,
       isContentEditable: optionBag.isContentEditable === true,
       parentElement: optionBag.parentElement || null,
       innerText: String(optionBag.text || ""),
@@ -6976,6 +8012,12 @@ function runEmailCandidateDiscoveryRegression() {
   });
   const gmailMarkedContainer = createFakeElement({
     id: "gmail-marked-container",
+    parentElement: createFakeElement({
+      id: "gmail-tabpanel-container",
+      attributes: {
+        role: "tabpanel"
+      }
+    }),
     attributes: {
       class: "adn ads",
       "data-message-id": "msg-f:123"
@@ -7011,6 +8053,28 @@ function runEmailCandidateDiscoveryRegression() {
       "a, p, br, blockquote, table, li, img": {}
     }
   });
+  const gmailEmbeddedReplyTextbox = createFakeElement({
+    id: "gmail-embedded-reply-textbox",
+    attributes: {
+      role: "textbox"
+    }
+  });
+  const gmailEmbeddedReplyCandidate = createFakeElement({
+    id: "gmail-embedded-reply-root",
+    parentElement: gmailMarkedContainer,
+    text:
+      "From: Alerts Team\n" +
+      "Subject: Opened message with embedded reply editor\n" +
+      "Review https://example.com/opened-message and confirm the updated account state today.",
+    width: 640,
+    height: 220,
+    top: 180,
+    matchedSelectors: [".a3s.aiL"],
+    querySelectorResults: {
+      "a, p, br, blockquote, table, li, img": {},
+      "[contenteditable='true'], textarea, [role='textbox']": gmailEmbeddedReplyTextbox
+    }
+  });
   const gmailRowFalsePositiveCandidate = createFakeElement({
     id: "gmail-row-false-positive-root",
     parentElement: gmailMarkedRowContainer,
@@ -7034,6 +8098,11 @@ function runEmailCandidateDiscoveryRegression() {
   const gmailLegitimateSearchRoot = {
     querySelectorAll: function querySelectorAll(selector) {
       return selector === ".a3s.aiL" ? [gmailLegitimateCandidate] : [];
+    }
+  };
+  const gmailEmbeddedReplySearchRoot = {
+    querySelectorAll: function querySelectorAll(selector) {
+      return selector === ".a3s.aiL" ? [gmailEmbeddedReplyCandidate] : [];
     }
   };
   const gmailRowFalsePositiveSearchRoot = {
@@ -7150,6 +8219,292 @@ function runEmailCandidateDiscoveryRegression() {
         id: "gmail",
         title: "Gmail",
         hostPattern: /mail\.google\.com$/i
+      }];
+    },
+    isOutlookHost: function isOutlookHost() {
+      return false;
+    },
+    isProtonHost: function isProtonHost() {
+      return false;
+    }
+  });
+  const gmailPreviewPaneDiscovery = emailCandidateDiscovery.create({
+    windowObject: {
+      innerHeight: 1000,
+      location: {
+        hostname: "mail.google.com",
+        pathname: "/mail/u/0/",
+        search: "",
+        hash: "#inbox"
+      }
+    },
+    documentObject: {
+      title: "Gmail preview pane"
+    },
+    cleanInputText: function cleanInputText(value) {
+      return String(value || "").trim();
+    },
+    getDetectionSearchRoots: function getDetectionSearchRoots() {
+      return [gmailLegitimateSearchRoot];
+    },
+    getEmailRootContentElement: function getEmailRootContentElement(element) {
+      return element || null;
+    },
+    measureElementText: function measureElementText(element) {
+      const textValue = String(element && (element.innerText || element.textContent) || "").trim();
+      return {
+        text: textValue,
+        lines: textValue ? textValue.split("\n").filter(Boolean).length : 0,
+        words: textValue ? textValue.split(/\s+/).filter(Boolean).length : 0
+      };
+    },
+    inboxHostPattern: /mail\.google\.com$/i,
+    readViewHintPattern: /message body|email body/i,
+    composeContextHintPattern: /compose/i,
+    standaloneEmailHintPattern: /eml|message\/rfc822/i,
+    outlookMailBodySelector: ".outlook-message-body",
+    inboxBodySelectors: [".a3s.aiL"],
+    standaloneEmailBodySelectors: [],
+    genericInboxContainerSelectors: [],
+    explicitInboxBodySelectors: [".a3s.aiL"],
+    getPrimaryInboxBodySelectors: function getPrimaryInboxBodySelectors() {
+      return [];
+    },
+    getInboxProviderKey: function getInboxProviderKey() {
+      return "";
+    },
+    listProviderDefinitions: function listProviderDefinitions() {
+      return [{
+        id: "gmail",
+        title: "Gmail",
+        hostPattern: /mail\.google\.com$/i
+      }];
+    },
+    isOutlookHost: function isOutlookHost() {
+      return false;
+    },
+    isProtonHost: function isProtonHost() {
+      return false;
+    }
+  });
+  const gmailEmbeddedReplyDiscovery = emailCandidateDiscovery.create({
+    windowObject: {
+      innerHeight: 1000,
+      location: {
+        hostname: "mail.google.com",
+        pathname: "/mail/u/0/",
+        search: "",
+        hash: "#inbox/FMfcgzQZXreply"
+      }
+    },
+    documentObject: {
+      title: "Gmail opened message with reply box"
+    },
+    cleanInputText: function cleanInputText(value) {
+      return String(value || "").trim();
+    },
+    getDetectionSearchRoots: function getDetectionSearchRoots() {
+      return [gmailEmbeddedReplySearchRoot];
+    },
+    getEmailRootContentElement: function getEmailRootContentElement(element) {
+      return element || null;
+    },
+    measureElementText: function measureElementText(element) {
+      const textValue = String(element && (element.innerText || element.textContent) || "").trim();
+      return {
+        text: textValue,
+        lines: textValue ? textValue.split("\n").filter(Boolean).length : 0,
+        words: textValue ? textValue.split(/\s+/).filter(Boolean).length : 0
+      };
+    },
+    inboxHostPattern: /mail\.google\.com$/i,
+    readViewHintPattern: /message body|email body/i,
+    composeContextHintPattern: /compose/i,
+    standaloneEmailHintPattern: /eml|message\/rfc822/i,
+    outlookMailBodySelector: ".outlook-message-body",
+    inboxBodySelectors: [],
+    standaloneEmailBodySelectors: [],
+    genericInboxContainerSelectors: [],
+    explicitInboxBodySelectors: [".a3s.aiL"],
+    getPrimaryInboxBodySelectors: function getPrimaryInboxBodySelectors() {
+      return [".a3s.aiL"];
+    },
+    getInboxProviderKey: function getInboxProviderKey() {
+      return "gmail";
+    },
+    listProviderDefinitions: function listProviderDefinitions() {
+      return [{
+        id: "gmail",
+        title: "Gmail",
+        hostPattern: /mail\.google\.com$/i
+      }];
+    },
+    isOutlookHost: function isOutlookHost() {
+      return false;
+    },
+    isProtonHost: function isProtonHost() {
+      return false;
+    }
+  });
+  const gmailHiddenLegitimateCandidate = createFakeElement({
+    id: "gmail-hidden-legitimate-root",
+    parentElement: gmailMarkedContainer,
+    hidden: true,
+    text:
+      "From: Hidden Alerts Team\n" +
+      "Subject: Hidden message body\n" +
+      "Visit https://example.com/hidden immediately for the body content.",
+    width: 640,
+    height: 320,
+    top: 220,
+    matchedSelectors: [".a3s.aiL"],
+    querySelectorResults: {
+      "a, p, br, blockquote, table, li, img": {}
+    }
+  });
+  const gmailHiddenLegitimateSearchRoot = {
+    querySelectorAll: function querySelectorAll(selector) {
+      return selector === ".a3s.aiL" ? [gmailHiddenLegitimateCandidate] : [];
+    }
+  };
+  const gmailHiddenClientDiscovery = emailCandidateDiscovery.create({
+    windowObject: {
+      innerHeight: 1000,
+      location: {
+        hostname: "mail.google.com",
+        pathname: "/mail/u/0/",
+        search: "",
+        hash: "#inbox"
+      }
+    },
+    documentObject: {
+      title: "Gmail inbox"
+    },
+    cleanInputText: function cleanInputText(value) {
+      return String(value || "").trim();
+    },
+    getDetectionSearchRoots: function getDetectionSearchRoots() {
+      return [gmailHiddenLegitimateSearchRoot];
+    },
+    getEmailRootContentElement: function getEmailRootContentElement(element) {
+      return element || null;
+    },
+    measureElementText: function measureElementText(element) {
+      const textValue = String(element && (element.innerText || element.textContent) || "").trim();
+      return {
+        text: textValue,
+        lines: textValue ? textValue.split("\n").filter(Boolean).length : 0,
+        words: textValue ? textValue.split(/\s+/).filter(Boolean).length : 0
+      };
+    },
+    inboxHostPattern: /mail\.google\.com$/i,
+    readViewHintPattern: /message body|email body/i,
+    composeContextHintPattern: /compose/i,
+    standaloneEmailHintPattern: /eml|message\/rfc822/i,
+    outlookMailBodySelector: ".outlook-message-body",
+    inboxBodySelectors: [".a3s.aiL"],
+    standaloneEmailBodySelectors: [],
+    genericInboxContainerSelectors: [],
+    explicitInboxBodySelectors: [".a3s.aiL"],
+    getPrimaryInboxBodySelectors: function getPrimaryInboxBodySelectors() {
+      return [];
+    },
+    getInboxProviderKey: function getInboxProviderKey() {
+      return "";
+    },
+    listProviderDefinitions: function listProviderDefinitions() {
+      return [{
+        id: "gmail",
+        title: "Gmail",
+        hostPattern: /mail\.google\.com$/i
+      }];
+    },
+    isOutlookHost: function isOutlookHost() {
+      return false;
+    },
+    isProtonHost: function isProtonHost() {
+      return false;
+    }
+  });
+  const gmailGenericClientContainer = createFakeElement({
+    id: "gmail-generic-client-container",
+    attributes: {
+      role: "main",
+      class: "gmail-shell"
+    },
+    text:
+      "Primary\n" +
+      "GitHub Sudo email verification code Apr 8 Please verify your identity.\n" +
+      "Security alert Apr 7 A new sign-in on Android.",
+    width: 1280,
+    height: 760,
+    top: 40,
+    querySelectorResults: {
+      ".a3s.aiL": { id: "hidden-descendant-marker" }
+    }
+  });
+  const gmailGenericClientSearchRoot = {
+    querySelectorAll: function querySelectorAll(selector) {
+      return selector === "[role='main']" ? [gmailGenericClientContainer] : [];
+    }
+  };
+  const gmailGenericClientDiscovery = emailCandidateDiscovery.create({
+    windowObject: {
+      innerHeight: 1000,
+      location: {
+        hostname: "mail.google.com",
+        pathname: "/mail/u/0/",
+        search: "",
+        hash: "#inbox"
+      }
+    },
+    documentObject: {
+      title: "Gmail inbox"
+    },
+    cleanInputText: function cleanInputText(value) {
+      return String(value || "").trim();
+    },
+    getDetectionSearchRoots: function getDetectionSearchRoots() {
+      return [gmailGenericClientSearchRoot];
+    },
+    getEmailRootContentElement: function getEmailRootContentElement(element) {
+      return element || null;
+    },
+    measureElementText: function measureElementText(element) {
+      const textValue = String(element && (element.innerText || element.textContent) || "").trim();
+      return {
+        text: textValue,
+        lines: textValue ? textValue.split("\n").filter(Boolean).length : 0,
+        words: textValue ? textValue.split(/\s+/).filter(Boolean).length : 0
+      };
+    },
+    inboxHostPattern: /mail\.google\.com$/i,
+    readViewHintPattern: /message body|email body/i,
+    composeContextHintPattern: /compose/i,
+    standaloneEmailHintPattern: /eml|message\/rfc822/i,
+    outlookMailBodySelector: ".outlook-message-body",
+    inboxBodySelectors: [".a3s.aiL", "[role='main']"],
+    standaloneEmailBodySelectors: [],
+    genericInboxContainerSelectors: ["[role='main']"],
+    explicitInboxBodySelectors: [".a3s.aiL"],
+    getPrimaryInboxBodySelectors: function getPrimaryInboxBodySelectors() {
+      return [];
+    },
+    getInboxProviderKey: function getInboxProviderKey() {
+      return "";
+    },
+    listProviderDefinitions: function listProviderDefinitions() {
+      return [{
+        id: "gmail",
+        title: "Gmail",
+        hostPattern: /mail\.google\.com$/i,
+        primaryInboxBodySelectors: [
+          "div.maincontent",
+          "div.AO div.adn.ads[data-message-id] .a3s.aiL",
+          "div.AO div[data-message-id].adn.ads .a3s.aiL",
+          "[data-message-id] .a3s.aiL",
+          ".a3s.aiL"
+        ]
       }];
     },
     isOutlookHost: function isOutlookHost() {
@@ -7279,6 +8634,10 @@ function runEmailCandidateDiscoveryRegression() {
   });
   const gmailFalsePositiveCandidates = gmailFalsePositiveDiscovery.getInboxRootCandidates();
   const gmailLegitimateCandidates = gmailLegitimateDiscovery.getInboxRootCandidates();
+  const gmailPreviewPaneCandidates = gmailPreviewPaneDiscovery.getInboxRootCandidates();
+  const gmailEmbeddedReplyCandidates = gmailEmbeddedReplyDiscovery.getInboxRootCandidates();
+  const gmailHiddenClientCandidates = gmailHiddenClientDiscovery.getInboxRootCandidates();
+  const gmailGenericClientCandidates = gmailGenericClientDiscovery.getInboxRootCandidates();
   const gmailMarkedClientCandidates = gmailMarkedClientDiscovery.getInboxRootCandidates();
   const gmailRowFalsePositiveCandidates = gmailRowFalsePositiveDiscovery.getInboxRootCandidates();
   const gmailMarkedClientFailure = gmailMarkedClientDiscovery.getInboxDetectionFailure(gmailMarkedClientCandidates);
@@ -7311,6 +8670,18 @@ function runEmailCandidateDiscoveryRegression() {
       return candidate && candidate.root && candidate.root.id ? candidate.root.id : "";
     }),
     gmailLegitimateCandidateRootIds: gmailLegitimateCandidates.map(function mapGmailLegitimateCandidateRootId(candidate) {
+      return candidate && candidate.root && candidate.root.id ? candidate.root.id : "";
+    }),
+    gmailPreviewPaneCandidateRootIds: gmailPreviewPaneCandidates.map(function mapGmailPreviewPaneCandidateRootId(candidate) {
+      return candidate && candidate.root && candidate.root.id ? candidate.root.id : "";
+    }),
+    gmailEmbeddedReplyCandidateRootIds: gmailEmbeddedReplyCandidates.map(function mapGmailEmbeddedReplyCandidateRootId(candidate) {
+      return candidate && candidate.root && candidate.root.id ? candidate.root.id : "";
+    }),
+    gmailHiddenClientCandidateRootIds: gmailHiddenClientCandidates.map(function mapGmailHiddenClientCandidateRootId(candidate) {
+      return candidate && candidate.root && candidate.root.id ? candidate.root.id : "";
+    }),
+    gmailGenericClientCandidateRootIds: gmailGenericClientCandidates.map(function mapGmailGenericClientCandidateRootId(candidate) {
       return candidate && candidate.root && candidate.root.id ? candidate.root.id : "";
     }),
     gmailMarkedClientCandidateRootIds: gmailMarkedClientCandidates.map(function mapGmailMarkedClientCandidateRootId(candidate) {
@@ -7378,8 +8749,24 @@ function runEmailCandidateDiscoveryRegression() {
     failures.push("Expected email candidate discovery to keep Gmail message bodies that include read-view markers.");
   }
 
-  if (!arrayEquals(actual.gmailMarkedClientCandidateRootIds, []) || actual.gmailMarkedClientFailureKind !== "provider-path-mismatch") {
-    failures.push("Expected email candidate discovery to reject Gmail inbox client views even when the DOM already contains Gmail message-body markers.");
+  if (!arrayEquals(actual.gmailPreviewPaneCandidateRootIds, ["gmail-legitimate-root"])) {
+    failures.push("Expected email candidate discovery to keep a visible Gmail preview-pane message body even when Gmail keeps the hash at #inbox.");
+  }
+
+  if (!arrayEquals(actual.gmailEmbeddedReplyCandidateRootIds, ["gmail-embedded-reply-root"])) {
+    failures.push("Expected email candidate discovery to keep a Gmail message body when the same body container also includes an embedded reply textbox.");
+  }
+
+  if (!arrayEquals(actual.gmailHiddenClientCandidateRootIds, [])) {
+    failures.push("Expected email candidate discovery to ignore hidden Gmail message roots so stale client-view DOM cannot keep the helper bubble visible.");
+  }
+
+  if (!arrayEquals(actual.gmailGenericClientCandidateRootIds, [])) {
+    failures.push("Expected email candidate discovery to ignore generic Gmail inbox containers on #inbox and only trust explicit Gmail body selectors.");
+  }
+
+  if (!arrayEquals(actual.gmailMarkedClientCandidateRootIds, ["gmail-legitimate-root"]) || actual.gmailMarkedClientFailureKind !== "") {
+    failures.push("Expected email candidate discovery to keep a visible Gmail preview-pane message body even when Gmail keeps the hash at #inbox.");
   }
 
   if (!arrayEquals(actual.gmailRowFalsePositiveCandidateRootIds, [])) {
@@ -7413,8 +8800,12 @@ function runEmailCandidateDiscoveryRegression() {
       shortExplicitCandidateRootIds: ["short-gmail-root"],
       gmailFalsePositiveCandidateRootIds: [],
       gmailLegitimateCandidateRootIds: ["gmail-legitimate-root"],
-      gmailMarkedClientCandidateRootIds: [],
-      gmailMarkedClientFailureKind: "provider-path-mismatch",
+      gmailPreviewPaneCandidateRootIds: ["gmail-legitimate-root"],
+      gmailEmbeddedReplyCandidateRootIds: ["gmail-embedded-reply-root"],
+      gmailHiddenClientCandidateRootIds: [],
+      gmailGenericClientCandidateRootIds: [],
+      gmailMarkedClientCandidateRootIds: ["gmail-legitimate-root"],
+      gmailMarkedClientFailureKind: "",
       gmailRowFalsePositiveCandidateRootIds: []
     },
     targetExpected: null,
@@ -7446,6 +8837,18 @@ function runInboxDetectorRegression() {
     inboxDetectors && inboxDetectors.selectors && Array.isArray(inboxDetectors.selectors.standaloneEmailBody)
       ? inboxDetectors.selectors.standaloneEmailBody.slice()
       : [];
+  const gmailInboxLocation = {
+    hostname: "mail.google.com",
+    pathname: "/mail/u/0/",
+    search: "",
+    hash: "#inbox"
+  };
+  const gmailMessageLocation = {
+    hostname: "mail.google.com",
+    pathname: "/mail/u/0/",
+    search: "",
+    hash: "#inbox/FMfcgzQbdrVWhsPjvcjBMQhCpcVJgpnB"
+  };
   const actual = {
     hasInboxDetectorRegistry: !!inboxDetectorRegistry,
     hasInboxDetectors: !!inboxDetectors,
@@ -7459,7 +8862,19 @@ function runInboxDetectorRegression() {
     ),
     gmailHasMainContentSelector: gmailPrimarySelectors.indexOf("div.maincontent") !== -1,
     inboxHasMainContentSelector: inboxBodySelectors.indexOf("div.maincontent") !== -1,
-    standaloneHasMainContentSelector: standaloneEmailBodySelectors.indexOf("div.maincontent") !== -1
+    standaloneHasMainContentSelector: standaloneEmailBodySelectors.indexOf("div.maincontent") !== -1,
+    gmailInboxProviderKey: inboxDetectors && typeof inboxDetectors.getInboxProviderKey === "function"
+      ? inboxDetectors.getInboxProviderKey(gmailInboxLocation)
+      : "",
+    gmailMessageProviderKey: inboxDetectors && typeof inboxDetectors.getInboxProviderKey === "function"
+      ? inboxDetectors.getInboxProviderKey(gmailMessageLocation)
+      : "",
+    gmailInboxPrimarySelectorCount: inboxDetectors && typeof inboxDetectors.getPrimaryInboxBodySelectors === "function"
+      ? inboxDetectors.getPrimaryInboxBodySelectors(gmailInboxLocation).length
+      : -1,
+    gmailMessagePrimarySelectorCount: inboxDetectors && typeof inboxDetectors.getPrimaryInboxBodySelectors === "function"
+      ? inboxDetectors.getPrimaryInboxBodySelectors(gmailMessageLocation).length
+      : -1
   };
   const failures = [];
 
@@ -7491,6 +8906,14 @@ function runInboxDetectorRegression() {
     failures.push("Expected standalone email selectors to include \"div.maincontent\".");
   }
 
+  if (actual.gmailInboxProviderKey !== "" || actual.gmailInboxPrimarySelectorCount <= 0) {
+    failures.push("Expected Gmail inbox list locations to remain non-read-view routes while still exposing Gmail body selectors for DOM-first preview-pane detection.");
+  }
+
+  if (actual.gmailMessageProviderKey !== "gmail" || actual.gmailMessagePrimarySelectorCount <= 0) {
+    failures.push("Expected Gmail opened-message locations to resolve as the Gmail provider and expose primary inbox-body selectors.");
+  }
+
   return {
     id: "module-inbox-detectors",
     title: "Inbox detectors include Gmail full-message maincontent selector",
@@ -7505,7 +8928,10 @@ function runInboxDetectorRegression() {
       gmailRegistryHasMainContentSelector: true,
       gmailHasMainContentSelector: true,
       inboxHasMainContentSelector: true,
-      standaloneHasMainContentSelector: true
+      standaloneHasMainContentSelector: true,
+      gmailInboxProviderKey: "",
+      gmailMessageProviderKey: "gmail",
+      gmailInboxPrimarySelectorCount: gmailPrimarySelectors.length
     },
     targetExpected: null,
     actual: actual,
@@ -8250,9 +9676,14 @@ async function runSmokeSuite() {
   const pipelineResults = testCases.flattenCases(suiteDefinition).map(runPipelineCase);
   const moduleResults = [
     runDebugRedactionRegression(),
+    runDebugHelperGatingRegression(),
     runExtensionPageDomContractRegression(),
     runPageFactoryRegression(),
     runExtensionPageHelperCouplingRegression(),
+    runWorkbenchAppSanitizerRegression(),
+    runComponentKitEmptyIdGuardRegression(),
+    runPageNavigationMobileVisibilityRegression(),
+    await runBackgroundMobileToolbarActionRegression(),
     runDetectorCatalogRegression(),
     runCatalogDriftRegression(),
     runCatalogGoldenRegression(),
@@ -8260,6 +9691,8 @@ async function runSmokeSuite() {
     runPipelineDetectionRegression(),
     runPipelineResolutionRegression(),
     runPipelineAssemblyRegression(),
+    runPipelineHtmlRewriterAnchorLookupRegression(),
+    runPipelineRewriteFallbackWiringRegression(),
     runPipelineDiagnosticsRegression(),
     runEmailLinkRegression(),
     runInboxDetectorRegression(),

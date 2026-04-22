@@ -43,6 +43,7 @@ function urlForensicsContentSettingsStorageBuildKeyOptions(optionBag) {
     trackingParameterFiltersStorageKey: String(optionBag.trackingParameterFiltersStorageKey || ""),
     replaceEmailBodyWithMirrorContentStorageKey: String(optionBag.replaceEmailBodyWithMirrorContentStorageKey || ""),
     allowHelperOpenWithoutDetectedEmailBodyStorageKey: String(optionBag.allowHelperOpenWithoutDetectedEmailBodyStorageKey || ""),
+    autoApplyMirrorOnMobileDeviceStorageKey: String(optionBag.autoApplyMirrorOnMobileDeviceStorageKey || ""),
     autoApplyMirrorForConfiguredSendersStorageKey: String(optionBag.autoApplyMirrorForConfiguredSendersStorageKey || ""),
     autoApplyMirrorSenderEmailListStorageKey: String(optionBag.autoApplyMirrorSenderEmailListStorageKey || ""),
     legacyAutoApplyMirrorForNamedSenderStorageKey: String(optionBag.legacyAutoApplyMirrorForNamedSenderStorageKey || "")
@@ -162,6 +163,11 @@ function urlForensicsContentSettingsStorageBuildSnapshotValues(normalizedStoredS
       options.allowHelperOpenWithoutDetectedEmailBodyStorageKey,
       options.extensionSettings.allowHelperOpenWithoutDetectedEmailBody
     ),
+    autoApplyMirrorOnMobileDevice: options.buildStorageBooleanSnapshotEntry(
+      normalizedStoredSettings,
+      options.autoApplyMirrorOnMobileDeviceStorageKey,
+      options.extensionSettings.autoApplyMirrorOnMobileDevice
+    ),
     autoApplyMirrorForConfiguredSenders: options.buildStorageBooleanSnapshotEntry(
       normalizedStoredSettings,
       options.autoApplyMirrorForConfiguredSendersStorageKey,
@@ -215,6 +221,10 @@ function urlForensicsContentSettingsStorageApplyStoredReplaceEmailBodySetting(ne
 
 function urlForensicsContentSettingsStorageApplyStoredAllowHelperOpenWithoutDetectedEmailBodySetting(nextValue, options) {
   options.extensionSettings.allowHelperOpenWithoutDetectedEmailBody = nextValue === true;
+}
+
+function urlForensicsContentSettingsStorageApplyStoredAutoApplyMirrorOnMobileDeviceSetting(nextValue, options) {
+  options.extensionSettings.autoApplyMirrorOnMobileDevice = nextValue === true;
 }
 
 function urlForensicsContentSettingsStorageGetBooleanStoredValue(storedSettings, storageKey, defaultValue, options) {
@@ -277,6 +287,19 @@ function urlForensicsContentSettingsStorageApplyLoadedSettings(storedSettings, o
     ),
     options
   );
+  urlForensicsContentSettingsStorageApplyStoredAutoApplyMirrorOnMobileDeviceSetting(
+    urlForensicsContentSettingsStorageGetBooleanStoredValue(
+      storedSettings,
+      options.autoApplyMirrorOnMobileDeviceStorageKey,
+      urlForensicsContentSettingsStorageGetDefaultSetting(
+        options.storageModel,
+        "autoApplyMirrorOnMobileDevice",
+        false
+      ),
+      options
+    ),
+    options
+  );
   options.applyStoredAutoApplyMirrorForConfiguredSendersSetting(
     options.resolveStoredAutoApplyConfiguredSendersValue(storedSettings)
   );
@@ -293,6 +316,7 @@ function urlForensicsContentSettingsStorageLogLoadedSettings(options) {
     trackingParameterFilters: options.extensionSettings.trackingParameterFilters,
     replaceEmailBodyWithMirrorContent: options.extensionSettings.replaceEmailBodyWithMirrorContent,
     allowHelperOpenWithoutDetectedEmailBody: options.extensionSettings.allowHelperOpenWithoutDetectedEmailBody,
+    autoApplyMirrorOnMobileDevice: options.extensionSettings.autoApplyMirrorOnMobileDevice,
     autoApplyMirrorForConfiguredSenders: options.extensionSettings.autoApplyMirrorForConfiguredSenders,
     autoApplyMirrorSenderEmailCount:
       Array.isArray(options.extensionSettings.autoApplyMirrorSenderEmailList)
@@ -309,6 +333,7 @@ function urlForensicsContentSettingsStorageBuildChangedStoredSettings(options) {
     [options.replaceEmailBodyWithMirrorContentStorageKey]: options.extensionSettings.replaceEmailBodyWithMirrorContent,
     [options.allowHelperOpenWithoutDetectedEmailBodyStorageKey]:
       options.extensionSettings.allowHelperOpenWithoutDetectedEmailBody,
+    [options.autoApplyMirrorOnMobileDeviceStorageKey]: options.extensionSettings.autoApplyMirrorOnMobileDevice,
     [options.autoApplyMirrorForConfiguredSendersStorageKey]: options.extensionSettings.autoApplyMirrorForConfiguredSenders,
     [options.autoApplyMirrorSenderEmailListStorageKey]:
       Array.isArray(options.extensionSettings.autoApplyMirrorSenderEmailList)
@@ -358,6 +383,12 @@ function urlForensicsContentSettingsStorageApplyPrimaryChangeEntries(changes, op
       key: options.allowHelperOpenWithoutDetectedEmailBodyStorageKey,
       applyValue: function applyAllowHelperOpenWithoutDetectedEmailBodyValue(nextValue) {
         urlForensicsContentSettingsStorageApplyStoredAllowHelperOpenWithoutDetectedEmailBodySetting(nextValue, options);
+      }
+    },
+    {
+      key: options.autoApplyMirrorOnMobileDeviceStorageKey,
+      applyValue: function applyAutoApplyMirrorOnMobileDeviceValue(nextValue) {
+        urlForensicsContentSettingsStorageApplyStoredAutoApplyMirrorOnMobileDeviceSetting(nextValue, options);
       }
     }
   ].forEach(function applyChangeHandler(changeHandler) {
@@ -554,6 +585,13 @@ function urlForensicsContentSettingsStorageCreate(options) {
     applyStoredAllowHelperOpenWithoutDetectedEmailBodySetting:
       function applyStoredAllowHelperOpenWithoutDetectedEmailBodySetting(nextValue) {
         urlForensicsContentSettingsStorageApplyStoredAllowHelperOpenWithoutDetectedEmailBodySetting(
+          nextValue,
+          resolvedOptions
+        );
+      },
+    applyStoredAutoApplyMirrorOnMobileDeviceSetting:
+      function applyStoredAutoApplyMirrorOnMobileDeviceSetting(nextValue) {
+        urlForensicsContentSettingsStorageApplyStoredAutoApplyMirrorOnMobileDeviceSetting(
           nextValue,
           resolvedOptions
         );

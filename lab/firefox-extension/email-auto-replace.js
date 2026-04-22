@@ -4,9 +4,33 @@ function urlForensicsEmailAutoReplaceResolveFunction(candidateValue, fallbackVal
   return typeof candidateValue === "function" ? candidateValue : fallbackValue;
 }
 
+function urlForensicsEmailAutoReplaceResolveMobileDeviceHelper() {
+  if (typeof globalThis !== "undefined" && globalThis.urlForensicsMobileDevice) {
+    return globalThis.urlForensicsMobileDevice;
+  }
+
+  if (typeof require === "function") {
+    try {
+      return require("./mobile-device.js");
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
 function urlForensicsEmailAutoReplaceBuildEnvironmentOptions(optionBag) {
+  const resolvedWindowObject = optionBag.windowObject || (typeof window !== "undefined" ? window : null);
+  const resolvedNavigatorObject =
+    optionBag.navigatorObject ||
+    (resolvedWindowObject && resolvedWindowObject.navigator ? resolvedWindowObject.navigator : null) ||
+    (typeof navigator !== "undefined" ? navigator : null);
+
   return {
     documentObject: optionBag.documentObject || (typeof document !== "undefined" ? document : null),
+    windowObject: resolvedWindowObject,
+    navigatorObject: resolvedNavigatorObject,
     getActiveEmailRoot: urlForensicsEmailAutoReplaceResolveFunction(
       optionBag.getActiveEmailRoot,
       function getMissingActiveEmailRoot() {
@@ -29,6 +53,12 @@ function urlForensicsEmailAutoReplaceBuildEnvironmentOptions(optionBag) {
       optionBag.getAutoApplyMirrorSenderHeaderPattern,
       function getMissingAutoApplyMirrorSenderHeaderPattern() {
         return null;
+      }
+    ),
+    isMobileDevice: urlForensicsEmailAutoReplaceResolveFunction(
+      optionBag.isMobileDevice,
+      function detectMobileDeviceFromBrowserSignals() {
+        return urlForensicsEmailAutoReplaceIsMobileDeviceDetected(resolvedWindowObject, resolvedNavigatorObject);
       }
     )
   };
@@ -57,6 +87,12 @@ function urlForensicsEmailAutoReplaceBuildStateOptions(optionBag) {
         return false;
       }
     ),
+    getAutoApplyMirrorOnMobileDeviceEnabled: urlForensicsEmailAutoReplaceResolveFunction(
+      optionBag.getAutoApplyMirrorOnMobileDeviceEnabled,
+      function getMissingAutoApplyMirrorOnMobileDeviceEnabled() {
+        return false;
+      }
+    ),
     getAutoApplyMirrorSenderEmailList: urlForensicsEmailAutoReplaceResolveFunction(
       optionBag.getAutoApplyMirrorSenderEmailList,
       function getMissingAutoApplyMirrorSenderEmailList() {
@@ -75,6 +111,16 @@ function urlForensicsEmailAutoReplaceCreateDefaultOptions(options) {
     urlForensicsEmailAutoReplaceBuildRuleOptions(optionBag),
     urlForensicsEmailAutoReplaceBuildStateOptions(optionBag)
   ));
+}
+
+function urlForensicsEmailAutoReplaceIsMobileDeviceDetected(windowObject, navigatorObject) {
+  const mobileDeviceHelper = urlForensicsEmailAutoReplaceResolveMobileDeviceHelper();
+
+  return !!(
+    mobileDeviceHelper &&
+    typeof mobileDeviceHelper.isMobileDeviceDetected === "function" &&
+    mobileDeviceHelper.isMobileDeviceDetected(windowObject, navigatorObject)
+  );
 }
 
 function urlForensicsEmailAutoReplaceGetMessageScope(root) {
@@ -180,11 +226,17 @@ function urlForensicsEmailAutoReplaceIsConfiguredSenderDetected(snapshot, option
   });
 }
 
+function urlForensicsEmailAutoReplaceIsMobileAutoReplaceEnabled(options) {
+  return options.getAutoApplyMirrorOnMobileDeviceEnabled() === true && options.isMobileDevice() === true;
+}
+
 function urlForensicsEmailAutoReplaceShouldAutoReplace(snapshot, options) {
-  if (
-    options.getAutoApplyMirrorForConfiguredSendersEnabled() !== true ||
-    !urlForensicsEmailAutoReplaceIsConfiguredSenderDetected(snapshot, options)
-  ) {
+  const shouldAutoReplaceForConfiguredSender =
+    options.getAutoApplyMirrorForConfiguredSendersEnabled() === true &&
+    urlForensicsEmailAutoReplaceIsConfiguredSenderDetected(snapshot, options);
+  const shouldAutoReplaceForMobileDevice = urlForensicsEmailAutoReplaceIsMobileAutoReplaceEnabled(options);
+
+  if (!shouldAutoReplaceForConfiguredSender && !shouldAutoReplaceForMobileDevice) {
     return false;
   }
 
@@ -208,6 +260,9 @@ function urlForensicsEmailAutoReplaceCreate(options) {
     },
     hasNativeEmailExpansionControl: function hasNativeEmailExpansionControl(root) {
       return urlForensicsEmailAutoReplaceHasNativeExpansionControl(root, resolvedOptions);
+    },
+    isMobileDeviceDetected: function isMobileDeviceDetected() {
+      return resolvedOptions.isMobileDevice() === true;
     },
     isConfiguredSenderDetected: function isConfiguredSenderDetected(snapshot) {
       return urlForensicsEmailAutoReplaceIsConfiguredSenderDetected(snapshot, resolvedOptions);

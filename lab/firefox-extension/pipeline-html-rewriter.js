@@ -302,12 +302,8 @@ function urlForensicsPipelineHtmlRewriteAnchors(context, rootNode, replacementLo
 
   Array.from(rootNode.querySelectorAll("a[href]")).forEach(function rewriteAnchor(anchorElement) {
     const originalHref = context.convertValueToString(anchorElement.getAttribute("href")).trim();
-
-    if (!urlForensicsPipelineHtmlIsDirectDetectedHref(context, originalHref, options)) {
-      return;
-    }
-
     const replacementUrl = urlForensicsPipelineHtmlLookupReplacementUrl(context, replacementLookup, originalHref, options);
+
     if (!replacementUrl) {
       return;
     }

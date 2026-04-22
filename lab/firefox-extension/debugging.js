@@ -15,23 +15,28 @@
   });
   const extensionApi = pageRuntime.extensionApi;
   const pageUi = pageRuntime.pageUi;
-  const defaultDebugConfig = {
-    level: "off",
-    categories: {
-      error: true,
-      runtime: true,
-      storage: true,
-      messaging: true,
-      ui: true,
-      pipeline: true,
-      function: false,
-      conditional: false,
-      loop: false,
-      variable: false
-    }
-  };
-  const pageChoicesStorageKey = "programDebugPageChoices";
-  const maxVisibleRenderLimit = 10000;
+  const debugConfigModel = globalScope && globalScope.urlForensicsDebugConfig ? globalScope.urlForensicsDebugConfig : null;
+  const defaultDebugConfig = debugConfigModel
+    ? debugConfigModel.defaultConfig
+    : {
+      level: "off",
+      categories: {
+        error: true,
+        runtime: true,
+        storage: true,
+        messaging: true,
+        ui: true,
+        pipeline: true,
+        function: false,
+        conditional: false,
+        loop: false,
+        variable: false
+      }
+    };
+  const pageChoicesStorageKey = debugConfigModel
+    ? debugConfigModel.storageKeys.programDebugPageChoices
+    : "programDebugPageChoices";
+  const maxVisibleRenderLimit = debugConfigModel ? 10000 : 10000;
   const debugState = {
     config: {
       level: defaultDebugConfig.level,
@@ -216,6 +221,10 @@
 
   // Function: clone debug config.
   function cloneDebugConfig(config) {
+    if (debugConfigModel && typeof debugConfigModel.cloneConfig === "function") {
+      return debugConfigModel.cloneConfig(config);
+    }
+
     const safeConfig = config && typeof config === "object" ? config : defaultDebugConfig;
     const safeCategories = safeConfig.categories && typeof safeConfig.categories === "object"
       ? safeConfig.categories

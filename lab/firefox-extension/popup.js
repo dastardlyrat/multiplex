@@ -54,6 +54,32 @@
     pageUi.setStatusText(DOM.statusMessage, message, tone);
   }
 
+  // Function: check whether the toolbar is running on a mobile device.
+  function isMobileDeviceDetected() {
+    const pageNavigation = globalScope && globalScope.urlForensicsPageNavigation
+      ? globalScope.urlForensicsPageNavigation
+      : null;
+
+    return !!(
+      pageNavigation &&
+      typeof pageNavigation.isMobileDeviceDetected === "function" &&
+      pageNavigation.isMobileDeviceDetected()
+    );
+  }
+
+  // Function: hide helper launch controls that are not available on mobile.
+  function syncMobileToolbarControls() {
+    if (!DOM.openPagePaneButton) {
+      return false;
+    }
+
+    const shouldHideHelperButton = isMobileDeviceDetected();
+    DOM.openPagePaneButton.hidden = shouldHideHelperButton;
+    DOM.openPagePaneButton.disabled = shouldHideHelperButton;
+    DOM.openPagePaneButton.setAttribute("aria-hidden", shouldHideHelperButton ? "true" : "false");
+    return shouldHideHelperButton;
+  }
+
   // Function: apply default settings.
   function applyDefaultSettings() {
     if (DOM.enableUrlNormalizationRepair) {
@@ -310,6 +336,11 @@
 
   // Function: open in-page helper.
   async function openInPageHelper() {
+    if (isMobileDeviceDetected()) {
+      setStatus("Helper launch is hidden on mobile devices.", "error");
+      return;
+    }
+
     if (debugApi) {
       debugApi.ui("popup open helper clicked");
     }
@@ -366,7 +397,7 @@
 
   // Function: bind ui.
   function bindUi() {
-    if (DOM.openPagePaneButton) {
+    if (DOM.openPagePaneButton && DOM.openPagePaneButton.hidden !== true) {
       DOM.openPagePaneButton.addEventListener("click", openInPageHelper);
     }
 
@@ -394,6 +425,7 @@
       DOM.extensionVersion.textContent = "v" + String(manifest && manifest.version ? manifest.version : "0.0.0");
     }
 
+    syncMobileToolbarControls();
     bindUi();
     await loadSettings();
     setStatus("Controls ready.", "");

@@ -124,6 +124,10 @@ function urlForensicsPagePaneMirrorDisableSameDocumentLinksInMarkup(htmlMarkup, 
 function urlForensicsPagePaneMirrorBuildFrameDocument(htmlMarkup, options) {
   const optionBag = options && typeof options === "object" ? options : {};
   const shouldDisableSameDocumentLinks = optionBag.disableSameDocumentLinks === true;
+  const emptyMarkup = String(
+    optionBag.emptyMarkup ||
+    '<div class="merged-link-lab-mirror-empty">Open an inbox email to mirror its formatted body here.</div>'
+  );
   const mirrorBaseUrl = String(
     optionBag.baseUrl ||
     (optionBag.windowObject && optionBag.windowObject.location && optionBag.windowObject.location.href) ||
@@ -137,9 +141,9 @@ function urlForensicsPagePaneMirrorBuildFrameDocument(htmlMarkup, options) {
           mirrorBaseUrl,
           optionBag.DOMParserClass
         )
-        : htmlMarkup
-    )
-    : '<div class="merged-link-lab-mirror-empty">Open an inbox email to mirror its formatted body here.</div>';
+          : htmlMarkup
+      )
+    : emptyMarkup;
 
   return [
     "<!doctype html>",
@@ -156,7 +160,7 @@ function urlForensicsPagePaneMirrorBuildFrameDocument(htmlMarkup, options) {
     shouldDisableSameDocumentLinks
       ? "    a[data-merged-link-lab-disabled-link='true'] { color: #4a4a4a; text-decoration: none; cursor: default; }"
       : "",
-    "    .merged-link-lab-mirror-empty {",
+    "    .merged-link-lab-mirror-empty, .merged-link-lab-backup-empty, .merged-link-lab-backup-plain {",
     "      padding: 18px;",
     "      border: 1px dashed #cfcfcf;",
     "      border-radius: 10px;",
@@ -164,6 +168,7 @@ function urlForensicsPagePaneMirrorBuildFrameDocument(htmlMarkup, options) {
     "      font: 13px/1.5 Arial, sans-serif;",
     "      color: #4a4a4a;",
     "    }",
+    "    .merged-link-lab-backup-plain { white-space: pre-wrap; word-break: break-word; }",
     "  </style>",
     "</head>",
     "<body>",
@@ -430,16 +435,22 @@ function urlForensicsPagePaneMirrorSetHoverLinkPanelExpanded(elements, isExpande
 
 function urlForensicsPagePaneMirrorRenderMarkup(state, elements, resolvedOptions, htmlMarkup, options) {
   const optionBag = options && typeof options === "object" ? options : {};
-  urlForensicsPagePaneMirrorClearHoverListener(state);
+  const renderTarget = optionBag.targetElement || elements.convertedPane;
+  const isConvertedPaneTarget = renderTarget === elements.convertedPane;
 
-  if (!elements.convertedPane) {
+  if (isConvertedPaneTarget) {
+    urlForensicsPagePaneMirrorClearHoverListener(state);
+  }
+
+  if (!renderTarget) {
     return;
   }
 
-  if (String(elements.convertedPane.tagName || "").toUpperCase() === "IFRAME") {
-    elements.convertedPane.srcdoc = urlForensicsPagePaneMirrorBuildFrameDocument(htmlMarkup, {
+  if (String(renderTarget.tagName || "").toUpperCase() === "IFRAME") {
+    renderTarget.srcdoc = urlForensicsPagePaneMirrorBuildFrameDocument(htmlMarkup, {
       disableSameDocumentLinks: optionBag.disableSameDocumentLinks === true,
       baseUrl: optionBag.baseUrl,
+      emptyMarkup: optionBag.emptyMarkup,
       DOMParserClass: resolvedOptions.DOMParserClass,
       windowObject: resolvedOptions.windowObject
     });
@@ -447,8 +458,10 @@ function urlForensicsPagePaneMirrorRenderMarkup(state, elements, resolvedOptions
   }
 
   resolvedOptions.replaceElementMarkup(
-    elements.convertedPane,
-    htmlMarkup || '<div class="merged-link-lab-empty-state">The formatted email mirror will appear here when a snapshot is available.</div>'
+    renderTarget,
+    htmlMarkup ||
+      optionBag.emptyMarkup ||
+      '<div class="merged-link-lab-empty-state">The formatted email mirror will appear here when a snapshot is available.</div>'
   );
 }
 

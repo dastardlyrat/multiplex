@@ -23,7 +23,7 @@
     </nav>
     <h1 class="icon-heading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">settings</span>Extension Settings</h1>
     <p class="lede">
-      Control URL cleanup, in-page mirror replacement, and sender-based auto-apply behavior.
+      Control URL cleanup, in-page mirror replacement, and automatic mirror behavior.
     </p>
 
     <div class="settings-list">
@@ -58,6 +58,19 @@
 
       <div class="setting-row">
         <span class="setting-copy">
+          <strong>Auto-apply mirror on mobile devices</strong>
+          <span class="setting-note">
+            When on, the extension automatically replaces the opened email body with mirror content when a mobile device is detected. Default: off.
+          </span>
+        </span>
+        <span class="switch">
+          <input id="autoApplyMirrorOnMobileDevice" type="checkbox" aria-label="Auto-apply mirror on mobile devices">
+          <span class="switch-track" aria-hidden="true"></span>
+        </span>
+      </div>
+
+      <div class="setting-row">
+        <span class="setting-copy">
           <strong>Auto-apply mirror for configured sender addresses</strong>
           <span class="setting-note">
             When on, the extension automatically replaces the opened email body with mirror content for messages from the configured sender address list. Default: off.
@@ -78,7 +91,7 @@
         <div>
           <h2 class="icon-subheading"><span class="material-symbols-outlined heading-icon" aria-hidden="true">alternate_email</span>Configured Sender Addresses</h2>
           <p class="setting-note sender-list-copy">
-            Add or remove the sender email addresses that trigger automatic mirror replacement when the generic auto-apply setting is enabled.
+            Add or remove the sender email addresses that trigger automatic mirror replacement when sender auto-apply is enabled.
           </p>
         </div>
       </div>
@@ -112,7 +125,9 @@
 </main>
 
 <script src="./debug-redaction.js"></script>
+<script src="./debug-config.js"></script>
 <script src="./debug.js"></script>
+<script src="./mobile-device.js"></script>
 <script src="./page-navigation.js"></script>
 <script src="./page-ui.js"></script>
 <script src="./page-runtime.js"></script>

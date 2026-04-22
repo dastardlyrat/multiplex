@@ -170,9 +170,37 @@ function urlForensicsEmailSnapshotSyncCreateDefaultOptions(options) {
 }
 
 function urlForensicsEmailSnapshotSyncDebugCall(debugApi, methodName, message, payload) {
+  if (debugApi && typeof debugApi.isMethodEnabled === "function" && debugApi.isMethodEnabled(methodName) !== true) {
+    return;
+  }
+
   if (debugApi && typeof debugApi[methodName] === "function") {
     debugApi[methodName](message, payload);
   }
+}
+
+function urlForensicsEmailSnapshotSyncBuildCandidateDebugDetails(candidate) {
+  const root = candidate && candidate.root ? candidate.root : null;
+  const rootBounds = root && typeof root.getBoundingClientRect === "function"
+    ? root.getBoundingClientRect()
+    : { width: 0, height: 0 };
+
+  return {
+    detectionMode: candidate && candidate.detectionMode ? String(candidate.detectionMode) : "",
+    score: candidate && Number.isFinite(candidate.score) ? candidate.score : 0,
+    rootId: root && root.id ? String(root.id) : "",
+    rootClassName:
+      root && typeof root.getAttribute === "function"
+        ? String(root.getAttribute("class") || "")
+        : "",
+    rootRole:
+      root && typeof root.getAttribute === "function"
+        ? String(root.getAttribute("role") || "")
+        : "",
+    rootWidth: Number(rootBounds.width) || 0,
+    rootHeight: Number(rootBounds.height) || 0,
+    rootConnected: !!(root && root.isConnected)
+  };
 }
 
 function urlForensicsEmailSnapshotSyncHandleLocationChange(currentLocationHref, options) {
@@ -196,13 +224,6 @@ function urlForensicsEmailSnapshotSyncObserveCandidates(inboxRootCandidates, opt
   });
 
   inboxRootCandidates.forEach(function observeCandidate(candidate) {
-    if (options.debugApi && candidate) {
-      urlForensicsEmailSnapshotSyncDebugCall(options.debugApi, "loop", "content observing inbox candidate", {
-        detectionMode: candidate.detectionMode || "",
-        score: candidate.score || 0
-      });
-    }
-
     options.observeEmailRoot(candidate.root);
   });
 }
@@ -239,7 +260,30 @@ function urlForensicsEmailSnapshotSyncCanUseFallbackRoot(fallbackRoot, options) 
   return fallbackText.length >= 8 || fallbackHasStructuredContent;
 }
 
-function urlForensicsEmailSnapshotSyncTryPublishFallbackSnapshot(shouldForcePublish, scheduleSnapshotSync, options) {
+function urlForensicsEmailSnapshotSyncShouldBlockFallbackForFailure(inboxDetectionFailure) {
+  return !!(
+    inboxDetectionFailure &&
+    inboxDetectionFailure.kind === "provider-path-mismatch"
+  );
+}
+
+function urlForensicsEmailSnapshotSyncShouldBypassMissingCandidateGrace(inboxDetectionFailure) {
+  return !!(
+    inboxDetectionFailure &&
+    inboxDetectionFailure.kind === "provider-path-mismatch"
+  );
+}
+
+function urlForensicsEmailSnapshotSyncTryPublishFallbackSnapshot(
+  shouldForcePublish,
+  scheduleSnapshotSync,
+  inboxDetectionFailure,
+  options
+) {
+  if (urlForensicsEmailSnapshotSyncShouldBlockFallbackForFailure(inboxDetectionFailure)) {
+    return false;
+  }
+
   const fallbackRoot = options.getLatestDetectedEmailRoot();
 
   if (!urlForensicsEmailSnapshotSyncCanUseFallbackRoot(fallbackRoot, options)) {
@@ -272,6 +316,7 @@ function urlForensicsEmailSnapshotSyncHandleMissingPrimaryCandidate(syncState, s
     const missingGraceWindow = options.getCandidateMissingGraceWindow();
 
     if (
+      !urlForensicsEmailSnapshotSyncShouldBypassMissingCandidateGrace(inboxDetectionFailure) &&
       urlForensicsEmailSnapshotSyncShouldWaitForMissingCandidateGrace(
         syncState.startedAt,
         missingGraceWindow,
@@ -286,6 +331,7 @@ function urlForensicsEmailSnapshotSyncHandleMissingPrimaryCandidate(syncState, s
       urlForensicsEmailSnapshotSyncTryPublishFallbackSnapshot(
         syncState.shouldForcePublish,
         scheduleSnapshotSync,
+        inboxDetectionFailure,
         options
       )
     ) {
@@ -321,6 +367,12 @@ function urlForensicsEmailSnapshotSyncPublishPrimaryCandidate(primaryInboxCandid
     options
   );
   const nextSnapshotSignature = options.createSnapshotSignature(nextSnapshot);
+  urlForensicsEmailSnapshotSyncDebugCall(
+    options.debugApi,
+    "variable",
+    "content primary inbox candidate selected",
+    urlForensicsEmailSnapshotSyncBuildCandidateDebugDetails(primaryInboxCandidate)
+  );
 
   if (nextSnapshotSignature === options.getLastPublishedSnapshotSignature() && !syncState.shouldForcePublish) {
     urlForensicsEmailSnapshotSyncDebugCall(options.debugApi, "conditional", "content snapshot unchanged; publish skipped");

@@ -25,6 +25,12 @@ function urlForensicsPagePaneLayoutCreateDefaultOptions(options) {
       : function shouldDisallowOpenWithoutSnapshot() {
         return false;
       },
+    shouldSuppressPaneVisibility: typeof optionBag.shouldSuppressPaneVisibility === "function"
+      ? optionBag.shouldSuppressPaneVisibility
+      : function shouldNotSuppressPaneVisibility() {
+        return false;
+      },
+    debugApi: optionBag.debugApi && typeof optionBag.debugApi === "object" ? optionBag.debugApi : null,
     getVisiblePaneReservedWidth: typeof optionBag.getVisiblePaneReservedWidth === "function"
       ? optionBag.getVisiblePaneReservedWidth
       : function getDefaultReservedWidth() {
@@ -33,6 +39,40 @@ function urlForensicsPagePaneLayoutCreateDefaultOptions(options) {
     windowObject: optionBag.windowObject || (typeof window !== "undefined" ? window : null),
     documentObject: optionBag.documentObject || (typeof document !== "undefined" ? document : null)
   });
+}
+
+function urlForensicsPagePaneLayoutDebugCall(debugApi, methodName, message, payload) {
+  if (debugApi && typeof debugApi.isMethodEnabled === "function" && debugApi.isMethodEnabled(methodName) !== true) {
+    return;
+  }
+
+  if (debugApi && typeof debugApi[methodName] === "function") {
+    debugApi[methodName](message, payload || {});
+  }
+}
+
+function urlForensicsPagePaneLayoutGetElementAttribute(element, attributeName) {
+  return element && typeof element.getAttribute === "function"
+    ? String(element.getAttribute(attributeName) || "")
+    : "";
+}
+
+function urlForensicsPagePaneLayoutGetElementBounds(element) {
+  return element && typeof element.getBoundingClientRect === "function"
+    ? element.getBoundingClientRect()
+    : { width: 0, height: 0 };
+}
+
+function urlForensicsPagePaneLayoutGetSnapshotFinalUrlCount(snapshot) {
+  return snapshot && snapshot.pipeline && Array.isArray(snapshot.pipeline.finalUrls)
+    ? snapshot.pipeline.finalUrls.length
+    : 0;
+}
+
+function urlForensicsPagePaneLayoutGetLocationHref(windowObject) {
+  return windowObject && windowObject.location && windowObject.location.href
+    ? String(windowObject.location.href)
+    : "";
 }
 
 function urlForensicsPagePaneLayoutGetViewportWidth(windowObject, documentObject) {
@@ -329,12 +369,63 @@ function urlForensicsPagePaneLayoutSync(elements, reservedLayoutEntries, options
   }
 }
 
+function urlForensicsPagePaneLayoutShouldSuppressPaneVisibility(options) {
+  return options.shouldSuppressPaneVisibility() === true;
+}
+
+function urlForensicsPagePaneLayoutBuildVisibilityDebugDetails(elements, shouldSuppressPaneVisibility, options) {
+  const latestSnapshot = options.getLatestSnapshot();
+  const activeEmailRoot = options.getActiveEmailRoot();
+  const rootElement = elements.root || null;
+  const rootBounds = urlForensicsPagePaneLayoutGetElementBounds(rootElement);
+  const activeRootBounds = urlForensicsPagePaneLayoutGetElementBounds(activeEmailRoot);
+
+  return {
+    suppressed: shouldSuppressPaneVisibility === true,
+    hasSnapshot: !!latestSnapshot,
+    detectionMode: latestSnapshot && latestSnapshot.detectionMode ? latestSnapshot.detectionMode : "",
+    finalUrlCount: urlForensicsPagePaneLayoutGetSnapshotFinalUrlCount(latestSnapshot),
+    allowWithoutSnapshot:
+      !latestSnapshot &&
+      shouldSuppressPaneVisibility !== true &&
+      options.shouldAllowOpenWithoutSnapshot() === true,
+    hasPaneRoot: !!rootElement,
+    paneClassName: urlForensicsPagePaneLayoutGetElementAttribute(rootElement, "class"),
+    paneAriaHidden: urlForensicsPagePaneLayoutGetElementAttribute(rootElement, "aria-hidden"),
+    paneWidth: Number(rootBounds.width) || 0,
+    paneHeight: Number(rootBounds.height) || 0,
+    expanded: elements.isExpanded === true,
+    hasActiveEmailRoot: !!activeEmailRoot,
+    activeEmailRootId: activeEmailRoot && activeEmailRoot.id ? String(activeEmailRoot.id) : "",
+    activeEmailRootClassName: urlForensicsPagePaneLayoutGetElementAttribute(activeEmailRoot, "class"),
+    activeEmailRootWidth: Number(activeRootBounds.width) || 0,
+    activeEmailRootHeight: Number(activeRootBounds.height) || 0,
+    href: urlForensicsPagePaneLayoutGetLocationHref(options.windowObject)
+  };
+}
+
 function urlForensicsPagePaneLayoutSetExpanded(elements, reservedLayoutEntries, isExpanded, options) {
-  const hasSnapshot = !!options.getLatestSnapshot();
-  const allowWithoutSnapshot = !hasSnapshot && options.shouldAllowOpenWithoutSnapshot() === true;
-  elements.isExpanded = !!isExpanded;
+  const shouldSuppressPaneVisibility = urlForensicsPagePaneLayoutShouldSuppressPaneVisibility(options);
+  const hasSnapshot = !shouldSuppressPaneVisibility && !!options.getLatestSnapshot();
+  const allowWithoutSnapshot =
+    !hasSnapshot &&
+    !shouldSuppressPaneVisibility &&
+    options.shouldAllowOpenWithoutSnapshot() === true;
+  elements.isExpanded = shouldSuppressPaneVisibility ? false : !!isExpanded;
+  urlForensicsPagePaneLayoutDebugCall(options.debugApi, "conditional", "content pane layout set expanded evaluated", {
+    requestedExpanded: !!isExpanded,
+    suppressed: shouldSuppressPaneVisibility,
+    hasSnapshot: hasSnapshot,
+    allowWithoutSnapshot: allowWithoutSnapshot
+  });
 
   if (!elements.root) {
+    urlForensicsPagePaneLayoutDebugCall(
+      options.debugApi,
+      "conditional",
+      "content pane layout set expanded skipped: no pane root",
+      urlForensicsPagePaneLayoutBuildVisibilityDebugDetails(elements, shouldSuppressPaneVisibility, options)
+    );
     urlForensicsPagePaneLayoutSync(elements, reservedLayoutEntries, options);
     return;
   }
@@ -358,23 +449,54 @@ function urlForensicsPagePaneLayoutSetExpanded(elements, reservedLayoutEntries, 
   }
 
   urlForensicsPagePaneLayoutSync(elements, reservedLayoutEntries, options);
+  urlForensicsPagePaneLayoutDebugCall(
+    options.debugApi,
+    "variable",
+    "content pane layout state applied",
+    urlForensicsPagePaneLayoutBuildVisibilityDebugDetails(elements, shouldSuppressPaneVisibility, options)
+  );
 }
 
 function urlForensicsPagePaneLayoutShow(elements, reservedLayoutEntries, options) {
   const paneRoot = options.ensurePane();
 
   if (!paneRoot) {
+    urlForensicsPagePaneLayoutDebugCall(options.debugApi, "conditional", "content pane layout show skipped: no pane root", {
+      href:
+        options.windowObject && options.windowObject.location && options.windowObject.location.href
+          ? String(options.windowObject.location.href)
+          : ""
+    });
     return;
   }
 
+  urlForensicsPagePaneLayoutDebugCall(options.debugApi, "functionIn", "content.paneLayout.showPane", {
+    hasPaneRoot: true
+  });
   urlForensicsPagePaneLayoutSetExpanded(elements, reservedLayoutEntries, elements.isExpanded, options);
+  urlForensicsPagePaneLayoutDebugCall(options.debugApi, "functionOut", "content.paneLayout.showPane", {
+    expanded: elements.isExpanded === true
+  });
 }
 
 function urlForensicsPagePaneLayoutHide(elements, reservedLayoutEntries, options) {
-  const allowWithoutSnapshot = options.shouldAllowOpenWithoutSnapshot() === true;
+  const shouldSuppressPaneVisibility = urlForensicsPagePaneLayoutShouldSuppressPaneVisibility(options);
+  const allowWithoutSnapshot =
+    !shouldSuppressPaneVisibility &&
+    options.shouldAllowOpenWithoutSnapshot() === true;
   elements.isExpanded = false;
+  urlForensicsPagePaneLayoutDebugCall(options.debugApi, "functionIn", "content.paneLayout.hidePane", {
+    suppressed: shouldSuppressPaneVisibility,
+    allowWithoutSnapshot: allowWithoutSnapshot
+  });
 
   if (!elements.root) {
+    urlForensicsPagePaneLayoutDebugCall(
+      options.debugApi,
+      "conditional",
+      "content pane layout hide skipped: no pane root",
+      urlForensicsPagePaneLayoutBuildVisibilityDebugDetails(elements, shouldSuppressPaneVisibility, options)
+    );
     urlForensicsPagePaneLayoutSync(elements, reservedLayoutEntries, options);
     return;
   }
@@ -388,10 +510,28 @@ function urlForensicsPagePaneLayoutHide(elements, reservedLayoutEntries, options
   }
 
   urlForensicsPagePaneLayoutSync(elements, reservedLayoutEntries, options);
+  urlForensicsPagePaneLayoutDebugCall(
+    options.debugApi,
+    "functionOut",
+    "content.paneLayout.hidePane",
+    urlForensicsPagePaneLayoutBuildVisibilityDebugDetails(elements, shouldSuppressPaneVisibility, options)
+  );
 }
 
 function urlForensicsPagePaneLayoutToggle(elements, reservedLayoutEntries, options) {
   if (!options.ensurePane()) {
+    urlForensicsPagePaneLayoutDebugCall(options.debugApi, "conditional", "content pane layout toggle blocked: no pane root");
+    return {
+      ok: false,
+      hasSnapshot: false,
+      visible: false,
+      expanded: false
+    };
+  }
+
+  if (urlForensicsPagePaneLayoutShouldSuppressPaneVisibility(options)) {
+    urlForensicsPagePaneLayoutHide(elements, reservedLayoutEntries, options);
+    urlForensicsPagePaneLayoutDebugCall(options.debugApi, "conditional", "content pane layout toggle blocked: suppressed");
     return {
       ok: false,
       hasSnapshot: false,
@@ -402,6 +542,7 @@ function urlForensicsPagePaneLayoutToggle(elements, reservedLayoutEntries, optio
 
   if (!options.getLatestSnapshot() && options.shouldAllowOpenWithoutSnapshot() !== true) {
     urlForensicsPagePaneLayoutHide(elements, reservedLayoutEntries, options);
+    urlForensicsPagePaneLayoutDebugCall(options.debugApi, "conditional", "content pane layout toggle blocked: missing snapshot");
     return {
       ok: false,
       hasSnapshot: false,
@@ -411,6 +552,12 @@ function urlForensicsPagePaneLayoutToggle(elements, reservedLayoutEntries, optio
   }
 
   urlForensicsPagePaneLayoutSetExpanded(elements, reservedLayoutEntries, !elements.isExpanded, options);
+  urlForensicsPagePaneLayoutDebugCall(
+    options.debugApi,
+    "functionOut",
+    "content.paneLayout.togglePaneVisibility",
+    urlForensicsPagePaneLayoutBuildVisibilityDebugDetails(elements, false, options)
+  );
   return {
     ok: true,
     hasSnapshot: !!options.getLatestSnapshot(),
@@ -421,6 +568,18 @@ function urlForensicsPagePaneLayoutToggle(elements, reservedLayoutEntries, optio
 
 function urlForensicsPagePaneLayoutOpen(elements, reservedLayoutEntries, options) {
   if (!options.ensurePane()) {
+    urlForensicsPagePaneLayoutDebugCall(options.debugApi, "conditional", "content pane layout open blocked: no pane root");
+    return {
+      ok: false,
+      hasSnapshot: false,
+      visible: false,
+      expanded: false
+    };
+  }
+
+  if (urlForensicsPagePaneLayoutShouldSuppressPaneVisibility(options)) {
+    urlForensicsPagePaneLayoutHide(elements, reservedLayoutEntries, options);
+    urlForensicsPagePaneLayoutDebugCall(options.debugApi, "conditional", "content pane layout open blocked: suppressed");
     return {
       ok: false,
       hasSnapshot: false,
@@ -431,6 +590,7 @@ function urlForensicsPagePaneLayoutOpen(elements, reservedLayoutEntries, options
 
   if (!options.getLatestSnapshot() && options.shouldAllowOpenWithoutSnapshot() !== true) {
     urlForensicsPagePaneLayoutHide(elements, reservedLayoutEntries, options);
+    urlForensicsPagePaneLayoutDebugCall(options.debugApi, "conditional", "content pane layout open blocked: missing snapshot");
     return {
       ok: false,
       hasSnapshot: false,
@@ -440,6 +600,12 @@ function urlForensicsPagePaneLayoutOpen(elements, reservedLayoutEntries, options
   }
 
   urlForensicsPagePaneLayoutSetExpanded(elements, reservedLayoutEntries, true, options);
+  urlForensicsPagePaneLayoutDebugCall(
+    options.debugApi,
+    "functionOut",
+    "content.paneLayout.openPane",
+    urlForensicsPagePaneLayoutBuildVisibilityDebugDetails(elements, false, options)
+  );
   return {
     ok: true,
     hasSnapshot: !!options.getLatestSnapshot(),

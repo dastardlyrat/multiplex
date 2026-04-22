@@ -85,6 +85,10 @@ function urlForensicsContentRuntimeLifecycleCreateDefaultOptions(options) {
 }
 
 function urlForensicsContentRuntimeLifecycleDebugCall(debugApi, methodName, message, payload) {
+  if (debugApi && typeof debugApi.isMethodEnabled === "function" && debugApi.isMethodEnabled(methodName) !== true) {
+    return;
+  }
+
   if (debugApi && typeof debugApi[methodName] === "function") {
     debugApi[methodName](message, payload);
   }
@@ -170,8 +174,17 @@ function urlForensicsContentRuntimeLifecycleRegisterRuntimeListener(runtimeMessa
 }
 
 function urlForensicsContentRuntimeLifecycleRegisterPageEvents(options) {
+  function scheduleFromEvent() {
+    return options.scheduleSnapshotSync();
+  }
+
   if (options.documentObject && typeof options.documentObject.addEventListener === "function") {
-    options.documentObject.addEventListener("visibilitychange", options.scheduleSnapshotSync, true);
+    options.documentObject.addEventListener("visibilitychange", function handleContentVisibilityChange() {
+      scheduleFromEvent();
+    }, true);
+    options.documentObject.addEventListener("click", function handleContentDocumentClick() {
+      scheduleFromEvent();
+    }, true);
   }
 
   if (!options.windowObject || typeof options.windowObject.addEventListener !== "function") {
@@ -185,7 +198,9 @@ function urlForensicsContentRuntimeLifecycleRegisterPageEvents(options) {
     "popstate",
     "hashchange"
   ].forEach(function registerWindowEvent(eventName) {
-    options.windowObject.addEventListener(eventName, options.scheduleSnapshotSync, true);
+    options.windowObject.addEventListener(eventName, function handleContentWindowEvent() {
+      scheduleFromEvent();
+    }, true);
   });
   options.windowObject.addEventListener("resize", options.syncPageViewportReservation, true);
 }
@@ -199,11 +214,15 @@ function urlForensicsContentRuntimeLifecycleCreateDocumentObserver(options) {
     return null;
   }
 
-  const documentObserver = new options.mutationObserverClass(options.scheduleSnapshotSync);
+  const documentObserver = new options.mutationObserverClass(function handleContentRuntimeMutation() {
+    options.scheduleSnapshotSync();
+  });
 
   documentObserver.observe(observedTarget, {
     childList: true,
-    subtree: true
+    subtree: true,
+    attributes: true,
+    attributeFilter: ["class", "style", "hidden", "aria-hidden", "role", "data-message-id"]
   });
   return documentObserver;
 }
@@ -231,13 +250,35 @@ function urlForensicsContentRuntimeLifecycleInstallHistoryNavigationSync(state, 
   return true;
 }
 
+function urlForensicsContentRuntimeLifecycleInstallSnapshotRetryPolling(state, options) {
+  if (
+    state.snapshotRetryPollingInstalled ||
+    !options.windowObject ||
+    typeof options.windowObject.setInterval !== "function"
+  ) {
+    return false;
+  }
+
+  state.snapshotRetryPollingInstalled = true;
+  state.snapshotRetryTimer = options.windowObject.setInterval(function retrySnapshotSyncUntilDetected() {
+    if (options.getLatestSnapshot()) {
+      return;
+    }
+
+    options.scheduleSnapshotSync();
+  }, 2000);
+  return true;
+}
+
 function urlForensicsContentRuntimeLifecycleCreate(options) {
   const resolvedOptions = urlForensicsContentRuntimeLifecycleCreateDefaultOptions(options);
   const state = {
     documentObserver: null,
     historyWrapped: false,
     initialized: false,
-    runtimeMessageHandler: null
+    runtimeMessageHandler: null,
+    snapshotRetryPollingInstalled: false,
+    snapshotRetryTimer: 0
   };
 
   state.runtimeMessageHandler = function handleRuntimeMessage(message) {
@@ -263,6 +304,7 @@ function urlForensicsContentRuntimeLifecycleCreate(options) {
     urlForensicsContentRuntimeLifecycleRegisterPageEvents(resolvedOptions);
     state.documentObserver = urlForensicsContentRuntimeLifecycleCreateDocumentObserver(resolvedOptions);
     urlForensicsContentRuntimeLifecycleInstallHistoryNavigationSync(state, resolvedOptions);
+    urlForensicsContentRuntimeLifecycleInstallSnapshotRetryPolling(state, resolvedOptions);
     await Promise.resolve(resolvedOptions.loadPipelineSettings()).finally(function finalizeLifecycleInitialization() {
       resolvedOptions.scheduleSnapshotSync();
     });
@@ -271,6 +313,7 @@ function urlForensicsContentRuntimeLifecycleCreate(options) {
       alreadyInitialized: false,
       hasObserver: !!state.documentObserver,
       historyWrapped: state.historyWrapped,
+      snapshotRetryPollingInstalled: state.snapshotRetryPollingInstalled,
       initialized: true
     };
   }

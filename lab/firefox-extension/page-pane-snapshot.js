@@ -11,6 +11,7 @@ function urlForensicsPagePaneSnapshotResolveFunction(candidateValue, fallbackVal
 function urlForensicsPagePaneSnapshotCreateFallbackPaneMirror() {
   return Object.freeze({
     clearRenderedPane: function clearMissingRenderedPane() {},
+    renderMarkup: function renderMissingMarkup() {},
     renderSnapshot: function renderMissingSnapshot() {},
     setHoverLinkPanelExpanded: function setMissingHoverLinkPanelExpanded() {}
   });
@@ -55,6 +56,7 @@ function urlForensicsPagePaneSnapshotCreateDefaultOptions(options) {
       optionBag.paneLayout,
       urlForensicsPagePaneSnapshotCreateFallbackPaneLayout()
     ),
+    debugApi: optionBag.debugApi && typeof optionBag.debugApi === "object" ? optionBag.debugApi : null,
     formatMetricCount: urlForensicsPagePaneSnapshotResolveFunction(
       optionBag.formatMetricCount,
       function formatMissingMetricCount(countValue) {
@@ -187,6 +189,114 @@ function urlForensicsPagePaneSnapshotResetRailMetrics(elements) {
   }
 }
 
+function urlForensicsPagePaneSnapshotGetOriginalBackup(snapshot) {
+  const backup = snapshot && snapshot.originalEmailBackup && typeof snapshot.originalEmailBackup === "object"
+    ? snapshot.originalEmailBackup
+    : {};
+
+  return {
+    sourceHtml: String(backup.sourceHtml || (snapshot && snapshot.sourceHtml) || ""),
+    rawText: String(backup.rawText || (snapshot && snapshot.rawText) || ""),
+    capturedAt: Number(backup.capturedAt || (snapshot && snapshot.detectedAt) || 0)
+  };
+}
+
+function urlForensicsPagePaneSnapshotEscapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function urlForensicsPagePaneSnapshotSerializeBackup(backup) {
+  if (!backup.sourceHtml && !backup.rawText) {
+    return "";
+  }
+
+  return JSON.stringify({
+    capturedAt: backup.capturedAt || 0,
+    sourceHtml: backup.sourceHtml,
+    rawText: backup.rawText
+  });
+}
+
+function urlForensicsPagePaneSnapshotBuildBackupFallbackMarkup(rawText) {
+  return [
+    '<pre class="merged-link-lab-backup-plain">',
+    urlForensicsPagePaneSnapshotEscapeHtml(rawText),
+    "</pre>"
+  ].join("");
+}
+
+function urlForensicsPagePaneSnapshotBuildBackupDisplayMarkup(backup) {
+  return backup.sourceHtml
+    ? backup.sourceHtml
+    : (
+        backup.rawText
+          ? urlForensicsPagePaneSnapshotBuildBackupFallbackMarkup(backup.rawText)
+          : '<div class="merged-link-lab-backup-empty">Open an inbox email to capture an original body backup.</div>'
+      );
+}
+
+function urlForensicsPagePaneSnapshotRenderBackup(options, snapshot) {
+  const backup = urlForensicsPagePaneSnapshotGetOriginalBackup(snapshot);
+  const debugApi = options.debugApi;
+
+  if (options.elements.backupSummary) {
+    options.elements.backupSummary.textContent = backup.capturedAt
+      ? "Authoritative original email body backup captured with this snapshot."
+      : "Authoritative original email body backup.";
+  }
+
+  if (options.elements.backupFrame && typeof options.paneMirror.renderMarkup === "function") {
+    options.paneMirror.renderMarkup(urlForensicsPagePaneSnapshotBuildBackupDisplayMarkup(backup), {
+      targetElement: options.elements.backupFrame,
+      disableSameDocumentLinks: snapshot && snapshot.isTopicDigest === true,
+      baseUrl: options.getBaseUrl(),
+      emptyMarkup: '<div class="merged-link-lab-backup-empty">Open an inbox email to capture an original body backup.</div>'
+    });
+  }
+
+  if (options.elements.backupPayload) {
+    options.elements.backupPayload.value = urlForensicsPagePaneSnapshotSerializeBackup(backup);
+  }
+
+  if (debugApi && typeof debugApi.ui === "function") {
+    debugApi.ui("content backup tab rendered from original backup", {
+      hasSourceHtml: !!backup.sourceHtml,
+      hasRawText: !!backup.rawText,
+      sourceHtmlLength: backup.sourceHtml.length,
+      rawTextLength: backup.rawText.length,
+      capturedAt: backup.capturedAt
+    });
+  }
+}
+
+function urlForensicsPagePaneSnapshotClearBackup(options) {
+  const elements = options.elements;
+  const debugApi = options.debugApi;
+
+  if (elements.backupSummary) {
+    elements.backupSummary.textContent = "No original email backup captured yet.";
+  }
+
+  if (elements.backupFrame && typeof options.paneMirror.renderMarkup === "function") {
+    options.paneMirror.renderMarkup("", {
+      targetElement: elements.backupFrame,
+      baseUrl: options.getBaseUrl(),
+      emptyMarkup: '<div class="merged-link-lab-backup-empty">Open an inbox email to capture an original body backup.</div>'
+    });
+  }
+
+  if (elements.backupPayload) {
+    elements.backupPayload.value = "";
+  }
+
+  if (debugApi && typeof debugApi.ui === "function") {
+    debugApi.ui("content backup tab cleared");
+  }
+}
+
 function urlForensicsPagePaneSnapshotRender(options, snapshot) {
   const paneRoot = options.ensurePane();
 
@@ -206,6 +316,7 @@ function urlForensicsPagePaneSnapshotRender(options, snapshot) {
     disableSameDocumentLinks: snapshot.isTopicDigest === true,
     baseUrl: options.getBaseUrl()
   });
+  urlForensicsPagePaneSnapshotRenderBackup(options, snapshot);
   options.diagnostics.renderDiagnosticsSections(
     options.elements.diagnosticsPane,
     options.diagnostics.buildDiagnosticsSections(snapshot)
@@ -222,6 +333,7 @@ function urlForensicsPagePaneSnapshotClear(options) {
 
   urlForensicsPagePaneSnapshotResetRailMetrics(options.elements);
   options.paneMirror.clearRenderedPane();
+  urlForensicsPagePaneSnapshotClearBackup(options);
   options.diagnostics.renderDiagnosticsSections(
     options.elements.diagnosticsPane,
     options.diagnostics.buildDiagnosticsSections(null)

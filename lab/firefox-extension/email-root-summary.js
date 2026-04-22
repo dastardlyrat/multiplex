@@ -4,6 +4,22 @@ function urlForensicsEmailRootSummaryResolveFunction(candidateValue, fallbackVal
   return typeof candidateValue === "function" ? candidateValue : fallbackValue;
 }
 
+function urlForensicsEmailRootSummaryResolveOriginalBackupHelper() {
+  if (typeof globalThis !== "undefined" && globalThis.urlForensicsEmailOriginalBackup) {
+    return globalThis.urlForensicsEmailOriginalBackup;
+  }
+
+  if (typeof require === "function") {
+    try {
+      return require("./email-original-backup.js");
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
 function urlForensicsEmailRootSummaryResolvePatternMatcher(patternLike) {
   if (patternLike instanceof RegExp) {
     return patternLike;
@@ -109,6 +125,49 @@ function urlForensicsEmailRootSummaryGetContentElement(element) {
   return urlForensicsEmailRootSummaryGetIframeContentElement(element) || element;
 }
 
+function urlForensicsEmailRootSummaryCreateBackup(root, contentElement, sourceHtml, rawText, options) {
+  const originalBackupHelper = urlForensicsEmailRootSummaryResolveOriginalBackupHelper();
+  const existingBackup = originalBackupHelper && typeof originalBackupHelper.read === "function"
+    ? originalBackupHelper.read(root, contentElement)
+    : null;
+  const debugApi = options.debugApi;
+
+  if (existingBackup && typeof existingBackup === "object") {
+    if (debugApi && typeof debugApi.variable === "function") {
+      debugApi.variable("content original email backup reused", {
+        sourceHtmlLength: String(existingBackup.sourceHtml || "").length,
+        rawTextLength: String(existingBackup.rawText || "").length
+      });
+    }
+
+    return existingBackup;
+  }
+
+  const backup = originalBackupHelper && typeof originalBackupHelper.getOrCreate === "function"
+    ? originalBackupHelper.getOrCreate({
+      root: root,
+      contentElement: contentElement,
+      sourceHtml: sourceHtml,
+      rawText: rawText,
+      getNow: options.getNow
+    })
+    : Object.freeze({
+      capturedAt: options.getNow(),
+      sourceHtml: String(sourceHtml || ""),
+      rawText: String(rawText || "")
+    });
+
+  if (debugApi && typeof debugApi.variable === "function") {
+    debugApi.variable("content original email backup captured", {
+      sourceHtmlLength: backup.sourceHtml.length,
+      rawTextLength: backup.rawText.length,
+      capturedAt: backup.capturedAt
+    });
+  }
+
+  return backup;
+}
+
 function urlForensicsEmailRootSummaryGetHtmlMarkup(element) {
   const contentElement = urlForensicsEmailRootSummaryGetContentElement(element);
   return String(contentElement && contentElement.innerHTML ? contentElement.innerHTML : "");
@@ -128,6 +187,34 @@ function urlForensicsEmailRootSummaryMeasureText(element, options) {
     text: normalizedText,
     lines: lineCount,
     words: wordCount
+  };
+}
+
+function urlForensicsEmailRootSummaryResolveSource(root, options) {
+  const contentElement = urlForensicsEmailRootSummaryGetContentElement(root);
+  const currentSourceHtml = urlForensicsEmailRootSummaryGetHtmlMarkup(root);
+  const currentRawText = options.cleanInputText(
+    contentElement && (contentElement.innerText || contentElement.textContent)
+      ? (contentElement.innerText || contentElement.textContent)
+      : ""
+  );
+  const originalBackup = urlForensicsEmailRootSummaryCreateBackup(
+    root,
+    contentElement,
+    currentSourceHtml,
+    currentRawText,
+    options
+  );
+
+  return {
+    contentElement: contentElement,
+    originalBackup: originalBackup,
+    sourceHtml: originalBackup && typeof originalBackup.sourceHtml === "string"
+      ? originalBackup.sourceHtml
+      : currentSourceHtml,
+    rawText: originalBackup && typeof originalBackup.rawText === "string"
+      ? originalBackup.rawText
+      : currentRawText
   };
 }
 
@@ -158,13 +245,9 @@ function urlForensicsEmailRootSummarySummarize(root, detectionMode, options) {
     });
   }
 
-  const contentElement = urlForensicsEmailRootSummaryGetContentElement(root);
-  const sourceHtml = urlForensicsEmailRootSummaryGetHtmlMarkup(root);
-  const rawText = options.cleanInputText(
-    contentElement && (contentElement.innerText || contentElement.textContent)
-      ? (contentElement.innerText || contentElement.textContent)
-      : ""
-  );
+  const sourceDetails = urlForensicsEmailRootSummaryResolveSource(root, options);
+  const sourceHtml = sourceDetails.sourceHtml;
+  const rawText = sourceDetails.rawText;
   const pipelineSettings = options.getPipelineSettings();
   const resolvedDetectionMode = detectionMode ||
     (options.inboxHostPattern.test(urlForensicsEmailRootSummaryGetHostname(options.windowObject))
@@ -203,6 +286,7 @@ function urlForensicsEmailRootSummarySummarize(root, detectionMode, options) {
         : defaultSectionLabel,
     sourceHtml: sourceHtml,
     rawText: rawText,
+    originalEmailBackup: sourceDetails.originalBackup,
     pipelineSettings: pipelineSettings,
     pipeline: pipelineResult,
     isTopicDigest: isTopicDigest

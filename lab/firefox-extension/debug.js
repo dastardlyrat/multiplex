@@ -10,28 +10,41 @@
       return "[debug redaction helper unavailable]";
     }
   };
-  const debugLevels = {
-    off: 0,
-    error: 1,
-    info: 2,
-    verbose: 3,
-    trace: 4
+  const debugConfigModel = globalScope.urlForensicsDebugConfig || {
+    categories: {
+      error: true,
+      runtime: true,
+      storage: true,
+      messaging: true,
+      ui: true,
+      pipeline: true,
+      function: false,
+      conditional: false,
+      loop: false,
+      variable: false
+    },
+    levels: {
+      off: 0,
+      error: 1,
+      info: 2,
+      verbose: 3,
+      trace: 4
+    },
+    normalizeConfig: null,
+    storageKeys: {
+      programDebugConfig: "programDebugConfig"
+    }
   };
-  const defaultCategories = {
-    error: true,
-    runtime: true,
-    storage: true,
-    messaging: true,
-    ui: true,
-    pipeline: true,
-    function: false,
-    conditional: false,
-    loop: false,
-    variable: false
-  };
+  const debugLevels = debugConfigModel.levels;
+  const defaultCategories = debugConfigModel.categories;
+  const debugStorageKey = debugConfigModel.storageKeys.programDebugConfig;
   const helperState = {
     context: "unknown",
-    module: "unknown"
+    module: "unknown",
+    config: {
+      level: "off",
+      categories: Object.assign({}, defaultCategories)
+    }
   };
 
   // Function: remember bounded local fallback events.
@@ -43,10 +56,148 @@
     }
   }
 
+  // Function: normalize debug config choices.
+  function normalizeDebugConfig(config) {
+    if (typeof debugConfigModel.normalizeConfig === "function") {
+      return debugConfigModel.normalizeConfig(config, helperState.config);
+    }
+
+    const safeConfig = config && typeof config === "object" ? config : {};
+    const candidateCategories = safeConfig.categories && typeof safeConfig.categories === "object"
+      ? safeConfig.categories
+      : {};
+    const nextCategories = Object.assign({}, helperState.config.categories);
+
+    Object.keys(defaultCategories).forEach(function normalizeDebugCategory(categoryName) {
+      if (Object.prototype.hasOwnProperty.call(candidateCategories, categoryName)) {
+        nextCategories[categoryName] = candidateCategories[categoryName] === true;
+      }
+    });
+    nextCategories.error = true;
+
+    return {
+      level: Object.prototype.hasOwnProperty.call(debugLevels, safeConfig.level)
+        ? safeConfig.level
+        : helperState.config.level,
+      categories: nextCategories
+    };
+  }
+
+  // Function: apply debug config choices.
+  function applyDebugConfig(config) {
+    helperState.config = normalizeDebugConfig(config);
+    return getConfig();
+  }
+
+  // Function: get debug config copy.
+  function getConfig() {
+    return {
+      level: helperState.config.level,
+      categories: Object.assign({}, helperState.config.categories)
+    };
+  }
+
+  // Function: check whether a debug event should be emitted.
+  function isEnabled(category, level) {
+    const normalizedCategory = Object.prototype.hasOwnProperty.call(defaultCategories, category) ? category : "runtime";
+    const normalizedLevel = Object.prototype.hasOwnProperty.call(debugLevels, level) ? level : "info";
+
+    if (helperState.config.level === "off") {
+      return false;
+    }
+
+    if (debugLevels[normalizedLevel] > debugLevels[helperState.config.level]) {
+      return false;
+    }
+
+    return normalizedCategory === "error" || helperState.config.categories[normalizedCategory] === true;
+  }
+
+  // Function: check whether a debug API method should emit.
+  function isMethodEnabled(methodName) {
+    const methodConfig = {
+      error: ["error", "error"],
+      runtime: ["runtime", "info"],
+      storage: ["storage", "info"],
+      messaging: ["messaging", "info"],
+      ui: ["ui", "info"],
+      pipeline: ["pipeline", "info"],
+      functionIn: ["function", "verbose"],
+      functionOut: ["function", "verbose"],
+      conditional: ["conditional", "verbose"],
+      loop: ["loop", "trace"],
+      variable: ["variable", "trace"]
+    };
+    const resolvedMethodConfig = methodConfig[methodName] || ["runtime", "info"];
+
+    return isEnabled(resolvedMethodConfig[0], resolvedMethodConfig[1]);
+  }
+
+  // Function: load persisted debug choices.
+  function loadPersistedDebugConfig() {
+    if (
+      !extensionApi ||
+      !extensionApi.storage ||
+      !extensionApi.storage.local ||
+      typeof extensionApi.storage.local.get !== "function"
+    ) {
+      return;
+    }
+
+    try {
+      const maybePromise = extensionApi.storage.local.get(debugStorageKey);
+
+      if (maybePromise && typeof maybePromise.then === "function") {
+        maybePromise
+          .then(function applyStoredDebugConfig(storedDebugConfig) {
+            const storedConfig = storedDebugConfig ? storedDebugConfig[debugStorageKey] : null;
+            if (storedConfig && typeof storedConfig === "object") {
+              applyDebugConfig(storedConfig);
+            }
+          })
+          .catch(function ignoreStoredDebugConfigFailure() {});
+      }
+    } catch {
+      return;
+    }
+  }
+
+  // Function: listen for debug-choice changes.
+  function installDebugConfigStorageListener() {
+    if (
+      !extensionApi ||
+      !extensionApi.storage ||
+      !extensionApi.storage.onChanged ||
+      typeof extensionApi.storage.onChanged.addListener !== "function"
+    ) {
+      return;
+    }
+
+    try {
+      extensionApi.storage.onChanged.addListener(function handleDebugStorageChange(changes, areaName) {
+        const safeChanges = changes && typeof changes === "object" ? changes : {};
+        const debugConfigChange = safeChanges[debugStorageKey];
+
+        if (areaName !== "local" || !debugConfigChange || !debugConfigChange.newValue) {
+          return;
+        }
+
+        applyDebugConfig(debugConfigChange.newValue);
+      });
+    } catch {
+      return;
+    }
+  }
+
   // Function: emit debug event.
   function emit(category, level, message, details) {
     const normalizedCategory = Object.prototype.hasOwnProperty.call(defaultCategories, category) ? category : "runtime";
     const normalizedLevel = Object.prototype.hasOwnProperty.call(debugLevels, level) ? level : "info";
+
+    if (!isEnabled(normalizedCategory, normalizedLevel)) {
+      return null;
+    }
+
     const event = {
       timestamp: Date.now(),
       category: normalizedCategory,
@@ -96,9 +247,16 @@
     return Object.assign({}, helperState);
   }
 
+  loadPersistedDebugConfig();
+  installDebugConfigStorageListener();
+
   globalScope.mergedLinkLabDebug = {
     levels: Object.assign({}, debugLevels),
     categories: Object.assign({}, defaultCategories),
+    getConfig: getConfig,
+    applyConfig: applyDebugConfig,
+    isEnabled: isEnabled,
+    isMethodEnabled: isMethodEnabled,
     configure: configure,
     emit: emit,
     error: function emitError(message, details) {

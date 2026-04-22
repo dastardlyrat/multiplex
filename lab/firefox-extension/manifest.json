@@ -22,6 +22,7 @@
   "background": {
     "scripts": [
       "debug-redaction.js",
+      "debug-config.js",
       "debug.js",
       "background.js"
     ]
@@ -51,6 +52,7 @@
       ],
       "js": [
         "debug-redaction.js",
+        "debug-config.js",
         "debug.js",
         "pipeline-default-plugin.js",
         "pipeline-plugin-registry.js",
@@ -78,9 +80,11 @@
         "page-pane-mirror.js",
         "page-pane-snapshot.js",
         "email-snapshot-sync.js",
+        "email-original-backup.js",
         "email-root-summary.js",
         "email-root-runtime.js",
         "email-auto-replace-state.js",
+        "mobile-device.js",
         "email-auto-replace.js",
         "content-settings-storage.js",
         "content-runtime-lifecycle.js",
@@ -103,6 +107,7 @@
         "app.css",
         "app.js",
         "debug-redaction.js",
+        "debug-config.js",
         "debug.js",
         "pipeline-default-plugin.js",
         "pipeline-plugin-registry.js",

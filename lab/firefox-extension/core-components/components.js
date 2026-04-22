@@ -10,7 +10,14 @@
   function resolveElementTarget(target) {
     // Branch: follow this path only when the current condition passes.
     if (typeof target === "string") {
-      return document.getElementById(target);
+      const normalizedTarget = String(target || "").trim();
+
+      // Branch: follow this path only when the current condition passes.
+      if (!normalizedTarget) {
+        return null;
+      }
+
+      return document.getElementById(normalizedTarget);
     }
 
     return target || null;
@@ -18,7 +25,8 @@
 
   const componentKit = {
     byId(id) {
-      return document.getElementById(id);
+      const normalizedId = String(id || "").trim();
+      return normalizedId ? document.getElementById(normalizedId) : null;
     },
 
     resolveElementTarget: resolveElementTarget,

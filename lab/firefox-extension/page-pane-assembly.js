@@ -73,7 +73,7 @@ function urlForensicsPagePaneAssemblyCreateDefaultOptions(options) {
 }
 
 function urlForensicsPagePaneAssemblyNormalizeTabKey(tabKey) {
-  return /^(converted|lab|diagnostics)$/.test(String(tabKey || "")) ? tabKey : "lab";
+  return /^(converted|backup|lab|diagnostics)$/.test(String(tabKey || "")) ? tabKey : "lab";
 }
 
 function urlForensicsPagePaneAssemblyUpdateTabButtons(elements, nextTabKey) {

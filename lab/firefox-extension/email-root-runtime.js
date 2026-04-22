@@ -4,6 +4,22 @@ function urlForensicsEmailRootRuntimeResolveFunction(candidateValue, fallbackVal
   return typeof candidateValue === "function" ? candidateValue : fallbackValue;
 }
 
+function urlForensicsEmailRootRuntimeResolveOriginalBackupHelper() {
+  if (typeof globalThis !== "undefined" && globalThis.urlForensicsEmailOriginalBackup) {
+    return globalThis.urlForensicsEmailOriginalBackup;
+  }
+
+  if (typeof require === "function") {
+    try {
+      return require("./email-original-backup.js");
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
 function urlForensicsEmailRootRuntimeBuildEnvironmentOptions(optionBag) {
   return {
     mutationObserverClass:
@@ -59,6 +75,7 @@ function urlForensicsEmailRootRuntimeBuildEnvironmentOptions(optionBag) {
 
 function urlForensicsEmailRootRuntimeBuildStateOptions(optionBag) {
   return {
+    debugApi: optionBag.debugApi && typeof optionBag.debugApi === "object" ? optionBag.debugApi : null,
     getLatestSnapshot: urlForensicsEmailRootRuntimeResolveFunction(
       optionBag.getLatestSnapshot,
       function getMissingLatestSnapshot() {
@@ -169,7 +186,9 @@ function urlForensicsEmailRootRuntimeObserve(root, options, observedEmailRoots) 
   rootObserver.observe(root, {
     childList: true,
     characterData: true,
-    subtree: true
+    subtree: true,
+    attributes: true,
+    attributeFilter: ["class", "style", "hidden", "aria-hidden", "role", "data-message-id"]
   });
 
   if (String(root.tagName || "").toUpperCase() === "IFRAME") {
@@ -187,7 +206,9 @@ function urlForensicsEmailRootRuntimeObserve(root, options, observedEmailRoots) 
       iframeObserver.observe(iframeContentRoot, {
         childList: true,
         characterData: true,
-        subtree: true
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["class", "style", "hidden", "aria-hidden", "role", "data-message-id"]
       });
     };
 
@@ -200,6 +221,33 @@ function urlForensicsEmailRootRuntimeObserve(root, options, observedEmailRoots) 
 
     attachIframeContentObserver();
   }
+}
+
+function urlForensicsEmailRootRuntimePreserveOriginalBackup(root, contentElement, snapshot) {
+  const originalBackupHelper = urlForensicsEmailRootRuntimeResolveOriginalBackupHelper();
+
+  if (!originalBackupHelper || typeof originalBackupHelper.preserveFromSnapshot !== "function") {
+    return null;
+  }
+
+  return originalBackupHelper.preserveFromSnapshot(root, contentElement, snapshot);
+}
+
+function urlForensicsEmailRootRuntimeDebugOriginalBackupPreserved(options, snapshot, contentElement) {
+  const debugApi = options.debugApi;
+  const backup = snapshot && snapshot.originalEmailBackup && typeof snapshot.originalEmailBackup === "object"
+    ? snapshot.originalEmailBackup
+    : snapshot;
+
+  if (!debugApi || typeof debugApi.variable !== "function" || !backup) {
+    return;
+  }
+
+  debugApi.variable("content original email backup preserved before rewrite", {
+    sourceHtmlLength: String(backup.sourceHtml || "").length,
+    rawTextLength: String(backup.rawText || "").length,
+    targetTagName: contentElement && contentElement.tagName ? String(contentElement.tagName) : ""
+  });
 }
 
 async function urlForensicsEmailRootRuntimeApplyRewrite(options, observedEmailRoots) {
@@ -234,7 +282,11 @@ async function urlForensicsEmailRootRuntimeApplyRewrite(options, observedEmailRo
     return { ok: true, applied: false, snapshot: refreshedSnapshot };
   }
 
-  options.replaceElementMarkup(options.getEmailRootContentElement(activeEmailRoot), rewrittenHtml);
+  const activeEmailContentElement = options.getEmailRootContentElement(activeEmailRoot);
+  urlForensicsEmailRootRuntimePreserveOriginalBackup(activeEmailRoot, activeEmailContentElement, latestSnapshot);
+  urlForensicsEmailRootRuntimeDebugOriginalBackupPreserved(options, latestSnapshot, activeEmailContentElement);
+  options.replaceElementMarkup(activeEmailContentElement, rewrittenHtml);
+  urlForensicsEmailRootRuntimePreserveOriginalBackup(activeEmailRoot, activeEmailContentElement, latestSnapshot);
   options.setLatestDetectedEmailRoot(activeEmailRoot);
   urlForensicsEmailRootRuntimeObserve(activeEmailRoot, options, observedEmailRoots);
 
