@@ -8,6 +8,16 @@ Open a supported webmail message, inspect its mirror, hover over links to examin
 
 **Multiplex** is the repository name; **URL Forensics Workbench** is the extension; `url-forensics` is the development-tooling package. The extension and package declare version **0.3.0**.
 
+This is an unsigned Firefox development build. The included package can be
+loaded temporarily; current webmail compatibility depends on the provider's
+page structure. Saved fixtures and recorded packaging checks support review
+without claiming a fresh live test of every integration.
+
+**Explore:** [The workspace](#a-workspace-for-understanding-email-links) ·
+[Try it](#try-it-in-firefox) · [Processing](#how-processing-works) ·
+[Data and limits](#permissions-data-and-limits) ·
+[Development](#development) · [Source map](#where-to-work).
+
 **[Download the Firefox extension ZIP](release-extension/url-forensics-workbench-0.3.0-firefox.zip?raw=true)** · [Installation and checksum](release-extension/README.md) · [How processing works](#how-processing-works) · [Development](#development)
 
 ## A workspace for understanding email links
@@ -163,10 +173,10 @@ The packaged extension has five recorded dynamic-`innerHTML` lint warnings, list
 
 ### Get the source
 
-The current default branch is `multiplex/backup-2026-04-09`:
+The current default branch is `main`:
 
 ```sh
-git clone --branch multiplex/backup-2026-04-09 https://github.com/dastardlyrat/multiplex.git
+git clone --branch main https://github.com/dastardlyrat/multiplex.git
 cd multiplex
 ```
 
@@ -218,6 +228,12 @@ The [hardening checklist](HARDENING-TODO.md) records the project's modularizatio
 
 ### Where to work
 
+Read the [extension manifest](lab/firefox-extension/manifest.json) first to see
+the browser entry points and configured hosts. Follow the relevant source
+family below, then inspect the matching fixtures and assertions in `tools/`.
+The committed extension ZIP is a separate distribution snapshot: changing a
+source file does not update that archive automatically.
+
 | Area | Starting point |
 | --- | --- |
 | Active Firefox extension | [lab/firefox-extension/](lab/firefox-extension/) |
@@ -242,3 +258,8 @@ The outer lab pages are distinct exploration surfaces. `forensics.html` contains
 ## License metadata
 
 [package.json](package.json) declares `ISC`. This tree has no standalone license file; this README records the existing metadata without adding license text or a copyright holder.
+
+The three bundled Material Symbols fonts retain their embedded Google LLC
+copyright notices. Google's [Material Symbols guide](https://developers.google.com/fonts/docs/material_symbols)
+documents the upstream collection under Apache License 2.0. Those upstream
+notices remain separate from the project's package metadata.
