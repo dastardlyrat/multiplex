@@ -1,0 +1,717 @@
+// Function: initialize shared URL Forensics storage model.
+(function initializeUrlForensicsStorageModel() {
+  "use strict";
+
+  const trackingParameterModel = (function resolveTrackingParameterModel() {
+    if (typeof globalThis !== "undefined" && globalThis.urlForensicsTrackingParameterModel) {
+      return globalThis.urlForensicsTrackingParameterModel;
+    }
+
+    if (typeof require === "function") {
+      try {
+        return require("./tracking-parameter-model.js");
+      } catch {
+        return null;
+      }
+    }
+
+    return null;
+  }());
+
+  if (!trackingParameterModel) {
+    throw new Error("URL Forensics tracking parameter model is unavailable.");
+  }
+
+  const debugConfigModel = (function resolveDebugConfigModel() {
+    if (typeof globalThis !== "undefined" && globalThis.urlForensicsDebugConfig) {
+      return globalThis.urlForensicsDebugConfig;
+    }
+
+    if (typeof require === "function") {
+      try {
+        return require("./debug-config.js");
+      } catch {
+        return null;
+      }
+    }
+
+    return null;
+  }());
+
+  const storageKeys = Object.freeze({
+    enableUrlNormalizationRepair: "enableUrlNormalizationRepair",
+    stripKnownTrackingParameters: "stripKnownTrackingParameters",
+    trackingParameterFilters: "trackingParameterFilters",
+    replaceEmailBodyWithMirrorContent: "replaceEmailBodyWithMirrorContent",
+    allowHelperOpenWithoutDetectedEmailBody: "allowHelperOpenWithoutDetectedEmailBody",
+    autoApplyMirrorOnMobileDevice: "autoApplyMirrorOnMobileDevice",
+    autoApplyMirrorForConfiguredSenders: "autoApplyMirrorForConfiguredSenders",
+    autoApplyMirrorSenderEmailList: "autoApplyMirrorSenderEmailList"
+  });
+  const legacyStorageKeys = Object.freeze({
+    autoApplyMirrorForNamedSender: "autoApplyMirrorForNamedSender"
+  });
+  const debugStorageKeys = debugConfigModel
+    ? debugConfigModel.storageKeys
+    : Object.freeze({
+      programDebugConfig: "programDebugConfig",
+      programDebugPageChoices: "programDebugPageChoices"
+    });
+  const defaultSettings = Object.freeze({
+    enableUrlNormalizationRepair: false,
+    stripKnownTrackingParameters: true,
+    trackingParameterFilters: trackingParameterModel.defaultTrackingParameterFilters,
+    replaceEmailBodyWithMirrorContent: false,
+    allowHelperOpenWithoutDetectedEmailBody: false,
+    autoApplyMirrorOnMobileDevice: false,
+    autoApplyMirrorForConfiguredSenders: false,
+    autoApplyMirrorSenderEmailList: Object.freeze([])
+  });
+  const defaultDebugConfig = debugConfigModel
+    ? debugConfigModel.defaultConfig
+    : Object.freeze({
+      level: "off",
+      categories: Object.freeze({
+        error: true,
+        runtime: true,
+        storage: true,
+        messaging: true,
+        ui: true,
+        pipeline: true,
+        function: false,
+        conditional: false,
+        loop: false,
+        variable: false
+      })
+    });
+  const defaultDebugPageChoices = debugConfigModel
+    ? debugConfigModel.defaultPageChoices
+    : Object.freeze({
+      renderLimit: 750,
+      autoRefresh: false,
+      typeFilter: "all"
+    });
+
+  // Function: normalize sender email address.
+  function normalizeSenderEmailAddress(value) {
+    const safeValue = String(value || "").trim().toLowerCase();
+    const mailtoMatch = safeValue.match(/^mailto:\s*([^?]+)/i);
+    const candidateValue = mailtoMatch ? mailtoMatch[1].trim() : safeValue;
+
+    if (!candidateValue) {
+      return "";
+    }
+
+    return /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i.test(candidateValue)
+      ? candidateValue
+      : "";
+  }
+
+  // Function: sanitize sender email list.
+  function sanitizeSenderEmailList(value) {
+    const candidateValues = Array.isArray(value) ? value : (value ? [value] : []);
+    const uniqueEmailMap = new Map();
+
+    candidateValues.forEach(function registerSenderEmail(candidateValue) {
+      const normalizedEmail = normalizeSenderEmailAddress(candidateValue);
+
+      if (!normalizedEmail || uniqueEmailMap.has(normalizedEmail)) {
+        return;
+      }
+
+      uniqueEmailMap.set(normalizedEmail, true);
+    });
+
+    return Array.from(uniqueEmailMap.keys());
+  }
+
+  // Function: resolve stored configured-sender auto-apply value.
+  function resolveStoredAutoApplyConfiguredSendersValue(storedSettings) {
+    const safeStoredSettings = storedSettings && typeof storedSettings === "object" ? storedSettings : {};
+
+    if (Object.prototype.hasOwnProperty.call(safeStoredSettings, storageKeys.autoApplyMirrorForConfiguredSenders)) {
+      return safeStoredSettings[storageKeys.autoApplyMirrorForConfiguredSenders];
+    }
+
+    if (Object.prototype.hasOwnProperty.call(safeStoredSettings, legacyStorageKeys.autoApplyMirrorForNamedSender)) {
+      return safeStoredSettings[legacyStorageKeys.autoApplyMirrorForNamedSender];
+    }
+
+    return undefined;
+  }
+
+  // Function: normalize stored settings.
+  function normalizeStoredSettings(storedSettings) {
+    const safeStoredSettings = storedSettings && typeof storedSettings === "object" ? storedSettings : {};
+    const normalizedStoredSettings = Object.assign({}, safeStoredSettings);
+    const resolvedAutoApplyValue = resolveStoredAutoApplyConfiguredSendersValue(normalizedStoredSettings);
+
+    // Preserve compatibility with the old key while keeping downstream code on the current key.
+    if (resolvedAutoApplyValue !== undefined) {
+      normalizedStoredSettings[storageKeys.autoApplyMirrorForConfiguredSenders] = resolvedAutoApplyValue;
+    }
+
+    return normalizedStoredSettings;
+  }
+
+  // Function: build storage boolean entry.
+  function buildStorageBooleanEntry(storedSettings, key, defaultValue) {
+    const hasStoredValue = !!(
+      storedSettings &&
+      typeof storedSettings === "object" &&
+      Object.prototype.hasOwnProperty.call(storedSettings, key)
+    );
+    const rawValue = hasStoredValue ? storedSettings[key] : undefined;
+
+    return {
+      hasStoredValue: hasStoredValue,
+      rawValue: rawValue,
+      effectiveValue: hasStoredValue ? rawValue === true : defaultValue === true
+    };
+  }
+
+  // Function: get effective stored boolean setting value.
+  function getEffectiveBooleanSettingValue(storedSettings, key, defaultValue) {
+    return buildStorageBooleanEntry(storedSettings, key, defaultValue).effectiveValue;
+  }
+
+  // Function: apply stored boolean setting to checkbox control.
+  function applyStoredBooleanSettingToControl(controlElement, storedSettings, key, defaultValue) {
+    if (!controlElement) {
+      return;
+    }
+
+    controlElement.checked = getEffectiveBooleanSettingValue(storedSettings, key, defaultValue);
+  }
+
+  // Function: build storage email list entry.
+  function buildStorageEmailListEntry(storedSettings, key, defaultValue) {
+    const hasStoredValue = !!(
+      storedSettings &&
+      typeof storedSettings === "object" &&
+      Object.prototype.hasOwnProperty.call(storedSettings, key)
+    );
+    const rawValue = hasStoredValue ? storedSettings[key] : undefined;
+
+    return {
+      hasStoredValue: hasStoredValue,
+      rawValue: rawValue,
+      effectiveValue: hasStoredValue ? sanitizeSenderEmailList(rawValue) : sanitizeSenderEmailList(defaultValue)
+    };
+  }
+
+  // Function: build tracking-parameter filter entry.
+  function buildTrackingParameterFilterEntry(storedSettings, key, defaultValue) {
+    const hasStoredValue = !!(
+      storedSettings &&
+      typeof storedSettings === "object" &&
+      Object.prototype.hasOwnProperty.call(storedSettings, key)
+    );
+    const rawValue = hasStoredValue ? storedSettings[key] : undefined;
+
+    return {
+      hasStoredValue: hasStoredValue,
+      rawValue: rawValue,
+      effectiveValue: trackingParameterModel.normalizeTrackingParameterFilters(hasStoredValue ? rawValue : defaultValue),
+      differsFromDefault: hasStoredValue && !trackingParameterModel.trackingParameterFiltersMatchDefault(rawValue)
+    };
+  }
+
+  // Function: get effective tracking-parameter filters.
+  function getEffectiveTrackingParameterFilters(storedSettings, key, defaultValue) {
+    return buildTrackingParameterFilterEntry(storedSettings, key, defaultValue).effectiveValue;
+  }
+
+  // Function: normalize debug config choices.
+  function normalizeDebugConfigChoices(value) {
+    if (debugConfigModel && typeof debugConfigModel.normalizeConfig === "function") {
+      return debugConfigModel.normalizeConfig(value, defaultDebugConfig);
+    }
+
+    const safeValue = value && typeof value === "object" ? value : {};
+    const safeCategories = safeValue.categories && typeof safeValue.categories === "object" ? safeValue.categories : {};
+    const allowedLevels = {
+      off: true,
+      error: true,
+      info: true,
+      verbose: true,
+      trace: true
+    };
+    const normalizedCategories = Object.assign({}, defaultDebugConfig.categories);
+
+    Object.keys(defaultDebugConfig.categories).forEach(function normalizeDebugCategory(categoryName) {
+      if (Object.prototype.hasOwnProperty.call(safeCategories, categoryName)) {
+        normalizedCategories[categoryName] = safeCategories[categoryName] === true;
+      }
+    });
+    normalizedCategories.error = true;
+
+    return {
+      level: allowedLevels[safeValue.level] ? safeValue.level : defaultDebugConfig.level,
+      categories: normalizedCategories
+    };
+  }
+
+  // Function: normalize debug page choices.
+  function normalizeDebugPageChoices(value) {
+    if (debugConfigModel && typeof debugConfigModel.normalizePageChoices === "function") {
+      return debugConfigModel.normalizePageChoices(value);
+    }
+
+    const safeValue = value && typeof value === "object" ? value : {};
+    const parsedRenderLimit = Number(safeValue.renderLimit);
+    const allowedTypeFilters = Object.assign({ all: true }, defaultDebugConfig.categories);
+
+    return {
+      renderLimit: Number.isFinite(parsedRenderLimit) && parsedRenderLimit > 0
+        ? Math.min(10000, Math.floor(parsedRenderLimit))
+        : defaultDebugPageChoices.renderLimit,
+      autoRefresh: safeValue.autoRefresh === true || safeValue.autoRefresh === false
+        ? safeValue.autoRefresh
+        : defaultDebugPageChoices.autoRefresh,
+      typeFilter: allowedTypeFilters[safeValue.typeFilter] ? safeValue.typeFilter : defaultDebugPageChoices.typeFilter
+    };
+  }
+
+  // Function: compare debug config choices.
+  function debugConfigMatchesDefault(config) {
+    if (debugConfigModel && typeof debugConfigModel.configMatchesDefault === "function") {
+      return debugConfigModel.configMatchesDefault(config);
+    }
+
+    const normalizedConfig = normalizeDebugConfigChoices(config);
+
+    if (normalizedConfig.level !== defaultDebugConfig.level) {
+      return false;
+    }
+
+    return Object.keys(defaultDebugConfig.categories).every(function compareDebugCategory(categoryName) {
+      return normalizedConfig.categories[categoryName] === defaultDebugConfig.categories[categoryName];
+    });
+  }
+
+  // Function: compare debug page choices.
+  function debugPageChoicesMatchDefault(pageChoices) {
+    if (debugConfigModel && typeof debugConfigModel.pageChoicesMatchDefault === "function") {
+      return debugConfigModel.pageChoicesMatchDefault(pageChoices);
+    }
+
+    const normalizedChoices = normalizeDebugPageChoices(pageChoices);
+
+    return (
+      normalizedChoices.renderLimit === defaultDebugPageChoices.renderLimit &&
+      normalizedChoices.autoRefresh === defaultDebugPageChoices.autoRefresh &&
+      normalizedChoices.typeFilter === defaultDebugPageChoices.typeFilter
+    );
+  }
+
+  // Function: build debug config storage entry.
+  function buildDebugConfigEntry(storedSettings) {
+    const hasStoredValue = !!(
+      storedSettings &&
+      typeof storedSettings === "object" &&
+      Object.prototype.hasOwnProperty.call(storedSettings, debugStorageKeys.programDebugConfig)
+    );
+    const rawValue = hasStoredValue ? storedSettings[debugStorageKeys.programDebugConfig] : undefined;
+    const effectiveValue = normalizeDebugConfigChoices(rawValue);
+
+    return {
+      hasStoredValue: hasStoredValue,
+      rawValue: rawValue,
+      effectiveValue: effectiveValue,
+      differsFromDefault: hasStoredValue && !debugConfigMatchesDefault(rawValue)
+    };
+  }
+
+  // Function: build debug page choices storage entry.
+  function buildDebugPageChoicesEntry(storedSettings) {
+    const hasStoredValue = !!(
+      storedSettings &&
+      typeof storedSettings === "object" &&
+      Object.prototype.hasOwnProperty.call(storedSettings, debugStorageKeys.programDebugPageChoices)
+    );
+    const rawValue = hasStoredValue ? storedSettings[debugStorageKeys.programDebugPageChoices] : undefined;
+    const effectiveValue = normalizeDebugPageChoices(rawValue);
+
+    return {
+      hasStoredValue: hasStoredValue,
+      rawValue: rawValue,
+      effectiveValue: effectiveValue,
+      differsFromDefault: hasStoredValue && !debugPageChoicesMatchDefault(rawValue)
+    };
+  }
+
+  // Function: create storage snapshot.
+  function createStorageSnapshot(options) {
+    const snapshotOptions = options && typeof options === "object" ? options : {};
+    const normalizedStoredSettings = normalizeStoredSettings(snapshotOptions.storedSettings);
+    const snapshot = {
+      source: String(snapshotOptions.source || "unavailable"),
+      loadedAt: Date.now(),
+      errorMessage: snapshotOptions.errorMessage ? String(snapshotOptions.errorMessage) : "",
+      enableUrlNormalizationRepair: buildStorageBooleanEntry(
+        normalizedStoredSettings,
+        storageKeys.enableUrlNormalizationRepair,
+        defaultSettings.enableUrlNormalizationRepair
+      ),
+      stripKnownTrackingParameters: buildStorageBooleanEntry(
+        normalizedStoredSettings,
+        storageKeys.stripKnownTrackingParameters,
+        defaultSettings.stripKnownTrackingParameters
+      ),
+      trackingParameterFilters: buildTrackingParameterFilterEntry(
+        normalizedStoredSettings,
+        storageKeys.trackingParameterFilters,
+        defaultSettings.trackingParameterFilters
+      ),
+      replaceEmailBodyWithMirrorContent: buildStorageBooleanEntry(
+        normalizedStoredSettings,
+        storageKeys.replaceEmailBodyWithMirrorContent,
+        defaultSettings.replaceEmailBodyWithMirrorContent
+      ),
+      allowHelperOpenWithoutDetectedEmailBody: buildStorageBooleanEntry(
+        normalizedStoredSettings,
+        storageKeys.allowHelperOpenWithoutDetectedEmailBody,
+        defaultSettings.allowHelperOpenWithoutDetectedEmailBody
+      ),
+      autoApplyMirrorOnMobileDevice: buildStorageBooleanEntry(
+        normalizedStoredSettings,
+        storageKeys.autoApplyMirrorOnMobileDevice,
+        defaultSettings.autoApplyMirrorOnMobileDevice
+      ),
+      autoApplyMirrorForConfiguredSenders: buildStorageBooleanEntry(
+        normalizedStoredSettings,
+        storageKeys.autoApplyMirrorForConfiguredSenders,
+        defaultSettings.autoApplyMirrorForConfiguredSenders
+      ),
+      autoApplyMirrorSenderEmailList: buildStorageEmailListEntry(
+        normalizedStoredSettings,
+        storageKeys.autoApplyMirrorSenderEmailList,
+        defaultSettings.autoApplyMirrorSenderEmailList
+      )
+    };
+
+    if (snapshotOptions.includeDebugChoices) {
+      snapshot.programDebugConfig = buildDebugConfigEntry(normalizedStoredSettings);
+      snapshot.programDebugPageChoices = buildDebugPageChoicesEntry(normalizedStoredSettings);
+    }
+
+    return snapshot;
+  }
+
+  // Function: get storage read keys.
+  function getStorageReadKeys(options) {
+    const keyOptions = options && typeof options === "object" ? options : {};
+    const readKeys = Object.values(storageKeys).concat(Object.values(legacyStorageKeys));
+
+    if (keyOptions.includeDebugChoices) {
+      return readKeys.concat(Object.values(debugStorageKeys));
+    }
+
+    return readKeys;
+  }
+
+  // Function: get storage source label.
+  function getStorageSourceLabel(storageSource) {
+    if (storageSource === "storage.local") {
+      return "storage.local";
+    }
+
+    if (storageSource === "storage.onChanged") {
+      return "storage.onChanged event";
+    }
+
+    if (storageSource === "storage-unavailable") {
+      return "Storage API unavailable";
+    }
+
+    if (storageSource === "storage-error") {
+      return "Storage read error";
+    }
+
+    if (storageSource === "defaults") {
+      return "Defaults";
+    }
+
+    return "Unavailable";
+  }
+
+  // Function: format storage boolean entry.
+  function formatStorageBooleanEntry(entry) {
+    if (!entry || typeof entry !== "object") {
+      return "Unavailable";
+    }
+
+    if (entry.hasStoredValue) {
+      if (entry.rawValue === true || entry.rawValue === false) {
+        return (entry.rawValue ? "true" : "false") + " (stored)";
+      }
+
+      return String(entry.rawValue) + " (stored non-boolean)";
+    }
+
+    return (entry.effectiveValue ? "true" : "false") + " (default)";
+  }
+
+  // Function: format storage email list entry.
+  function formatStorageEmailListEntry(entry) {
+    if (!entry || typeof entry !== "object") {
+      return "Unavailable";
+    }
+
+    const effectiveValue = Array.isArray(entry.effectiveValue) ? entry.effectiveValue : [];
+    const sourceLabel = entry.hasStoredValue ? "stored" : "default";
+
+    if (!effectiveValue.length) {
+      return "0 addresses (" + sourceLabel + ")";
+    }
+
+    return (
+      String(effectiveValue.length) +
+      " address" +
+      (effectiveValue.length === 1 ? "" : "es") +
+      " (" +
+      sourceLabel +
+      "): " +
+      effectiveValue.slice(0, 3).join(", ") +
+      (effectiveValue.length > 3 ? ", +" + String(effectiveValue.length - 3) + " more" : "")
+    );
+  }
+
+  // Function: format tracking-parameter filter entry.
+  function formatTrackingParameterFilterEntry(entry) {
+    if (!entry || typeof entry !== "object") {
+      return "Unavailable";
+    }
+
+    const sourceLabel = entry.hasStoredValue
+      ? (entry.differsFromDefault ? "stored custom" : "stored default")
+      : "not stored; using defaults";
+
+    return trackingParameterModel.formatTrackingParameterFilterSummary(entry.effectiveValue, {
+      sourceLabel: sourceLabel,
+      maxVisibleLabels: 4
+    });
+  }
+
+  // Function: format debug config entry.
+  function formatDebugConfigEntry(entry) {
+    if (!entry || typeof entry !== "object") {
+      return "Unavailable";
+    }
+
+    const effectiveValue = entry.effectiveValue && typeof entry.effectiveValue === "object"
+      ? entry.effectiveValue
+      : normalizeDebugConfigChoices(null);
+    const enabledCategories = Object.keys(effectiveValue.categories).filter(function keepEnabledCategory(categoryName) {
+      return effectiveValue.categories[categoryName] === true;
+    });
+    const sourceLabel = entry.hasStoredValue
+      ? (entry.differsFromDefault ? "stored custom" : "stored default")
+      : "not stored; using defaults";
+
+    return (
+      sourceLabel +
+      "; level=" +
+      effectiveValue.level +
+      "; categories=" +
+      enabledCategories.join(", ")
+    );
+  }
+
+  // Function: format debug page choices entry.
+  function formatDebugPageChoicesEntry(entry) {
+    if (!entry || typeof entry !== "object") {
+      return "Unavailable";
+    }
+
+    const effectiveValue = entry.effectiveValue && typeof entry.effectiveValue === "object"
+      ? entry.effectiveValue
+      : normalizeDebugPageChoices(null);
+    const sourceLabel = entry.hasStoredValue
+      ? (entry.differsFromDefault ? "stored custom" : "stored default")
+      : "not stored; using defaults";
+
+    return (
+      sourceLabel +
+      "; renderLimit=" +
+      String(effectiveValue.renderLimit) +
+      "; liveRefresh=" +
+      (effectiveValue.autoRefresh ? "on" : "off") +
+      "; typeFilter=" +
+      effectiveValue.typeFilter
+    );
+  }
+
+  // Function: get gecko manifest settings.
+  function getGeckoManifestSettings(manifest) {
+    return (
+      manifest &&
+      manifest.browser_specific_settings &&
+      manifest.browser_specific_settings.gecko &&
+      typeof manifest.browser_specific_settings.gecko === "object"
+        ? manifest.browser_specific_settings.gecko
+        : {}
+    );
+  }
+
+  // Function: get storage badge label.
+  function getStorageBadgeLabel(storageSnapshot) {
+    if (!storageSnapshot) {
+      return "Storage unknown";
+    }
+
+    if (storageSnapshot.source === "storage.local" || storageSnapshot.source === "storage.onChanged") {
+      return "Storage loaded";
+    }
+
+    if (storageSnapshot.source === "storage-error") {
+      return "Storage error";
+    }
+
+    if (storageSnapshot.source === "storage-unavailable") {
+      return "Storage unavailable";
+    }
+
+    return "Storage unknown";
+  }
+
+  // Function: build storage diagnostics rows.
+  function buildStorageDiagnosticsRows(options) {
+    const rowOptions = options && typeof options === "object" ? options : {};
+    const manifest = rowOptions.manifest && typeof rowOptions.manifest === "object" ? rowOptions.manifest : {};
+    const geckoSettings = getGeckoManifestSettings(manifest);
+    const storageSnapshot = rowOptions.storageSnapshot || null;
+    const pageLabel = String(rowOptions.pageLabel || "Page");
+    const pageUrl = String(rowOptions.pageUrl || "");
+    const shouldIncludeDebugChoices = rowOptions.includeDebugChoices === true;
+    const shortenPageValue =
+      typeof rowOptions.shortenValue === "function"
+        ? rowOptions.shortenValue
+        : function useRawPageValue(value) {
+            return String(value || "Unavailable");
+          };
+    const formatLoadedAt =
+      typeof rowOptions.formatTimestamp === "function"
+        ? rowOptions.formatTimestamp
+        : function formatRawTimestamp(timestampValue) {
+            return String(timestampValue || "Unavailable");
+          };
+    const rows = [
+      { label: "Extension", value: String(manifest.name || "URL Forensics Workbench") },
+      { label: "Version", value: String(manifest.version || "Unavailable") },
+      { label: "Gecko ID", value: String(geckoSettings.id || "Unavailable") },
+      { label: "Firefox Min Version", value: String(geckoSettings.strict_min_version || "Unavailable") },
+      { label: pageLabel, value: shortenPageValue(pageUrl, 108) },
+      { label: "Ready State", value: String(rowOptions.readyState || "unknown") }
+    ];
+
+    if (!storageSnapshot) {
+      rows.push({ label: "Storage Source", value: "Unavailable" });
+      return rows;
+    }
+
+    rows.push({ label: "Storage Source", value: getStorageSourceLabel(storageSnapshot.source) });
+    rows.push({ label: "Storage Loaded", value: formatLoadedAt(storageSnapshot.loadedAt) });
+    rows.push({
+      label: "Storage URL Normalization",
+      value: formatStorageBooleanEntry(storageSnapshot.enableUrlNormalizationRepair)
+    });
+    rows.push({
+      label: "Storage Tracking Parameter Stripping",
+      value: formatStorageBooleanEntry(storageSnapshot.stripKnownTrackingParameters)
+    });
+    rows.push({
+      label: "Storage Tracker Filters",
+      value: formatTrackingParameterFilterEntry(storageSnapshot.trackingParameterFilters)
+    });
+    rows.push({
+      label: "Storage Replace Body",
+      value: formatStorageBooleanEntry(storageSnapshot.replaceEmailBodyWithMirrorContent)
+    });
+    rows.push({
+      label: "Storage Helper Open Before Detection",
+      value: formatStorageBooleanEntry(storageSnapshot.allowHelperOpenWithoutDetectedEmailBody)
+    });
+    rows.push({
+      label: "Storage Mobile Auto-Apply",
+      value: formatStorageBooleanEntry(storageSnapshot.autoApplyMirrorOnMobileDevice)
+    });
+    rows.push({
+      label: "Storage Auto-Apply Toggle",
+      value: formatStorageBooleanEntry(storageSnapshot.autoApplyMirrorForConfiguredSenders)
+    });
+    rows.push({
+      label: "Storage Sender Addresses",
+      value: formatStorageEmailListEntry(storageSnapshot.autoApplyMirrorSenderEmailList)
+    });
+
+    if (shouldIncludeDebugChoices) {
+      rows.push({
+        label: "Debug Output Choices",
+        value: formatDebugConfigEntry(storageSnapshot.programDebugConfig)
+      });
+      rows.push({
+        label: "Debug Page Choices",
+        value: formatDebugPageChoicesEntry(storageSnapshot.programDebugPageChoices)
+      });
+      rows.push({
+        label: "Debug Output Storage",
+        value: "Not persisted; in-memory only"
+      });
+    }
+
+    if (storageSnapshot.errorMessage) {
+      rows.push({
+        label: "Storage Error",
+        value: storageSnapshot.errorMessage
+      });
+    }
+
+    return rows;
+  }
+
+  globalThis.urlForensicsStorageModel = Object.freeze({
+    storageKeys: storageKeys,
+    legacyStorageKeys: legacyStorageKeys,
+    debugStorageKeys: debugStorageKeys,
+    defaultSettings: defaultSettings,
+    trackingParameterDefinitions: trackingParameterModel.trackingParameterDefinitions,
+    defaultTrackingParameterFilters: trackingParameterModel.defaultTrackingParameterFilters,
+    defaultDebugConfig: defaultDebugConfig,
+    defaultDebugPageChoices: defaultDebugPageChoices,
+    normalizeSenderEmailAddress: normalizeSenderEmailAddress,
+    sanitizeSenderEmailList: sanitizeSenderEmailList,
+    resolveStoredAutoApplyConfiguredSendersValue: resolveStoredAutoApplyConfiguredSendersValue,
+    normalizeStoredSettings: normalizeStoredSettings,
+    buildStorageBooleanEntry: buildStorageBooleanEntry,
+    getEffectiveBooleanSettingValue: getEffectiveBooleanSettingValue,
+    applyStoredBooleanSettingToControl: applyStoredBooleanSettingToControl,
+    buildStorageEmailListEntry: buildStorageEmailListEntry,
+    buildTrackingParameterFilterEntry: buildTrackingParameterFilterEntry,
+    getEffectiveTrackingParameterFilters: getEffectiveTrackingParameterFilters,
+    normalizeTrackingParameterFilters: trackingParameterModel.normalizeTrackingParameterFilters,
+    trackingParameterFiltersMatchDefault: trackingParameterModel.trackingParameterFiltersMatchDefault,
+    getTrackingParameterDefinitionsByBucket: trackingParameterModel.getTrackingParameterDefinitionsByBucket,
+    setTrackingParameterBucketEnabled: trackingParameterModel.setTrackingParameterBucketEnabled,
+    isTrackingParameterBucketFullyEnabled: trackingParameterModel.isTrackingParameterBucketFullyEnabled,
+    formatTrackingParameterFilterSummary: trackingParameterModel.formatTrackingParameterFilterSummary,
+    formatTrackingParameterFilterEntry: formatTrackingParameterFilterEntry,
+    normalizeDebugConfigChoices: normalizeDebugConfigChoices,
+    normalizeDebugPageChoices: normalizeDebugPageChoices,
+    debugConfigMatchesDefault: debugConfigMatchesDefault,
+    debugPageChoicesMatchDefault: debugPageChoicesMatchDefault,
+    buildDebugConfigEntry: buildDebugConfigEntry,
+    buildDebugPageChoicesEntry: buildDebugPageChoicesEntry,
+    createStorageSnapshot: createStorageSnapshot,
+    getStorageReadKeys: getStorageReadKeys,
+    getStorageSourceLabel: getStorageSourceLabel,
+    formatStorageBooleanEntry: formatStorageBooleanEntry,
+    formatStorageEmailListEntry: formatStorageEmailListEntry,
+    formatDebugConfigEntry: formatDebugConfigEntry,
+    formatDebugPageChoicesEntry: formatDebugPageChoicesEntry,
+    getGeckoManifestSettings: getGeckoManifestSettings,
+    getStorageBadgeLabel: getStorageBadgeLabel,
+    buildStorageDiagnosticsRows: buildStorageDiagnosticsRows
+  });
+}());

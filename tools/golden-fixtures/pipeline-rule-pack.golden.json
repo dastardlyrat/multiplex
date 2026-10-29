@@ -1,0 +1,649 @@
+{
+  "pluginPacks": [
+    {
+      "id": "builtin-default",
+      "title": "Built-in URL Forensics rule pack",
+      "priority": 0,
+      "detection": {
+        "urlTokenPattern": {
+          "source": "https?:\\/\\/[^\\s<>\"']+",
+          "flags": "gi"
+        },
+        "repairableUrlTokenPatterns": [
+          {
+            "id": "protocol-whitespace-token",
+            "pattern": {
+              "source": "(?:^|[^a-z])(https?:\\/\\/\\s+[^\\s<>\"']+)",
+              "flags": "gi"
+            },
+            "tokenGroupIndex": 1
+          },
+          {
+            "id": "protocol-single-slash-token",
+            "pattern": {
+              "source": "(?:^|[^a-z])(https?:\\/(?!\\/)[^\\s<>\"']+)",
+              "flags": "gi"
+            },
+            "tokenGroupIndex": 1
+          },
+          {
+            "id": "protocol-missing-colon-token",
+            "pattern": {
+              "source": "(?:^|[^a-z])(https?\\/\\/[^\\s<>\"']+)",
+              "flags": "gi"
+            },
+            "tokenGroupIndex": 1
+          },
+          {
+            "id": "protocol-missing-leading-h-token",
+            "pattern": {
+              "source": "(?:^|[^a-z])(ttps?:\\/\\/[^\\s<>\"']+)",
+              "flags": "gi"
+            },
+            "tokenGroupIndex": 1
+          }
+        ],
+        "trailingUrlPunctuationPattern": {
+          "source": "[)\\]\\.,>]+$",
+          "flags": ""
+        },
+        "wrappedNoisePattern": {
+          "source": "[<>]",
+          "flags": "g"
+        },
+        "lightweightWhitespaceNoisePattern": {
+          "source": "[\\u2000-\\u200F\\u2028-\\u202F]",
+          "flags": "g"
+        },
+        "heavyWhitespaceNoisePattern": {
+          "source": "[\\u00AD\\u034F\\u061C\\u115F\\u1160\\u17B4\\u17B5\\u180E\\u2000-\\u200F\\u2028-\\u202F\\u2060-\\u206F\\uFEFF]",
+          "flags": "g"
+        },
+        "protectedMarkupTagPattern": {
+          "source": "^(A|SCRIPT|STYLE|NOSCRIPT|TEXTAREA|PRE|CODE)$",
+          "flags": "i"
+        },
+        "embeddedTrackingParameterPattern": {
+          "source": "[?&](?:url|u|target|redirect|redirect_url|dest|destination|next|forward|goto|continue|to|href|link|data)=([^&]+)",
+          "flags": "gi"
+        }
+      },
+      "tracking": {
+        "preferredTrackingParameterNames": [
+          "url",
+          "u",
+          "target",
+          "redirect",
+          "redirect_url",
+          "dest",
+          "destination",
+          "next",
+          "forward",
+          "goto",
+          "continue",
+          "to",
+          "href",
+          "link",
+          "data"
+        ],
+        "trackerHostKeywords": [
+          "list-manage",
+          "rs6.net",
+          "ccsend.com",
+          "kajabimail",
+          "mail",
+          "tracking",
+          "redirect",
+          "click"
+        ],
+        "trackingParameterDefinitions": [
+          {
+            "key": "utmPrefix",
+            "bucket": "safe",
+            "label": "utm_*",
+            "parameterName": "utm_",
+            "matchMode": "prefix",
+            "description": "Remove any UTM campaign parameter whose name starts with utm_."
+          },
+          {
+            "key": "gclid",
+            "bucket": "safe",
+            "label": "gclid",
+            "parameterName": "gclid",
+            "matchMode": "exact",
+            "description": "Google Ads click identifier."
+          },
+          {
+            "key": "dclid",
+            "bucket": "safe",
+            "label": "dclid",
+            "parameterName": "dclid",
+            "matchMode": "exact",
+            "description": "Google display click identifier."
+          },
+          {
+            "key": "gbraid",
+            "bucket": "safe",
+            "label": "gbraid",
+            "parameterName": "gbraid",
+            "matchMode": "exact",
+            "description": "Google app-to-web attribution parameter."
+          },
+          {
+            "key": "wbraid",
+            "bucket": "safe",
+            "label": "wbraid",
+            "parameterName": "wbraid",
+            "matchMode": "exact",
+            "description": "Google web-to-app attribution parameter."
+          },
+          {
+            "key": "msclkid",
+            "bucket": "safe",
+            "label": "msclkid",
+            "parameterName": "msclkid",
+            "matchMode": "exact",
+            "description": "Microsoft Ads click identifier."
+          },
+          {
+            "key": "ttclid",
+            "bucket": "safe",
+            "label": "ttclid",
+            "parameterName": "ttclid",
+            "matchMode": "exact",
+            "description": "TikTok click identifier."
+          },
+          {
+            "key": "liFatId",
+            "bucket": "safe",
+            "label": "li_fat_id",
+            "parameterName": "li_fat_id",
+            "matchMode": "exact",
+            "description": "LinkedIn ad attribution identifier."
+          },
+          {
+            "key": "fbclid",
+            "bucket": "safe",
+            "label": "fbclid",
+            "parameterName": "fbclid",
+            "matchMode": "exact",
+            "description": "Facebook click identifier."
+          },
+          {
+            "key": "mcCid",
+            "bucket": "safe",
+            "label": "mc_cid",
+            "parameterName": "mc_cid",
+            "matchMode": "exact",
+            "description": "Mailchimp campaign identifier."
+          },
+          {
+            "key": "mcEid",
+            "bucket": "safe",
+            "label": "mc_eid",
+            "parameterName": "mc_eid",
+            "matchMode": "exact",
+            "description": "Mailchimp email identifier."
+          },
+          {
+            "key": "mcTc",
+            "bucket": "safe",
+            "label": "mc_tc",
+            "parameterName": "mc_tc",
+            "matchMode": "exact",
+            "description": "Mailchimp tracking code parameter."
+          },
+          {
+            "key": "hsenc",
+            "bucket": "safe",
+            "label": "hsenc",
+            "parameterName": "hsenc",
+            "matchMode": "exact",
+            "description": "HubSpot email hash parameter."
+          },
+          {
+            "key": "hsmi",
+            "bucket": "safe",
+            "label": "_hsmi",
+            "parameterName": "_hsmi",
+            "matchMode": "exact",
+            "description": "HubSpot message identifier."
+          },
+          {
+            "key": "hsCtaTracking",
+            "bucket": "safe",
+            "label": "hsCtaTracking",
+            "parameterName": "hsctatracking",
+            "matchMode": "exact",
+            "description": "HubSpot CTA tracking parameter."
+          }
+        ]
+      },
+      "classification": {
+        "hostRules": [
+          {
+            "id": "publisher-list-manage",
+            "type": "publisher",
+            "matchType": "hostContains",
+            "value": "list-manage",
+            "values": [],
+            "pattern": null
+          },
+          {
+            "id": "newsletter-known-mailers",
+            "type": "newsletter",
+            "matchType": "hostContainsAny",
+            "value": "",
+            "values": [
+              "rs6.net",
+              "kajabimail",
+              "ymlpmail",
+              "ccsend.com",
+              "mailchi.mp"
+            ],
+            "pattern": null
+          },
+          {
+            "id": "tracker-host-pattern",
+            "type": "tracker",
+            "matchType": "hostPattern",
+            "value": "",
+            "values": [],
+            "pattern": {
+              "source": "track|trk|click|redirect",
+              "flags": "i"
+            }
+          }
+        ]
+      },
+      "repair": {
+        "peelTransforms": [
+          {
+            "id": "trim-trailing-url-punctuation",
+            "note": "TRAILING_PUNCT_REMOVED",
+            "match": {
+              "source": "[)\\]\\.,>]+$",
+              "flags": ""
+            },
+            "replaceWith": ""
+          },
+          {
+            "id": "collapse-protocol-whitespace",
+            "note": "PROTOCOL_REPAIRED",
+            "match": {
+              "source": "^(https?:\\/\\/|https?:\\/|https?\\/\\/|ttps?:\\/\\/)\\s+",
+              "flags": "i"
+            },
+            "replaceWith": "$1"
+          },
+          {
+            "id": "repair-single-protocol-slash",
+            "note": "PROTOCOL_REPAIRED",
+            "match": {
+              "source": "^([^:]+):\\/([^/])",
+              "flags": "i"
+            },
+            "replaceWith": "$1://$2"
+          },
+          {
+            "id": "repair-missing-colon-https",
+            "note": "PROTOCOL_REPAIRED",
+            "match": {
+              "source": "^https\\/\\/([^/])",
+              "flags": "i"
+            },
+            "replaceWith": "https://$1"
+          },
+          {
+            "id": "repair-missing-colon-http",
+            "note": "PROTOCOL_REPAIRED",
+            "match": {
+              "source": "^http\\/\\/([^/])",
+              "flags": "i"
+            },
+            "replaceWith": "http://$1"
+          },
+          {
+            "id": "repair-missing-leading-h-https",
+            "note": "PROTOCOL_REPAIRED",
+            "match": {
+              "source": "^ttps:\\/\\/",
+              "flags": "i"
+            },
+            "replaceWith": "https://"
+          },
+          {
+            "id": "repair-missing-leading-h-http",
+            "note": "PROTOCOL_REPAIRED",
+            "match": {
+              "source": "^ttp:\\/\\/",
+              "flags": "i"
+            },
+            "replaceWith": "http://"
+          }
+        ]
+      }
+    }
+  ],
+  "resolvedConfig": {
+    "detection": {
+      "urlTokenPattern": {
+        "source": "https?:\\/\\/[^\\s<>\"']+",
+        "flags": "gi"
+      },
+      "repairableUrlTokenPatterns": [
+        {
+          "id": "protocol-whitespace-token",
+          "pattern": {
+            "source": "(?:^|[^a-z])(https?:\\/\\/\\s+[^\\s<>\"']+)",
+            "flags": "gi"
+          },
+          "tokenGroupIndex": 1
+        },
+        {
+          "id": "protocol-single-slash-token",
+          "pattern": {
+            "source": "(?:^|[^a-z])(https?:\\/(?!\\/)[^\\s<>\"']+)",
+            "flags": "gi"
+          },
+          "tokenGroupIndex": 1
+        },
+        {
+          "id": "protocol-missing-colon-token",
+          "pattern": {
+            "source": "(?:^|[^a-z])(https?\\/\\/[^\\s<>\"']+)",
+            "flags": "gi"
+          },
+          "tokenGroupIndex": 1
+        },
+        {
+          "id": "protocol-missing-leading-h-token",
+          "pattern": {
+            "source": "(?:^|[^a-z])(ttps?:\\/\\/[^\\s<>\"']+)",
+            "flags": "gi"
+          },
+          "tokenGroupIndex": 1
+        }
+      ],
+      "trailingUrlPunctuationPattern": {
+        "source": "[)\\]\\.,>]+$",
+        "flags": ""
+      },
+      "wrappedNoisePattern": {
+        "source": "[<>]",
+        "flags": "g"
+      },
+      "lightweightWhitespaceNoisePattern": {
+        "source": "[\\u2000-\\u200F\\u2028-\\u202F]",
+        "flags": "g"
+      },
+      "heavyWhitespaceNoisePattern": {
+        "source": "[\\u00AD\\u034F\\u061C\\u115F\\u1160\\u17B4\\u17B5\\u180E\\u2000-\\u200F\\u2028-\\u202F\\u2060-\\u206F\\uFEFF]",
+        "flags": "g"
+      },
+      "protectedMarkupTagPattern": {
+        "source": "^(A|SCRIPT|STYLE|NOSCRIPT|TEXTAREA|PRE|CODE)$",
+        "flags": "i"
+      },
+      "embeddedTrackingParameterPattern": {
+        "source": "[?&](?:url|u|target|redirect|redirect_url|dest|destination|next|forward|goto|continue|to|href|link|data)=([^&]+)",
+        "flags": "gi"
+      }
+    },
+    "tracking": {
+      "preferredTrackingParameterNames": [
+        "url",
+        "u",
+        "target",
+        "redirect",
+        "redirect_url",
+        "dest",
+        "destination",
+        "next",
+        "forward",
+        "goto",
+        "continue",
+        "to",
+        "href",
+        "link",
+        "data"
+      ],
+      "trackerHostKeywords": [
+        "list-manage",
+        "rs6.net",
+        "ccsend.com",
+        "kajabimail",
+        "mail",
+        "tracking",
+        "redirect",
+        "click"
+      ],
+      "trackingParameterDefinitions": [
+        {
+          "key": "utmPrefix",
+          "bucket": "safe",
+          "label": "utm_*",
+          "parameterName": "utm_",
+          "matchMode": "prefix",
+          "description": "Remove any UTM campaign parameter whose name starts with utm_."
+        },
+        {
+          "key": "gclid",
+          "bucket": "safe",
+          "label": "gclid",
+          "parameterName": "gclid",
+          "matchMode": "exact",
+          "description": "Google Ads click identifier."
+        },
+        {
+          "key": "dclid",
+          "bucket": "safe",
+          "label": "dclid",
+          "parameterName": "dclid",
+          "matchMode": "exact",
+          "description": "Google display click identifier."
+        },
+        {
+          "key": "gbraid",
+          "bucket": "safe",
+          "label": "gbraid",
+          "parameterName": "gbraid",
+          "matchMode": "exact",
+          "description": "Google app-to-web attribution parameter."
+        },
+        {
+          "key": "wbraid",
+          "bucket": "safe",
+          "label": "wbraid",
+          "parameterName": "wbraid",
+          "matchMode": "exact",
+          "description": "Google web-to-app attribution parameter."
+        },
+        {
+          "key": "msclkid",
+          "bucket": "safe",
+          "label": "msclkid",
+          "parameterName": "msclkid",
+          "matchMode": "exact",
+          "description": "Microsoft Ads click identifier."
+        },
+        {
+          "key": "ttclid",
+          "bucket": "safe",
+          "label": "ttclid",
+          "parameterName": "ttclid",
+          "matchMode": "exact",
+          "description": "TikTok click identifier."
+        },
+        {
+          "key": "liFatId",
+          "bucket": "safe",
+          "label": "li_fat_id",
+          "parameterName": "li_fat_id",
+          "matchMode": "exact",
+          "description": "LinkedIn ad attribution identifier."
+        },
+        {
+          "key": "fbclid",
+          "bucket": "safe",
+          "label": "fbclid",
+          "parameterName": "fbclid",
+          "matchMode": "exact",
+          "description": "Facebook click identifier."
+        },
+        {
+          "key": "mcCid",
+          "bucket": "safe",
+          "label": "mc_cid",
+          "parameterName": "mc_cid",
+          "matchMode": "exact",
+          "description": "Mailchimp campaign identifier."
+        },
+        {
+          "key": "mcEid",
+          "bucket": "safe",
+          "label": "mc_eid",
+          "parameterName": "mc_eid",
+          "matchMode": "exact",
+          "description": "Mailchimp email identifier."
+        },
+        {
+          "key": "mcTc",
+          "bucket": "safe",
+          "label": "mc_tc",
+          "parameterName": "mc_tc",
+          "matchMode": "exact",
+          "description": "Mailchimp tracking code parameter."
+        },
+        {
+          "key": "hsenc",
+          "bucket": "safe",
+          "label": "hsenc",
+          "parameterName": "hsenc",
+          "matchMode": "exact",
+          "description": "HubSpot email hash parameter."
+        },
+        {
+          "key": "hsmi",
+          "bucket": "safe",
+          "label": "_hsmi",
+          "parameterName": "_hsmi",
+          "matchMode": "exact",
+          "description": "HubSpot message identifier."
+        },
+        {
+          "key": "hsCtaTracking",
+          "bucket": "safe",
+          "label": "hsCtaTracking",
+          "parameterName": "hsctatracking",
+          "matchMode": "exact",
+          "description": "HubSpot CTA tracking parameter."
+        }
+      ]
+    },
+    "classification": {
+      "hostRules": [
+        {
+          "id": "publisher-list-manage",
+          "type": "publisher",
+          "matchType": "hostContains",
+          "value": "list-manage",
+          "values": [],
+          "pattern": null
+        },
+        {
+          "id": "newsletter-known-mailers",
+          "type": "newsletter",
+          "matchType": "hostContainsAny",
+          "value": "",
+          "values": [
+            "rs6.net",
+            "kajabimail",
+            "ymlpmail",
+            "ccsend.com",
+            "mailchi.mp"
+          ],
+          "pattern": null
+        },
+        {
+          "id": "tracker-host-pattern",
+          "type": "tracker",
+          "matchType": "hostPattern",
+          "value": "",
+          "values": [],
+          "pattern": {
+            "source": "track|trk|click|redirect",
+            "flags": "i"
+          }
+        }
+      ]
+    },
+    "repair": {
+      "peelTransforms": [
+        {
+          "id": "trim-trailing-url-punctuation",
+          "note": "TRAILING_PUNCT_REMOVED",
+          "match": {
+            "source": "[)\\]\\.,>]+$",
+            "flags": ""
+          },
+          "replaceWith": ""
+        },
+        {
+          "id": "collapse-protocol-whitespace",
+          "note": "PROTOCOL_REPAIRED",
+          "match": {
+            "source": "^(https?:\\/\\/|https?:\\/|https?\\/\\/|ttps?:\\/\\/)\\s+",
+            "flags": "i"
+          },
+          "replaceWith": "$1"
+        },
+        {
+          "id": "repair-single-protocol-slash",
+          "note": "PROTOCOL_REPAIRED",
+          "match": {
+            "source": "^([^:]+):\\/([^/])",
+            "flags": "i"
+          },
+          "replaceWith": "$1://$2"
+        },
+        {
+          "id": "repair-missing-colon-https",
+          "note": "PROTOCOL_REPAIRED",
+          "match": {
+            "source": "^https\\/\\/([^/])",
+            "flags": "i"
+          },
+          "replaceWith": "https://$1"
+        },
+        {
+          "id": "repair-missing-colon-http",
+          "note": "PROTOCOL_REPAIRED",
+          "match": {
+            "source": "^http\\/\\/([^/])",
+            "flags": "i"
+          },
+          "replaceWith": "http://$1"
+        },
+        {
+          "id": "repair-missing-leading-h-https",
+          "note": "PROTOCOL_REPAIRED",
+          "match": {
+            "source": "^ttps:\\/\\/",
+            "flags": "i"
+          },
+          "replaceWith": "https://"
+        },
+        {
+          "id": "repair-missing-leading-h-http",
+          "note": "PROTOCOL_REPAIRED",
+          "match": {
+            "source": "^ttp:\\/\\/",
+            "flags": "i"
+          },
+          "replaceWith": "http://"
+        }
+      ]
+    }
+  }
+}

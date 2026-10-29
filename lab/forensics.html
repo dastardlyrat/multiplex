@@ -1,0 +1,2955 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>URL Forensics Workbench</title>
+<!-- Self-contained styles so the file can travel without external CSS assets. -->
+<style>
+/* Base component styles shared across panes, actions, and utility states. */
+:root {
+  --surface: #ffffff;
+  --surface-soft: #f6f6f6;
+  --border: #cfcfcf;
+  --ink: #1f1f1f;
+  --ink-soft: #4a4a4a;
+  --accent: #0f766e;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  font-family: Arial, sans-serif;
+  color: var(--ink);
+}
+
+.app-shell {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, #ececec 0%, #f8f8f8 100%);
+}
+
+.app-header,
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.workspace {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 8px;
+  padding: 8px;
+  overflow: auto;
+}
+
+.column {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.pane-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #ffffff;
+  background: #383838;
+  padding: 6px 8px;
+}
+
+.pane-action {
+  cursor: pointer;
+  font-size: 10px;
+  border: 1px solid #707070;
+  background: #505050;
+  color: #ffffff;
+  padding: 2px 6px;
+}
+
+.pane-edit,
+.pane-output,
+.pane-console {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  white-space: pre-wrap;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+}
+
+.pane-edit[contenteditable="true"],
+.pane-output[contenteditable="true"] {
+  outline: none;
+}
+
+.pane-console {
+  background: var(--surface-soft);
+  white-space: pre;
+  font-size: 11px;
+}
+
+.pane-summary {
+  flex: 0 0 auto;
+  padding: 6px 8px;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 11px;
+  background: #f0f0f0;
+  color: var(--ink-soft);
+}
+
+.is-hidden {
+  display: none;
+}
+
+.token-valid {
+  color: #2e7d32;
+  font-weight: 700;
+}
+
+.token-warning {
+  color: #ef6c00;
+  font-weight: 700;
+}
+
+.token-fail {
+  color: #c62828;
+  font-weight: 700;
+}
+
+/* Layout-specific styles for the URL forensics workspace and converted preview sidebar. */
+.content-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  overflow: hidden;
+}
+
+.merged-workspace {
+  display: flex;
+  flex-wrap: nowrap;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  width: auto;
+  overflow: hidden;
+  gap: 8px;
+  align-items: stretch;
+  padding: 0;
+}
+
+.app-header h3 {
+  margin: 0 16px 0 0;
+  font-size: 16px;
+}
+
+.app-header {
+  flex-wrap: wrap;
+}
+
+.column {
+  min-width: 0;
+  height: 100%;
+  transition: flex-basis 0.2s ease, width 0.2s ease;
+}
+
+.column.is-expanded {
+  flex: 1 1 auto;
+  width: auto;
+}
+
+.column.is-active {
+  box-shadow: inset 0 0 0 1px rgba(15, 118, 110, 0.45);
+}
+
+.column.is-active .pane-title {
+  background: #0f766e;
+}
+
+.column.is-collapsed-horizontal {
+  flex: 0 0 52px;
+  width: 52px;
+  align-self: stretch;
+  overflow: hidden;
+}
+
+.column.is-collapsed-horizontal .pane-title {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  justify-content: flex-start;
+  align-items: center;
+  height: 100%;
+  min-height: 100%;
+  padding: 8px 6px;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.column.is-collapsed-horizontal .pane-title .pane-action {
+  writing-mode: horizontal-tb;
+  transform: rotate(90deg);
+  transform-origin: center;
+  font-size: 9px;
+  padding: 2px 4px;
+}
+
+.column.is-collapsed-horizontal .pane-edit,
+.column.is-collapsed-horizontal .pane-output,
+.column.is-collapsed-horizontal .pane-console,
+.column.is-collapsed-horizontal .pane-summary {
+  display: none;
+}
+
+.sidebar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sidebar-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 0;
+  width: 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--surface);
+  border: 0 solid var(--border);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+  opacity: 0;
+  transition: flex-basis 0.22s ease, width 0.22s ease, opacity 0.22s ease, border-width 0.22s ease;
+}
+
+.sidebar-panel.is-open {
+  flex-basis: min(420px, 34vw);
+  width: min(420px, 34vw);
+  border-width: 1px;
+  opacity: 1;
+}
+
+#editor,
+#rewrittenPane,
+#finalPane,
+#digestPane {
+  white-space: pre-wrap;
+}
+
+#editor {
+  white-space: normal;
+  font-family: "Segoe UI", Arial, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  background: #ffffff;
+}
+
+#editor p,
+#editor div,
+#editor ul,
+#editor ol,
+#editor blockquote,
+#editor table,
+#editor pre {
+  margin-top: 0;
+  margin-bottom: 0.85em;
+}
+
+#editor img,
+#editor table {
+  max-width: 100%;
+}
+
+#editor img {
+  height: auto;
+}
+
+#editor table {
+  border-collapse: collapse;
+}
+
+#editor td,
+#editor th {
+  border: 1px solid #d6d6d6;
+  padding: 4px 6px;
+}
+
+#editor blockquote {
+  padding-left: 12px;
+  border-left: 3px solid #d0d0d0;
+  color: #4a4a4a;
+}
+
+#editor pre {
+  white-space: pre-wrap;
+  padding: 8px;
+  border-radius: 8px;
+  background: #f6f6f6;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+}
+
+#editor a {
+  color: #0f766e;
+}
+
+#finalPane a,
+#digestPane a,
+#rewrittenPane a,
+#diagnosticsPane a,
+#resolvedPane a,
+#detectedPane a {
+  color: #0f766e;
+  text-decoration: none;
+}
+
+#finalPane a:hover,
+#digestPane a:hover,
+#rewrittenPane a:hover,
+#diagnosticsPane a:hover,
+#resolvedPane a:hover,
+#detectedPane a:hover {
+  text-decoration: underline;
+}
+
+.inline-meta {
+  color: #555;
+  font-size: 11px;
+}
+
+#debugPane {
+  max-height: 28vh;
+  border-top: 1px solid var(--border);
+  background: #f4f4f4;
+}
+
+@media (max-width: 1100px) {
+  .content-shell {
+    flex-direction: column;
+    gap: 6px;
+    padding: 6px;
+  }
+
+  .merged-workspace {
+    gap: 6px;
+  }
+
+  .sidebar-panel {
+    width: 100%;
+  }
+
+  .sidebar-panel.is-open {
+    flex-basis: min(40vh, 320px);
+    width: 100%;
+  }
+
+  .column.is-collapsed-horizontal {
+    flex-basis: 44px;
+    width: 44px;
+  }
+}
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <!-- The header keeps the same button IDs used by the inline controller module below. -->
+  <header class="app-header">
+    <h3>URL Forensics Workbench</h3>
+    <button id="runBtn" class="pane-action" type="button">Run Pipeline</button>
+    <button id="useRewrittenBtn" class="pane-action" type="button">Show Converted Panel</button>
+    <button id="copyFinalBtn" class="pane-action" type="button">Copy Final URLs</button>
+    <button id="copyDigestBtn" class="pane-action" type="button">Copy Digest HTML</button>
+    <button id="toggleDebugBtn" class="pane-action" type="button">Toggle Debug</button>
+  </header>
+
+  <!-- The workspace itself is rendered from configuration so the repeated pane structure stays modular. -->
+  <div id="contentShell" class="content-shell">
+    <main id="workspace" class="workspace merged-workspace" aria-label="URL forensics analysis workspace"></main>
+  </div>
+
+  <!-- Hidden by default; this becomes visible when the analyst toggles debug output. -->
+  <div id="debugPane" class="pane-console is-hidden"></div>
+</div>
+
+<!-- Shared template for the main workspace columns. -->
+<template id="workspacePaneTemplate">
+  <section class="column">
+    <div class="pane-title">
+      <span data-role="title"></span>
+      <button class="pane-action" type="button" data-role="copyButton">Copy</button>
+    </div>
+    <div data-role="content"></div>
+    <div data-role="summary" class="pane-summary"></div>
+  </section>
+</template>
+
+<!-- Separate template for the converted preview sidebar because it includes a close action. -->
+<template id="sidebarPaneTemplate">
+  <aside class="sidebar-panel" aria-hidden="true" data-default-open="true">
+    <div class="pane-title">
+      <span data-role="title"></span>
+      <div class="sidebar-actions">
+        <button id="closeRewrittenBtn" class="pane-action" type="button">Hide</button>
+        <button class="pane-action" type="button" data-role="copyButton">Copy</button>
+      </div>
+    </div>
+    <div data-role="content"></div>
+    <div data-role="summary" class="pane-summary"></div>
+  </aside>
+</template>
+
+<script src="./firefox-extension/debug.js"></script>
+
+<!-- Layout module: builds the repeated panes from configuration inside this single file. -->
+<script>
+(function buildForensicsLayout() {
+  "use strict";
+
+  const debugApi = typeof globalThis !== "undefined" ? globalThis.mergedLinkLabDebug : null;
+  if (debugApi && typeof debugApi.configure === "function") {
+    debugApi.configure({ context: "forensics-inline-layout", module: "layout" });
+    debugApi.runtime("forensics inline layout initialization started");
+  }
+
+  /*
+    This layout builder keeps the page modular even though everything now lives in one HTML file.
+    The configuration objects below are the single source of truth for pane titles, IDs, copy targets,
+    and which surfaces should be editable. The existing app controller still works because those IDs
+    and classes remain exactly the same after rendering.
+  */
+  const WORKSPACE_PANES = [
+    {
+      title: "Input Editor",
+      contentId: "editor",
+      contentClass: "pane-edit",
+      summaryId: "inputSummary",
+      copyTargetId: "editor",
+      isEditable: true,
+      defaultExpanded: true
+    },
+    {
+      title: "Detected URLs",
+      contentId: "detectedPane",
+      contentClass: "pane-console",
+      summaryId: "detectSummary",
+      copyTargetId: "detectedPane"
+    },
+    {
+      title: "Normalization and Resolve",
+      contentId: "resolvedPane",
+      contentClass: "pane-console",
+      summaryId: "resolveSummary",
+      copyTargetId: "resolvedPane"
+    },
+    {
+      title: "Final URL List",
+      contentId: "finalPane",
+      contentClass: "pane-output",
+      summaryId: "finalSummary",
+      copyTargetId: "finalPane",
+      isEditable: true
+    },
+    {
+      title: "Digest Output",
+      contentId: "digestPane",
+      contentClass: "pane-output",
+      summaryId: "digestSummary",
+      copyTargetId: "digestPane",
+      isEditable: true
+    },
+    {
+      title: "Diagnostics",
+      contentId: "diagnosticsPane",
+      contentClass: "pane-console",
+      summaryId: "diagnosticsSummary",
+      copyTargetId: "diagnosticsPane"
+    }
+  ];
+
+  const SIDEBAR_PANE = {
+    id: "rewrittenSidebar",
+    title: "Converted Panel",
+    contentId: "rewrittenPane",
+    contentClass: "pane-output",
+    summaryId: "rewrittenSummary",
+    copyTargetId: "rewrittenPane",
+    isEditable: true
+  };
+
+  const contentShell = document.getElementById("contentShell");
+  const workspace = document.getElementById("workspace");
+  const workspacePaneTemplate = document.getElementById("workspacePaneTemplate");
+  const sidebarPaneTemplate = document.getElementById("sidebarPaneTemplate");
+
+  if (!contentShell || !workspace || !workspacePaneTemplate || !sidebarPaneTemplate) {
+    if (debugApi) {
+      debugApi.error("forensics inline layout initialization aborted: required template missing", {
+        hasContentShell: !!contentShell,
+        hasWorkspace: !!workspace,
+        hasWorkspacePaneTemplate: !!workspacePaneTemplate,
+        hasSidebarPaneTemplate: !!sidebarPaneTemplate
+      });
+    }
+    return;
+  }
+
+  // Creates one pane body with the exact ID and class hooks expected by the controller code.
+  function createPaneContentElement(config) {
+    const contentElement = document.createElement("div");
+    contentElement.id = config.contentId;
+    contentElement.className = config.contentClass;
+    contentElement.setAttribute("aria-label", config.title);
+
+    if (config.isEditable) {
+      contentElement.setAttribute("contenteditable", "true");
+    }
+
+    return contentElement;
+  }
+
+  // Applies the shared title, copy target, summary ID, and content surface for any pane template.
+  function applySharedPaneMetadata(rootElement, config) {
+    const titleElement = rootElement.querySelector('[data-role="title"]');
+    const copyButton = rootElement.querySelector('[data-role="copyButton"]');
+    const contentPlaceholder = rootElement.querySelector('[data-role="content"]');
+    const summaryElement = rootElement.querySelector('[data-role="summary"]');
+
+    if (titleElement) {
+      titleElement.textContent = config.title;
+    }
+
+    if (copyButton) {
+      copyButton.setAttribute("data-copy", config.copyTargetId);
+    }
+
+    if (summaryElement) {
+      summaryElement.id = config.summaryId;
+    }
+
+    if (contentPlaceholder) {
+      contentPlaceholder.replaceWith(createPaneContentElement(config));
+    }
+  }
+
+  // Builds one main workspace column from configuration so repeated markup stays out of the HTML body.
+  function buildWorkspacePane(config) {
+    const paneFragment = workspacePaneTemplate.content.cloneNode(true);
+    const column = paneFragment.querySelector(".column");
+
+    applySharedPaneMetadata(paneFragment, config);
+
+    if (column && config.defaultExpanded) {
+      column.setAttribute("data-default-expanded", "true");
+    }
+
+    return column;
+  }
+
+  // Builds the sidebar separately because it includes a close action in addition to the copy button.
+  function buildSidebarPane(config) {
+    const paneFragment = sidebarPaneTemplate.content.cloneNode(true);
+    const sidebar = paneFragment.querySelector(".sidebar-panel");
+
+    applySharedPaneMetadata(paneFragment, config);
+
+    if (sidebar) {
+      sidebar.id = config.id;
+    }
+
+    return sidebar;
+  }
+
+  // Render every workspace pane in a single batch so the DOM is clean before the app controller starts.
+  function renderWorkspacePanes() {
+    const paneElements = WORKSPACE_PANES.map(buildWorkspacePane).filter(Boolean);
+    workspace.replaceChildren(...paneElements);
+  }
+
+  // Insert the converted preview sidebar after the main workspace to preserve the existing flex layout.
+  function renderSidebarPane() {
+    const sidebarElement = buildSidebarPane(SIDEBAR_PANE);
+
+    if (!sidebarElement) {
+      return;
+    }
+
+    const existingSidebar = document.getElementById(SIDEBAR_PANE.id);
+    if (existingSidebar) {
+      existingSidebar.remove();
+    }
+
+    contentShell.appendChild(sidebarElement);
+  }
+
+  // Initialize the layout renderer by creating the configured panes before the controller starts.
+  function initializeLayout() {
+    renderWorkspacePanes();
+    renderSidebarPane();
+    if (debugApi) {
+      debugApi.runtime("forensics inline layout initialized", {
+        workspacePaneCount: WORKSPACE_PANES.length,
+        hasSidebar: !!document.getElementById(SIDEBAR_PANE.id)
+      });
+    }
+  }
+
+  initializeLayout();
+})();
+</script>
+
+<!-- Utility module: lightweight helpers for DOM lookup, copying, visibility, and shared pipeline helpers. -->
+<script>
+(function attachComponentKit(globalScope) {
+  "use strict";
+
+  function getComponentDebug() {
+    return globalScope && globalScope.mergedLinkLabDebug ? globalScope.mergedLinkLabDebug : null;
+  }
+
+  // Resolve either an element ID string or a direct DOM node into a usable element reference.
+  function resolveElementTarget(target) {
+    if (typeof target === "string") {
+      return document.getElementById(target);
+    }
+
+    return target || null;
+  }
+
+  const componentKit = {
+    byId(id) {
+      return document.getElementById(id);
+    },
+
+    resolveElementTarget: resolveElementTarget,
+
+    renderCount(target, label, count) {
+      const targetElement = resolveElementTarget(target);
+      const debugApi = getComponentDebug();
+      if (!targetElement) {
+        if (debugApi) {
+          debugApi.conditional("forensics component kit renderCount skipped: target missing", { label: label });
+        }
+        return;
+      }
+      targetElement.textContent = String(label) + ": " + String(count);
+      if (debugApi) {
+        debugApi.variable("forensics component kit count rendered", { label: label, count: count });
+      }
+    },
+
+    setVisible(target, shouldBeVisible) {
+      const targetElement = resolveElementTarget(target);
+      const debugApi = getComponentDebug();
+      if (!targetElement) {
+        if (debugApi) {
+          debugApi.conditional("forensics component kit setVisible skipped: target missing");
+        }
+        return;
+      }
+      targetElement.classList.toggle("is-hidden", !shouldBeVisible);
+      if (debugApi) {
+        debugApi.ui("forensics component kit visibility changed", { shouldBeVisible: !!shouldBeVisible });
+      }
+    },
+
+    toggle(target) {
+      const targetElement = resolveElementTarget(target);
+      const debugApi = getComponentDebug();
+      if (!targetElement) {
+        if (debugApi) {
+          debugApi.conditional("forensics component kit toggle skipped: target missing");
+        }
+        return;
+      }
+      targetElement.classList.toggle("is-hidden");
+      if (debugApi) {
+        debugApi.ui("forensics component kit visibility toggled", { isHidden: targetElement.classList.contains("is-hidden") });
+      }
+    },
+
+    bindLiveInput(target, handler) {
+      const targetElement = resolveElementTarget(target);
+      const debugApi = getComponentDebug();
+      if (!targetElement || typeof handler !== "function") {
+        if (debugApi) {
+          debugApi.conditional("forensics component kit bindLiveInput skipped", {
+            hasTarget: !!targetElement,
+            hasHandler: typeof handler === "function"
+          });
+        }
+        return;
+      }
+      targetElement.addEventListener("input", handler);
+      if (debugApi) {
+        debugApi.ui("forensics component kit live input bound");
+      }
+    },
+
+    async copyFromElement(source) {
+      const debugApi = getComponentDebug();
+      if (debugApi) {
+        debugApi.functionIn("forensics.componentKit.copyFromElement");
+      }
+      const sourceElement = resolveElementTarget(source);
+      if (!sourceElement || !navigator.clipboard || typeof navigator.clipboard.writeText !== "function") {
+        if (debugApi) {
+          debugApi.conditional("forensics component kit plain copy skipped", {
+            hasSource: !!sourceElement,
+            hasClipboard: !!navigator.clipboard
+          });
+          debugApi.functionOut("forensics.componentKit.copyFromElement", { copied: false });
+        }
+        return false;
+      }
+
+      await navigator.clipboard.writeText(sourceElement.innerText || "");
+      if (debugApi) {
+        debugApi.variable("forensics component kit plain copy text length assigned", {
+          textLength: sourceElement.innerText ? sourceElement.innerText.length : 0
+        });
+        debugApi.functionOut("forensics.componentKit.copyFromElement", { copied: true });
+      }
+      return true;
+    },
+
+    async copyRichFromElement(source) {
+      const debugApi = getComponentDebug();
+      if (debugApi) {
+        debugApi.functionIn("forensics.componentKit.copyRichFromElement");
+      }
+      const sourceElement = resolveElementTarget(source);
+
+      if (
+        !sourceElement ||
+        !navigator.clipboard ||
+        typeof navigator.clipboard.write !== "function" ||
+        typeof ClipboardItem === "undefined"
+      ) {
+        if (debugApi) {
+          debugApi.conditional("forensics component kit rich copy skipped", {
+            hasSource: !!sourceElement,
+            hasClipboard: !!navigator.clipboard,
+            hasClipboardItem: typeof ClipboardItem !== "undefined"
+          });
+          debugApi.functionOut("forensics.componentKit.copyRichFromElement", { copied: false });
+        }
+        return false;
+      }
+
+      const clipboardItem = new ClipboardItem({
+        "text/html": new Blob([sourceElement.innerHTML || ""], { type: "text/html" }),
+        "text/plain": new Blob([sourceElement.innerText || ""], { type: "text/plain" })
+      });
+
+      await navigator.clipboard.write([clipboardItem]);
+      if (debugApi) {
+        debugApi.variable("forensics component kit rich copy source lengths assigned", {
+          htmlLength: sourceElement.innerHTML ? sourceElement.innerHTML.length : 0,
+          textLength: sourceElement.innerText ? sourceElement.innerText.length : 0
+        });
+        debugApi.functionOut("forensics.componentKit.copyRichFromElement", { copied: true });
+      }
+      return true;
+    },
+
+    runPipeline(stages, inputValue, context) {
+      const debugApi = getComponentDebug();
+      if (debugApi) {
+        debugApi.functionIn("forensics.componentKit.runPipeline", {
+          stageCount: stages ? stages.length : 0,
+          inputLength: typeof inputValue === "string" ? inputValue.length : null
+        });
+      }
+      const pipelineContext = context || {};
+      let currentValue = inputValue;
+
+      (stages || []).forEach(function runStage(stage, index) {
+        try {
+          if (debugApi) {
+            debugApi.loop("forensics component kit running pipeline stage", {
+              index: index,
+              stageName: stage && stage.name ? stage.name : "anonymousStage"
+            });
+          }
+          currentValue = stage(currentValue, pipelineContext);
+        } catch (error) {
+          const stageName = stage.name || "anonymousStage";
+          if (!pipelineContext.errors) pipelineContext.errors = [];
+          pipelineContext.errors.push(stageName + ": " + error.message);
+          if (debugApi) {
+            debugApi.error("forensics component kit pipeline stage failed", {
+              stageName: stageName,
+              message: error && error.message ? error.message : "unknown error"
+            });
+          }
+        }
+      });
+
+      if (debugApi) {
+        debugApi.functionOut("forensics.componentKit.runPipeline", {
+          errorCount: pipelineContext.errors ? pipelineContext.errors.length : 0,
+          outputLength: typeof currentValue === "string" ? currentValue.length : null
+        });
+      }
+      return {
+        value: currentValue,
+        context: pipelineContext
+      };
+    }
+  };
+
+  globalScope.ComponentKit = componentKit;
+})(window);
+</script>
+
+<!-- Analysis module: detects, unwraps, normalizes, rewrites, and summarizes URLs. -->
+<script>
+(function attachMergedLinkLabPipeline(globalScope, createPipelineApi) {
+  "use strict";
+
+  const pipelineApi = createPipelineApi(globalScope);
+
+  if (typeof module !== "undefined" && module.exports) {
+    module.exports = pipelineApi;
+  }
+
+  if (globalScope) {
+    globalScope.MergedLinkLabPipeline = pipelineApi;
+  }
+})(
+  typeof globalThis !== "undefined" ? globalThis : this,
+  // Build the pipeline module and return the public analysis API used by the page.
+  function createMergedLinkLabPipelineApi(globalScope) {
+    "use strict";
+
+    const debugApi = globalScope && globalScope.mergedLinkLabDebug ? globalScope.mergedLinkLabDebug : null;
+    if (debugApi && typeof debugApi.configure === "function") {
+      debugApi.configure({ context: "forensics-inline-pipeline", module: "pipeline" });
+      debugApi.runtime("forensics inline pipeline initialization started");
+    }
+
+    // Regular expressions are grouped here so every pipeline stage shares the same token rules.
+    const regularExpressions = {
+      urlToken: /https?:\/\/[^\s<>"']+/gi,
+      trailingUrlPunctuation: /[)\]\.,>]+$/,
+      wrappedNoise: /[<>]/g,
+      lightweightWhitespaceNoise: /[\u2000-\u200F\u2028-\u202F]/g,
+      heavyWhitespaceNoise: /[\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180E\u2000-\u200F\u2028-\u202F\u2060-\u206F\uFEFF]/g,
+      protectedMarkupTag: /^(A|SCRIPT|STYLE|NOSCRIPT|TEXTAREA|PRE|CODE)$/i,
+      embeddedTrackingParameter:
+        /[?&](?:url|u|target|redirect|redirect_url|dest|destination|next|forward|goto|continue|to|href|link|data)=([^&]+)/gi
+    };
+
+    const preferredTrackingParameterNames = [
+      "url",
+      "u",
+      "target",
+      "redirect",
+      "redirect_url",
+      "dest",
+      "destination",
+      "next",
+      "forward",
+      "goto",
+      "continue",
+      "to",
+      "href",
+      "link",
+      "data"
+    ];
+
+    const trackingHostKeywords = [
+      "list-manage",
+      "rs6.net",
+      "ccsend.com",
+      "kajabimail",
+      "mail",
+      "tracking",
+      "redirect",
+      "click"
+    ];
+
+    // Convert nullable or non-string values into a safe string for downstream helpers.
+    function convertValueToString(value) {
+      return String(value || "");
+    }
+
+    // Read a DOM NodeFilter constant when available, otherwise fall back to the provided numeric value.
+    function getNodeFilterFlag(flagName, fallbackValue) {
+      return globalScope && globalScope.NodeFilter && typeof globalScope.NodeFilter[flagName] === "number"
+        ? globalScope.NodeFilter[flagName]
+        : fallbackValue;
+    }
+
+    // Read a DOM Node constant when available, otherwise fall back to the provided numeric value.
+    function getNodeTypeValue(typeName, fallbackValue) {
+      return globalScope && globalScope.Node && typeof globalScope.Node[typeName] === "number"
+        ? globalScope.Node[typeName]
+        : fallbackValue;
+    }
+
+    // Parse markup into a detached HTML document so it can be inspected safely.
+    function createHtmlParserDocument(sourceMarkup) {
+      if (!globalScope || typeof globalScope.DOMParser !== "function") {
+        return null;
+      }
+
+      const htmlParser = new globalScope.DOMParser();
+      return htmlParser.parseFromString(convertValueToString(sourceMarkup), "text/html");
+    }
+
+    // Escape special characters before rendering dynamic text back into HTML.
+    function escapeHtml(text) {
+      return convertValueToString(text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    // Normalize user-provided text by standardizing whitespace, line breaks, and spacing.
+    function cleanInputText(rawInput) {
+      const normalizedText = convertValueToString(rawInput)
+        .replace(/\r\n?/g, "\n")
+        .replace(/\u00A0/g, " ")
+        .replace(regularExpressions.lightweightWhitespaceNoise, "");
+
+      const normalizedLines = normalizedText
+        .split("\n")
+        .map(function collapseLineWhitespace(lineText) {
+          return lineText.replace(/[ \t]+/g, " ").replace(/[ \t]+$/g, "");
+        });
+
+      return normalizedLines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+    }
+
+    // Strip lightweight wrapper noise from a single line before title heuristics run.
+    function normalizeLine(lineText) {
+      return convertValueToString(lineText)
+        .replace(regularExpressions.wrappedNoise, "")
+        .replace(regularExpressions.lightweightWhitespaceNoise, "")
+        .trim();
+    }
+
+    // Check whether a nearby line looks like a useful human-readable title.
+    function validateTitle(rawTitleText) {
+      const normalizedTitle = normalizeLine(rawTitleText)
+        .replace(/[*_`]/g, "")
+        .replace(/^\|\s*/, "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      // Reject titles that are empty, obviously machine-generated, or too weak to label a digest entry well.
+      if (!normalizedTitle) return null;
+      if (normalizedTitle.startsWith("[image")) return null;
+      if (normalizedTitle.split(" ").length > 15) return null;
+      if (/^[a-z].*\.$/.test(normalizedTitle)) return null;
+      if (!/[A-Z0-9:!?]/.test(normalizedTitle)) return null;
+
+      return normalizedTitle;
+    }
+
+    // Prefer a clean title when possible and otherwise fall back to the destination host.
+    function normalizeTitle(titleText, fallbackHost) {
+      if (!titleText) return fallbackHost;
+      if (titleText.includes("http://") || titleText.includes("https://")) return fallbackHost;
+      if (titleText.length > 120) return fallbackHost;
+      return titleText;
+    }
+
+    // Create the standard record shape used for each detected URL token.
+    function createDetectedUrlRecord(originalUrl, recordId) {
+      return {
+        id: recordId,
+        original: originalUrl,
+        normalized: null,
+        resolved: [],
+        validResolved: [],
+        replacementUrl: "",
+        notes: []
+      };
+    }
+
+    // Stage 1: scan plain text for raw URL tokens and assign stable record IDs.
+    function detectURLs(textToScan, options) {
+      if (debugApi) {
+        debugApi.functionIn("forensics-inline-pipeline.detectURLs", {
+          inputLength: convertValueToString(textToScan).length,
+          hasOptions: !!options
+        });
+      }
+      const optionBag = options || {};
+      const startingRecordId = optionBag.startId || 1;
+      const detectedUrlTokens = convertValueToString(textToScan).match(regularExpressions.urlToken) || [];
+
+      if (debugApi) {
+        debugApi.variable("forensics inline detected url token count assigned", {
+          count: detectedUrlTokens.length,
+          startingRecordId: startingRecordId
+        });
+      }
+
+      const detectedItems = detectedUrlTokens.map(function mapDetectedUrlToken(originalUrl, index) {
+        if (debugApi && index < 3) {
+          debugApi.loop("forensics inline detectURLs mapping token", {
+            index: index,
+            recordId: startingRecordId + index,
+            tokenLength: originalUrl ? originalUrl.length : 0
+          });
+        }
+        return createDetectedUrlRecord(originalUrl, startingRecordId + index);
+      });
+
+      if (debugApi) {
+        debugApi.functionOut("forensics-inline-pipeline.detectURLs", {
+          detectedCount: detectedItems.length
+        });
+      }
+
+      return detectedItems;
+    }
+
+    // Stage 1b: walk HTML safely so both href attributes and visible text URLs can be analyzed.
+    function detectUrlsFromHtml(sourceMarkup) {
+      if (debugApi) {
+        debugApi.functionIn("forensics-inline-pipeline.detectUrlsFromHtml", {
+          sourceHtmlLength: convertValueToString(sourceMarkup).length
+        });
+      }
+      const parsedDocument = createHtmlParserDocument(sourceMarkup);
+
+      if (!parsedDocument) {
+        if (debugApi) {
+          debugApi.conditional("forensics inline html parser unavailable; falling back to text detection");
+          debugApi.functionOut("forensics-inline-pipeline.detectUrlsFromHtml", { mode: "fallback" });
+        }
+        return detectURLs(sourceMarkup);
+      }
+
+      const rootNode = parsedDocument.body || parsedDocument.documentElement || parsedDocument;
+      const showElementNodes = getNodeFilterFlag("SHOW_ELEMENT", 1);
+      const showTextNodes = getNodeFilterFlag("SHOW_TEXT", 4);
+      const htmlWalker = rootNode.ownerDocument.createTreeWalker(rootNode, showElementNodes | showTextNodes);
+      const detectedItems = [];
+      let nextRecordId = 1;
+      let currentNode = rootNode;
+
+      // Walk the parsed HTML once and harvest URLs from both anchor tags and visible text nodes.
+      while (currentNode) {
+        const tagName = convertValueToString(currentNode.tagName).toUpperCase();
+
+        if (currentNode.nodeType === getNodeTypeValue("ELEMENT_NODE", 1) && tagName === "A") {
+          const hrefValue = convertValueToString(currentNode.getAttribute("href")).trim();
+
+          if (/^https?:\/\//i.test(hrefValue)) {
+            detectedItems.push(createDetectedUrlRecord(hrefValue, nextRecordId));
+            nextRecordId += 1;
+          }
+        }
+
+        if (currentNode.nodeType === getNodeTypeValue("TEXT_NODE", 3)) {
+          const parentTagName = currentNode.parentElement ? currentNode.parentElement.tagName : "";
+
+          if (!regularExpressions.protectedMarkupTag.test(parentTagName)) {
+            const matchedTextUrls = detectURLs(currentNode.nodeValue || "", { startId: nextRecordId });
+            if (matchedTextUrls.length) {
+              detectedItems.push.apply(detectedItems, matchedTextUrls);
+              nextRecordId += matchedTextUrls.length;
+            }
+          }
+        }
+
+        currentNode = htmlWalker.nextNode();
+      }
+
+      if (debugApi) {
+        debugApi.functionOut("forensics-inline-pipeline.detectUrlsFromHtml", {
+          detectedCount: detectedItems.length
+        });
+      }
+      return detectedItems;
+    }
+
+    // Remove trailing punctuation and repair lightly malformed protocols before resolution.
+    function peel(urlValue) {
+      let peeledUrl = convertValueToString(urlValue).trim();
+      const cleanupNotes = [];
+
+      if (regularExpressions.trailingUrlPunctuation.test(peeledUrl)) {
+        peeledUrl = peeledUrl.replace(regularExpressions.trailingUrlPunctuation, "");
+        cleanupNotes.push("TRAILING_PUNCT_REMOVED");
+      }
+
+      if (/^https?:\/([^/])/.test(peeledUrl)) {
+        peeledUrl = peeledUrl.replace(/^https?:\/([^/])/, "https://$1");
+        cleanupNotes.push("PROTOCOL_REPAIRED");
+      }
+
+      return {
+        value: peeledUrl,
+        notes: cleanupNotes
+      };
+    }
+
+    // Attempt one safe URL decode pass without throwing on malformed input.
+    function decodeValue(valueToDecode) {
+      try {
+        return decodeURIComponent(valueToDecode);
+      } catch {
+        return valueToDecode;
+      }
+    }
+
+    // Apply multiple decode passes so nested tracker parameters can be unwrapped.
+    function decodeRepeated(valueToDecode, maximumRounds) {
+      let decodedValue = valueToDecode;
+      const totalDecodePasses = maximumRounds || 3;
+
+      // Keep decoding until the value stops changing or the safety limit is reached.
+      for (let decodeRoundIndex = 0; decodeRoundIndex < totalDecodePasses; decodeRoundIndex += 1) {
+        const nextDecodedValue = decodeValue(decodedValue);
+        if (nextDecodedValue === decodedValue) break;
+        decodedValue = nextDecodedValue;
+      }
+
+      return decodedValue;
+    }
+
+    // Pull the first absolute URL token out of a larger string value.
+    function extractFirstAbsoluteUrl(valueToInspect) {
+      const candidateText = convertValueToString(valueToInspect).trim();
+
+      if (!candidateText) {
+        return null;
+      }
+
+      const directLeadingMatch = candidateText.match(/^https?:\/\/[^\s<>"']+/i);
+      if (directLeadingMatch) {
+        return directLeadingMatch[0];
+      }
+
+      const embeddedUrlMatch = candidateText.match(/https?:\/\/[^\s<>"']+/i);
+      return embeddedUrlMatch ? embeddedUrlMatch[0] : null;
+    }
+
+    // Return the first candidate value that can yield an absolute URL.
+    function firstUrlCandidate(candidateValues) {
+      // Try candidates in order so the first decodable absolute URL wins.
+      for (let valueIndex = 0; valueIndex < candidateValues.length; valueIndex += 1) {
+        const rawCandidateValue = convertValueToString(candidateValues[valueIndex]).trim();
+
+        if (!rawCandidateValue) {
+          continue;
+        }
+
+        const decodedCandidateValue = decodeRepeated(rawCandidateValue, 4);
+        const extractedAbsoluteUrl = extractFirstAbsoluteUrl(decodedCandidateValue);
+
+        if (extractedAbsoluteUrl) {
+          return extractedAbsoluteUrl;
+        }
+      }
+
+      return null;
+    }
+
+    // Heuristically flag hosts that look like email tracking or redirect domains.
+    function isLikelyTrackerHost(hostName) {
+      const normalizedHostName = convertValueToString(hostName).toLowerCase();
+
+      if (!normalizedHostName) {
+        return false;
+      }
+
+      return trackingHostKeywords.some(function hasTrackingKeyword(keyword) {
+        return normalizedHostName.includes(keyword);
+      });
+    }
+
+    // Stage 2: pull nested destination URLs out of tracker parameters and redirect wrappers.
+    function extractTrackingCandidates(urlValue) {
+      const foundDestinationUrls = [];
+      const seenDestinationUrls = new Set();
+      const trimmedUrlValue = convertValueToString(urlValue).trim();
+
+      // Add one destination candidate only if it is distinct, absolute, and worth keeping.
+      function rememberDestinationCandidate(candidateValue) {
+        const extractedAbsoluteUrl = extractFirstAbsoluteUrl(candidateValue);
+
+        if (!extractedAbsoluteUrl || extractedAbsoluteUrl === trimmedUrlValue || seenDestinationUrls.has(extractedAbsoluteUrl)) {
+          return;
+        }
+
+        seenDestinationUrls.add(extractedAbsoluteUrl);
+        foundDestinationUrls.push(extractedAbsoluteUrl);
+      }
+
+      let parsedUrl = null;
+
+      try {
+        parsedUrl = new URL(trimmedUrlValue);
+      } catch {
+        parsedUrl = null;
+      }
+
+      // Check named tracking parameters first, then all parameters, then the whole URL for tracker-style hosts.
+      if (parsedUrl) {
+        preferredTrackingParameterNames.forEach(function inspectTrackingParameter(parameterName) {
+          parsedUrl.searchParams.getAll(parameterName).forEach(function addTrackingParameterValue(parameterValue) {
+            rememberDestinationCandidate(decodeRepeated(parameterValue, 4));
+          });
+        });
+
+        parsedUrl.searchParams.forEach(function inspectAllSearchParameterValues(parameterValue) {
+          rememberDestinationCandidate(decodeRepeated(parameterValue, 4));
+        });
+
+        if (isLikelyTrackerHost(parsedUrl.hostname)) {
+          rememberDestinationCandidate(decodeRepeated(trimmedUrlValue, 4));
+        }
+      }
+
+      const embeddedTrackingMatches = [...trimmedUrlValue.matchAll(regularExpressions.embeddedTrackingParameter)];
+      embeddedTrackingMatches.forEach(function inspectEmbeddedTrackingMatch(embeddedMatch) {
+        rememberDestinationCandidate(decodeRepeated(embeddedMatch[1], 4));
+      });
+
+      return foundDestinationUrls;
+    }
+
+    // Return the first extracted tracking destination for callers that only need one result.
+    function extractTracking(urlValue) {
+      const detectedTrackingCandidates = extractTrackingCandidates(urlValue);
+      return detectedTrackingCandidates.length ? detectedTrackingCandidates[0] : null;
+    }
+
+    // Break malformed strings that accidentally contain multiple concatenated absolute URLs.
+    function splitMerged(urlValue) {
+      const mergedUrlSegments = convertValueToString(urlValue).match(/https?:\/\/.*?(?=https?:\/\/|$)/g);
+      return mergedUrlSegments && mergedUrlSegments.length ? mergedUrlSegments : [convertValueToString(urlValue)];
+    }
+
+    // Stage 3: recursively follow merged or nested tracker URLs until only leaf destinations remain.
+    function resolveURL(urlValue) {
+      const pendingUrlQueue = [{ value: urlValue, depth: 0 }];
+      const seenQueuedUrls = new Set([urlValue]);
+      const resolvedLeafUrls = [];
+      const seenLeafUrls = new Set();
+      const maximumResolutionDepth = 6;
+
+      // Breadth-first resolution lets us peel apart merged URLs and nested trackers without recursing forever.
+      while (pendingUrlQueue.length) {
+        const currentQueueEntry = pendingUrlQueue.shift();
+        const mergedUrlParts = splitMerged(currentQueueEntry.value);
+
+        mergedUrlParts.forEach(function inspectMergedUrlPart(mergedUrlPart) {
+          const destinationCandidates = extractTrackingCandidates(mergedUrlPart);
+
+          // If the current value still contains redirect targets, queue those next instead of treating this as a leaf.
+          if (destinationCandidates.length && currentQueueEntry.depth < maximumResolutionDepth) {
+            destinationCandidates.forEach(function queueDestinationCandidate(candidateUrl) {
+              if (seenQueuedUrls.has(candidateUrl)) {
+                return;
+              }
+
+              seenQueuedUrls.add(candidateUrl);
+              pendingUrlQueue.push({
+                value: candidateUrl,
+                depth: currentQueueEntry.depth + 1
+              });
+            });
+
+            return;
+          }
+
+          if (!seenLeafUrls.has(mergedUrlPart)) {
+            seenLeafUrls.add(mergedUrlPart);
+            resolvedLeafUrls.push(mergedUrlPart);
+          }
+        });
+      }
+
+      return resolvedLeafUrls.length ? resolvedLeafUrls : [urlValue];
+    }
+
+    // Repeatedly follow the preferred resolved URL until the result stabilizes.
+    function resolveURLMinimalRecursive(urlValue) {
+      const seenIntermediateUrls = new Set();
+      let currentUrlValue = convertValueToString(urlValue).trim();
+      let safetyGuardCount = 0;
+
+      // Re-run the resolver until the preferred next URL stops changing, or a loop/safety cap is encountered.
+      while (currentUrlValue && !seenIntermediateUrls.has(currentUrlValue) && safetyGuardCount < 24) {
+        safetyGuardCount += 1;
+        seenIntermediateUrls.add(currentUrlValue);
+
+        const peeledUrl = peel(currentUrlValue).value;
+        const decodedUrl = decodeRepeated(peeledUrl, 4);
+        const resolvedCandidates = resolveURL(decodedUrl);
+        const validResolvedCandidates = resolvedCandidates.filter(isValidURL);
+        const preferredNextUrl = convertValueToString(validResolvedCandidates[0] || resolvedCandidates[0] || decodedUrl || currentUrlValue).trim();
+
+        if (!preferredNextUrl || preferredNextUrl === currentUrlValue) {
+          break;
+        }
+
+        currentUrlValue = preferredNextUrl;
+      }
+
+      return currentUrlValue || convertValueToString(urlValue).trim();
+    }
+
+    // Verify that the current value can be parsed as a valid URL.
+    function isValidURL(urlValue) {
+      try {
+        new URL(urlValue);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
+    // Read only the hostname from a URL string.
+    function extractHost(urlValue) {
+      try {
+        return new URL(urlValue).hostname;
+      } catch {
+        return "";
+      }
+    }
+
+    // Reduce a URL to its origin and path without trailing slash noise.
+    function extractBaseUrl(urlValue) {
+      try {
+        const parsedUrl = new URL(urlValue);
+        return parsedUrl.origin + parsedUrl.pathname.replace(/\/$/, "");
+      } catch {
+        return urlValue;
+      }
+    }
+
+    // Reduce a URL to protocol plus host for compact display.
+    function extractOriginUrl(urlValue) {
+      try {
+        const parsedUrl = new URL(urlValue);
+        return parsedUrl.protocol + "//" + parsedUrl.host;
+      } catch {
+        return urlValue;
+      }
+    }
+
+    // Assign a simple category label based on the hostname pattern.
+    function classify(hostName) {
+      // The checks are ordered from most specific to most general so tracker-like hosts do not mask known publishers.
+      if (!hostName) return "unknown";
+      if (hostName.includes("list-manage")) return "publisher";
+      if (hostName.includes("rs6.net") || hostName.includes("kajabimail") || hostName.includes("ymlpmail")) return "newsletter";
+      if (/track|trk|click|redirect/i.test(hostName)) return "tracker";
+      return "destination";
+    }
+
+    // Clean anchor label whitespace while preserving readable text.
+    function normalizeAnchorText(textValue) {
+      return convertValueToString(textValue)
+        .replace(/\u00A0/g, " ")
+        .replace(/[ \t\f\v]+/g, " ")
+        .trim();
+    }
+
+    // Normalize general text content by removing invisible noise and extra spacing.
+    function normalizeTextValue(textValue) {
+      return convertValueToString(textValue)
+        .replace(regularExpressions.heavyWhitespaceNoise, "")
+        .replace(/\u00A0/g, " ")
+        .replace(/[ \t\f\v]+/g, " ")
+        .replace(/\n[ \t]+/g, "\n")
+        .replace(/\n{3,}/g, "\n\n");
+    }
+
+    // Find the line index where an original URL token appeared in the source text.
+    function locateLineForOriginal(rawText, originalUrl, fallbackStartIndex) {
+      const safeRawText = convertValueToString(rawText);
+      const safeFallbackIndex = Math.max(0, fallbackStartIndex || 0);
+      const locatedOffset = safeRawText.indexOf(originalUrl, safeFallbackIndex);
+
+      if (locatedOffset < 0) {
+        return {
+          lineIndex: -1,
+          nextStart: safeFallbackIndex
+        };
+      }
+
+      const textBeforeMatch = safeRawText.slice(0, locatedOffset);
+
+      return {
+        lineIndex: textBeforeMatch.split("\n").length - 1,
+        nextStart: locatedOffset + originalUrl.length
+      };
+    }
+
+    // Search the lines above a URL for the closest usable title candidate.
+    function findNearbyTitle(lines, lineIndex) {
+      for (let nearbyLineIndex = lineIndex - 1; nearbyLineIndex >= 0 && nearbyLineIndex > lineIndex - 10; nearbyLineIndex -= 1) {
+        const validatedTitle = validateTitle(lines[nearbyLineIndex]);
+        if (validatedTitle) {
+          return validatedTitle;
+        }
+      }
+
+      return null;
+    }
+
+    // Flatten the preferred resolved URL list for final output rendering.
+    function buildStandaloneFinalUrls(items) {
+      return (items || []).flatMap(function flattenResolvedUrls(item) {
+        return item.validResolved && item.validResolved.length ? item.validResolved : item.resolved;
+      });
+    }
+
+    // Stage 4: build human-readable digest rows by matching resolved URLs back to nearby titles.
+    function buildDigestEntries(rawText, items, options) {
+      const optionBag = options || {};
+      const useReplacementUrlOnly = !!optionBag.useReplacementUrlOnly;
+      const inputLines = convertValueToString(rawText).split("\n");
+      const digestEntries = [];
+      const seenDigestKeys = new Set();
+      let nextSearchStartIndex = 0;
+
+      (items || []).forEach(function inspectDetectedItem(item) {
+        const locatedOriginalLine = locateLineForOriginal(rawText, item.original, nextSearchStartIndex);
+        nextSearchStartIndex = locatedOriginalLine.nextStart;
+
+        // Depending on the caller, digest rows can use only the preferred replacement or every resolved candidate.
+        const digestUrls = useReplacementUrlOnly
+          ? (item.replacementUrl ? [item.replacementUrl] : [])
+          : (item.validResolved && item.validResolved.length ? item.validResolved : item.resolved);
+
+        digestUrls.forEach(function addDigestEntry(resolvedUrl) {
+          const resolvedHost = extractHost(resolvedUrl);
+          const nearbyTitle = locatedOriginalLine.lineIndex >= 0 ? findNearbyTitle(inputLines, locatedOriginalLine.lineIndex) : null;
+          const displayTitle = normalizeTitle(nearbyTitle, resolvedHost || "unknown-host");
+          const digestKey = displayTitle + "|" + resolvedHost;
+
+          if (!displayTitle || seenDigestKeys.has(digestKey)) {
+            return;
+          }
+
+          seenDigestKeys.add(digestKey);
+          digestEntries.push({
+            title: displayTitle,
+            url: resolvedUrl,
+            host: resolvedHost,
+            type: classify(resolvedHost)
+          });
+        });
+      });
+
+      return digestEntries;
+    }
+
+    // Collect only the URLs whose preferred replacement differs from the original token.
+    function buildChangedUrls(items) {
+      const changedUrlEntries = [];
+      const seenChangedUrlKeys = new Set();
+
+      (items || []).forEach(function inspectItem(item) {
+        const originalUrl = convertValueToString(item.original).trim();
+        const replacementUrl = convertValueToString(item.replacementUrl).trim();
+
+        if (!originalUrl || !replacementUrl || replacementUrl === originalUrl) {
+          return;
+        }
+
+        const changedUrlKey = originalUrl + "=>" + replacementUrl;
+        if (seenChangedUrlKeys.has(changedUrlKey)) {
+          return;
+        }
+
+        seenChangedUrlKeys.add(changedUrlKey);
+        changedUrlEntries.push({
+          original: originalUrl,
+          finalUrl: replacementUrl,
+          finalBaseUrl: extractBaseUrl(replacementUrl),
+          type: classify(extractHost(replacementUrl))
+        });
+      });
+
+      return changedUrlEntries;
+    }
+
+    // Choose the best replacement URL for one detected item.
+    function getPreferredReplacementUrl(item) {
+      const preferredUrl = item && item.validResolved && item.validResolved.length
+        ? item.validResolved[0]
+        : (item && item.resolved && item.resolved.length ? item.resolved[0] : "");
+
+      return convertValueToString(preferredUrl || item.normalized || item.original).trim();
+    }
+
+    // Build fast lookup maps from original or normalized URLs to replacement URLs.
+    function buildReplacementLookup(items) {
+      const replacementByOriginalUrl = new Map();
+      const replacementByNormalizedUrl = new Map();
+
+      (items || []).forEach(function inspectReplacementItem(item) {
+        const replacementUrl = convertValueToString(item.replacementUrl).trim();
+        const originalUrl = convertValueToString(item.original).trim();
+        const normalizedUrl = convertValueToString(item.normalized).trim();
+
+        if (!replacementUrl) {
+          return;
+        }
+
+        if (originalUrl && !replacementByOriginalUrl.has(originalUrl)) {
+          replacementByOriginalUrl.set(originalUrl, replacementUrl);
+        }
+
+        if (normalizedUrl && !replacementByNormalizedUrl.has(normalizedUrl)) {
+          replacementByNormalizedUrl.set(normalizedUrl, replacementUrl);
+        }
+      });
+
+      return {
+        byOriginal: replacementByOriginalUrl,
+        byNormalized: replacementByNormalizedUrl
+      };
+    }
+
+    // Resolve a replacement URL from the lookup maps using original or normalized forms.
+    function lookupReplacementUrl(replacementLookup, urlValue) {
+      const trimmedUrlValue = convertValueToString(urlValue).trim();
+
+      if (!trimmedUrlValue) {
+        return "";
+      }
+
+      if (replacementLookup.byOriginal.has(trimmedUrlValue)) {
+        return replacementLookup.byOriginal.get(trimmedUrlValue);
+      }
+
+      const normalizedUrlValue = peel(trimmedUrlValue).value;
+
+      if (replacementLookup.byNormalized.has(normalizedUrlValue)) {
+        return replacementLookup.byNormalized.get(normalizedUrlValue);
+      }
+
+      return "";
+    }
+
+    // Decide whether anchor text still looks machine-generated and should be replaced.
+    function looksLikeUrlText(textValue) {
+      const normalizedAnchorText = normalizeAnchorText(textValue);
+      return !normalizedAnchorText || /^https?:\/\//i.test(normalizedAnchorText) || normalizedAnchorText === normalizedAnchorText.toLowerCase();
+    }
+
+    // Normalize rewritten markup after replacements so the preview stays readable.
+    function cleanupMarkup(rootNode) {
+      if (!rootNode || !rootNode.ownerDocument) {
+        return;
+      }
+
+      const textWalker = rootNode.ownerDocument.createTreeWalker(rootNode, getNodeFilterFlag("SHOW_TEXT", 4));
+      const textNodes = [];
+      let currentTextNode = textWalker.nextNode();
+
+      // Collect text nodes first so normalization can safely replace or remove nodes without disturbing traversal.
+      while (currentTextNode) {
+        textNodes.push(currentTextNode);
+        currentTextNode = textWalker.nextNode();
+      }
+
+      textNodes.forEach(function normalizeTextNode(textNode) {
+        const parentTagName = textNode.parentElement ? textNode.parentElement.tagName : "";
+
+        if (regularExpressions.protectedMarkupTag.test(parentTagName)) {
+          return;
+        }
+
+        const normalizedNodeValue = normalizeTextValue(textNode.nodeValue || "");
+
+        if (!normalizedNodeValue.trim()) {
+          textNode.remove();
+          return;
+        }
+
+        if (normalizedNodeValue !== (textNode.nodeValue || "")) {
+          textNode.nodeValue = normalizedNodeValue;
+        }
+      });
+
+      Array.from(rootNode.querySelectorAll("a[href]")).forEach(function normalizeAnchor(anchorElement) {
+        const trimmedHref = convertValueToString(anchorElement.getAttribute("href")).trim();
+        anchorElement.setAttribute("href", trimmedHref);
+
+        const normalizedAnchorLabel = normalizeAnchorText(anchorElement.textContent || "");
+        if (normalizedAnchorLabel) {
+          anchorElement.textContent = normalizedAnchorLabel;
+        }
+      });
+
+      Array.from(rootNode.querySelectorAll("*")).forEach(function trimExcessLineBreaks(elementNode) {
+        let consecutiveBreakCount = 0;
+
+        Array.from(elementNode.childNodes).forEach(function inspectChildNode(childNode) {
+          if (childNode.nodeType === getNodeTypeValue("ELEMENT_NODE", 1) && childNode.tagName === "BR") {
+            consecutiveBreakCount += 1;
+            if (consecutiveBreakCount > 2) {
+              childNode.remove();
+            }
+            return;
+          }
+
+          if (childNode.nodeType === getNodeTypeValue("TEXT_NODE", 3) && !normalizeTextValue(childNode.nodeValue || "").trim()) {
+            return;
+          }
+
+          consecutiveBreakCount = 0;
+        });
+      });
+    }
+
+    // Update anchor href values and labels using the replacement lookup.
+    function rewriteAnchors(rootNode, replacementLookup) {
+      let rewrittenAnchorCount = 0;
+
+      Array.from(rootNode.querySelectorAll("a[href]")).forEach(function rewriteAnchor(anchorElement) {
+        const originalHref = convertValueToString(anchorElement.getAttribute("href")).trim();
+
+        if (!/^https?:\/\//i.test(originalHref)) {
+          return;
+        }
+
+        const replacementUrl = lookupReplacementUrl(replacementLookup, originalHref);
+        if (!replacementUrl) {
+          return;
+        }
+
+        anchorElement.setAttribute("href", replacementUrl);
+        anchorElement.setAttribute("data-merged-link-lab", classify(extractHost(replacementUrl)));
+
+        if (looksLikeUrlText(anchorElement.textContent || "")) {
+          anchorElement.textContent = extractBaseUrl(replacementUrl) || replacementUrl;
+        }
+
+        rewrittenAnchorCount += 1;
+      });
+
+      return rewrittenAnchorCount;
+    }
+
+    // Replace bare text URLs inside text nodes with their preferred replacement values.
+    function replaceTextUrls(rootNode, replacementLookup) {
+      const textWalker = rootNode.ownerDocument.createTreeWalker(rootNode, getNodeFilterFlag("SHOW_TEXT", 4));
+      const candidateTextNodes = [];
+      let currentTextNode = textWalker.nextNode();
+      let rewrittenTextNodeCount = 0;
+
+      // First find text nodes that are actually eligible for replacement and are not inside protected markup.
+      while (currentTextNode) {
+        if (
+          currentTextNode.parentElement &&
+          !regularExpressions.protectedMarkupTag.test(currentTextNode.parentElement.tagName) &&
+          /https?:\/\/[^\s<>"']+/i.test(currentTextNode.nodeValue || "")
+        ) {
+          candidateTextNodes.push(currentTextNode);
+        }
+
+        currentTextNode = textWalker.nextNode();
+      }
+
+      candidateTextNodes.forEach(function rewriteTextNode(textNode) {
+        const rawTextValue = textNode.nodeValue || "";
+        const replacementFragment = rootNode.ownerDocument.createDocumentFragment();
+        const matchingExpression = new RegExp(regularExpressions.urlToken.source, "gi");
+        let nextSearchIndex = 0;
+        let nodeWasChanged = false;
+        let currentMatch = null;
+
+        // Rebuild the text node piece by piece so only matched URL tokens are replaced and surrounding text is preserved.
+        while ((currentMatch = matchingExpression.exec(rawTextValue)) !== null) {
+          const originalUrlToken = currentMatch[0];
+          const matchStartIndex = currentMatch.index;
+          const matchEndIndex = matchStartIndex + originalUrlToken.length;
+          const peeledUrlToken = peel(originalUrlToken);
+          const trailingPunctuationMatch = convertValueToString(originalUrlToken).match(regularExpressions.trailingUrlPunctuation);
+          const trailingPunctuation = trailingPunctuationMatch ? trailingPunctuationMatch[0] : "";
+          const replacementUrl =
+            lookupReplacementUrl(replacementLookup, originalUrlToken) ||
+            lookupReplacementUrl(replacementLookup, peeledUrlToken.value);
+
+          if (!replacementUrl) {
+            continue;
+          }
+
+          const replacementText = replacementUrl + trailingPunctuation;
+
+          if (matchStartIndex > nextSearchIndex) {
+            replacementFragment.appendChild(rootNode.ownerDocument.createTextNode(rawTextValue.slice(nextSearchIndex, matchStartIndex)));
+          }
+
+          replacementFragment.appendChild(rootNode.ownerDocument.createTextNode(replacementText));
+          nextSearchIndex = matchEndIndex;
+          nodeWasChanged = nodeWasChanged || replacementText !== originalUrlToken;
+        }
+
+        if (!nodeWasChanged) {
+          return;
+        }
+
+        if (nextSearchIndex < rawTextValue.length) {
+          replacementFragment.appendChild(rootNode.ownerDocument.createTextNode(rawTextValue.slice(nextSearchIndex)));
+        }
+
+        if (textNode.parentNode) {
+          textNode.parentNode.replaceChild(replacementFragment, textNode);
+        }
+
+        rewrittenTextNodeCount += 1;
+      });
+
+      return rewrittenTextNodeCount;
+    }
+
+    // Stage 5: rewrite original HTML so links and text nodes point at their preferred resolved URLs.
+    function rewriteHtml(sourceMarkup, items) {
+      const parsedDocument = createHtmlParserDocument(sourceMarkup);
+
+      if (!parsedDocument) {
+        return {
+          html: convertValueToString(sourceMarkup),
+          count: 0
+        };
+      }
+
+      const rootNode = parsedDocument.body || parsedDocument.documentElement || parsedDocument;
+      const replacementLookup = buildReplacementLookup(items || []);
+      const rewrittenAnchorCount = rewriteAnchors(rootNode, replacementLookup);
+      const rewrittenTextNodeCount = replaceTextUrls(rootNode, replacementLookup);
+
+      cleanupMarkup(rootNode);
+
+      return {
+        html: parsedDocument.body && parsedDocument.body.innerHTML ? parsedDocument.body.innerHTML : convertValueToString(sourceMarkup),
+        count: rewrittenAnchorCount + rewrittenTextNodeCount
+      };
+    }
+
+    // Decide whether existing anchor text is readable enough to keep in preview mode.
+    function isHumanReadableAnchor(anchorElement) {
+      const anchorText = normalizeAnchorText(anchorElement && anchorElement.textContent);
+
+      if (!anchorText) return false;
+      if (/^https?:\/\//i.test(anchorText)) return false;
+      if (anchorText.length > 140) return false;
+      if (/^\[image/i.test(anchorText)) return true;
+      if (/facebook|instagram|youtube|linkedin|tiktok/i.test(anchorText)) return true;
+      return anchorText.split(/\s+/).length <= 10;
+    }
+
+    // Trim noise from the standalone preview after links and text nodes are rewritten.
+    function cleanupStandalonePreviewMarkup(documentRoot, parsedDocument) {
+      const textWalker = parsedDocument.createTreeWalker(documentRoot, getNodeFilterFlag("SHOW_TEXT", 4));
+      const textNodes = [];
+      let currentTextNode = textWalker.nextNode();
+
+      // Gather text nodes up front so preview cleanup can normalize whitespace without mutating the active walker.
+      while (currentTextNode) {
+        textNodes.push(currentTextNode);
+        currentTextNode = textWalker.nextNode();
+      }
+
+      textNodes.forEach(function normalizePreviewTextNode(textNode) {
+        const parentTagName = textNode.parentElement ? textNode.parentElement.tagName : "";
+        const shouldPreserveWhitespace = /^(PRE|TEXTAREA)$/i.test(parentTagName);
+        const normalizedValue = shouldPreserveWhitespace
+          ? convertValueToString(textNode.nodeValue)
+          : normalizeTextValue(textNode.nodeValue || "");
+
+        if (!shouldPreserveWhitespace && !normalizedValue.trim()) {
+          textNode.remove();
+          return;
+        }
+
+        if (normalizedValue !== (textNode.nodeValue || "")) {
+          textNode.nodeValue = normalizedValue;
+        }
+      });
+
+      Array.from(parsedDocument.querySelectorAll("a[href]")).forEach(function normalizePreviewAnchor(anchorElement) {
+        const trimmedHref = convertValueToString(anchorElement.getAttribute("href")).trim();
+        anchorElement.setAttribute("href", trimmedHref);
+
+        const normalizedAnchorLabel = normalizeTextValue(anchorElement.textContent || "").trim();
+        if (normalizedAnchorLabel) {
+          anchorElement.textContent = normalizedAnchorLabel;
+        }
+      });
+
+      // Create a simple signature for deduplicating repeated anchors.
+      function buildAnchorSignature(anchorElement) {
+        if (!anchorElement || anchorElement.tagName !== "A" || !anchorElement.hasAttribute("href")) {
+          return "";
+        }
+
+        const hrefValue = convertValueToString(anchorElement.getAttribute("href")).trim();
+        const textValue = normalizeTextValue(anchorElement.textContent || "").trim();
+        return hrefValue + "||" + textValue;
+      }
+
+      // Treat whitespace and line breaks as ignorable when checking duplicate neighboring links.
+      function isIgnorableNodeBetweenLinks(node) {
+        if (!node) return true;
+        if (node.nodeType === getNodeTypeValue("TEXT_NODE", 3)) return !normalizeTextValue(node.nodeValue || "").trim();
+        return node.nodeType === getNodeTypeValue("ELEMENT_NODE", 1) && node.tagName === "BR";
+      }
+
+      Array.from(documentRoot.querySelectorAll("*")).forEach(function removeImmediateDuplicateAnchors(parentElement) {
+        let previousAnchorSignature = "";
+
+        Array.from(parentElement.childNodes).forEach(function inspectChildNode(childNode) {
+          if (isIgnorableNodeBetweenLinks(childNode)) {
+            return;
+          }
+
+          if (
+            childNode.nodeType === getNodeTypeValue("ELEMENT_NODE", 1) &&
+            childNode.tagName === "A" &&
+            childNode.hasAttribute("href")
+          ) {
+            const currentAnchorSignature = buildAnchorSignature(childNode);
+
+            if (currentAnchorSignature && currentAnchorSignature === previousAnchorSignature) {
+              childNode.remove();
+              return;
+            }
+
+            previousAnchorSignature = currentAnchorSignature;
+            return;
+          }
+
+          previousAnchorSignature = "";
+        });
+      });
+
+      // Build a signature for blocks that only contain one meaningful anchor.
+      function buildSimpleBlockSignature(blockElement) {
+        if (!blockElement || blockElement.nodeType !== getNodeTypeValue("ELEMENT_NODE", 1)) {
+          return "";
+        }
+
+        const directElementChildren = Array.from(blockElement.children);
+        const directAnchorChildren = directElementChildren.filter(function keepAnchorChildren(childElement) {
+          return childElement.tagName === "A" && childElement.hasAttribute("href");
+        });
+        const otherNonBreakChildren = directElementChildren.filter(function keepOtherChildren(childElement) {
+          return childElement.tagName !== "A" && childElement.tagName !== "BR";
+        });
+
+        if (directAnchorChildren.length !== 1 || otherNonBreakChildren.length > 0) {
+          return "";
+        }
+
+        const clonedBlockElement = blockElement.cloneNode(true);
+        Array.from(clonedBlockElement.querySelectorAll("a,br")).forEach(function removeLinkArtifacts(node) {
+          node.remove();
+        });
+
+        const remainingText = normalizeTextValue(clonedBlockElement.textContent || "").replace(/\s+/g, "").trim();
+        if (remainingText) {
+          return "";
+        }
+
+        return buildAnchorSignature(directAnchorChildren[0]);
+      }
+
+      const blockCandidates = Array.from(documentRoot.querySelectorAll("p,div,li,td,th,span"));
+      let previousBlockSignature = "";
+
+      // Remove repeated single-link blocks that often appear after aggressive HTML rewriting.
+      blockCandidates.forEach(function removeDuplicateSingleLinkBlocks(blockElement) {
+        const currentBlockSignature = buildSimpleBlockSignature(blockElement);
+
+        if (!currentBlockSignature) {
+          previousBlockSignature = "";
+          return;
+        }
+
+        if (currentBlockSignature === previousBlockSignature) {
+          blockElement.remove();
+          return;
+        }
+
+        previousBlockSignature = currentBlockSignature;
+      });
+
+      Array.from(documentRoot.querySelectorAll("*")).forEach(function trimPreviewLineBreakRuns(elementNode) {
+        let consecutiveBreakCount = 0;
+
+        // Compress runaway line-break sequences so the converted preview stays readable.
+        Array.from(elementNode.childNodes).forEach(function inspectChildNode(childNode) {
+          if (childNode.nodeType === getNodeTypeValue("ELEMENT_NODE", 1) && childNode.tagName === "BR") {
+            consecutiveBreakCount += 1;
+            if (consecutiveBreakCount > 2) {
+              childNode.remove();
+            }
+            return;
+          }
+
+          if (childNode.nodeType === getNodeTypeValue("TEXT_NODE", 3) && !(childNode.nodeValue || "").trim()) {
+            return;
+          }
+
+          consecutiveBreakCount = 0;
+        });
+      });
+
+      const reverseCleanupCandidates = Array.from(documentRoot.querySelectorAll("p,div,span,td,th,li")).reverse();
+
+      // Walk backward when removing empty wrappers so parent containers are evaluated after their children settle.
+      reverseCleanupCandidates.forEach(function removeEmptyStructuralNodes(elementNode) {
+        if (elementNode.querySelector("img,svg,table,ul,ol,a,button,input,textarea,select,iframe")) {
+          return;
+        }
+
+        const meaningfulText = normalizeTextValue(elementNode.textContent || "").replace(/\s+/g, "");
+        const hasNonBreakChildElement = Array.from(elementNode.children).some(function findNonBreakChild(childElement) {
+          return childElement.tagName !== "BR";
+        });
+
+        if (!meaningfulText && !hasNonBreakChildElement) {
+          elementNode.remove();
+        }
+      });
+    }
+
+    // Preview mode resolves links directly inside the pasted markup so analysts can inspect a converted panel.
+    function rewriteHtmlForStandalonePreview(sourceMarkup) {
+      const parsedDocument = createHtmlParserDocument(sourceMarkup);
+
+      if (!parsedDocument) {
+        return {
+          html: convertValueToString(sourceMarkup),
+          count: 0
+        };
+      }
+
+      const rootNode = parsedDocument.body || parsedDocument.documentElement || parsedDocument;
+      let rewrittenNodeCount = 0;
+
+      // Preview mode first normalizes existing anchors in place before it rewrites plain text URLs into links.
+      Array.from(parsedDocument.querySelectorAll("a[href]")).forEach(function rewritePreviewAnchor(anchorElement) {
+        const originalHref = convertValueToString(anchorElement.getAttribute("href")).trim();
+
+        if (!/^https?:\/\//i.test(originalHref)) {
+          return;
+        }
+
+        const resolvedHref = resolveURLMinimalRecursive(originalHref);
+        const resolvedHost = extractHost(resolvedHref);
+        const resolvedType = classify(resolvedHost);
+        const resolvedOriginUrl = extractOriginUrl(resolvedHref);
+
+        anchorElement.setAttribute("href", resolvedHref);
+        anchorElement.setAttribute("data-link-type", resolvedType);
+        anchorElement.setAttribute("data-base-url", resolvedOriginUrl);
+
+        if (!isHumanReadableAnchor(anchorElement)) {
+          anchorElement.textContent = resolvedOriginUrl + " (" + resolvedType + ")";
+        }
+
+        rewrittenNodeCount += 1;
+      });
+
+      const textWalker = parsedDocument.createTreeWalker(rootNode, getNodeFilterFlag("SHOW_TEXT", 4));
+      const textNodesToRewrite = [];
+      let currentTextNode = textWalker.nextNode();
+
+      // Only collect text nodes that are allowed to become preview links and are not already inside anchors/scripts.
+      while (currentTextNode) {
+        const parentTagName = currentTextNode.parentElement ? currentTextNode.parentElement.tagName : "";
+
+        if (currentTextNode.parentElement && !/^(A|SCRIPT|STYLE)$/i.test(parentTagName)) {
+          textNodesToRewrite.push(currentTextNode);
+        }
+
+        currentTextNode = textWalker.nextNode();
+      }
+
+      textNodesToRewrite.forEach(function rewritePreviewTextNode(textNode) {
+        const rawTextValue = textNode.nodeValue || "";
+
+        if (!rawTextValue || !/https?:\/\//i.test(rawTextValue)) {
+          return;
+        }
+
+        const replacementFragment = parsedDocument.createDocumentFragment();
+        const matchingExpression = new RegExp(regularExpressions.urlToken.source, "gi");
+        let nextSearchIndex = 0;
+        let nodeWasChanged = false;
+        let currentMatch = null;
+
+        // Build a replacement fragment so each URL token becomes a clickable preview link while surrounding text stays intact.
+        while ((currentMatch = matchingExpression.exec(rawTextValue)) !== null) {
+          const originalUrlToken = currentMatch[0];
+          const matchStartIndex = currentMatch.index;
+          const matchEndIndex = matchStartIndex + originalUrlToken.length;
+
+          if (matchStartIndex > nextSearchIndex) {
+            replacementFragment.appendChild(parsedDocument.createTextNode(rawTextValue.slice(nextSearchIndex, matchStartIndex)));
+          }
+
+          const resolvedUrl = resolveURLMinimalRecursive(originalUrlToken);
+          const resolvedHost = extractHost(resolvedUrl);
+          const resolvedType = classify(resolvedHost);
+          const resolvedOriginUrl = extractOriginUrl(resolvedUrl);
+          const anchorElement = parsedDocument.createElement("a");
+
+          anchorElement.setAttribute("href", resolvedUrl);
+          anchorElement.setAttribute("target", "_blank");
+          anchorElement.setAttribute("rel", "noopener noreferrer");
+          anchorElement.setAttribute("data-link-type", resolvedType);
+          anchorElement.setAttribute("data-base-url", resolvedOriginUrl);
+          anchorElement.textContent = resolvedOriginUrl + " (" + resolvedType + ")";
+
+          replacementFragment.appendChild(anchorElement);
+          rewrittenNodeCount += 1;
+          nodeWasChanged = true;
+          nextSearchIndex = matchEndIndex;
+        }
+
+        if (!nodeWasChanged) {
+          return;
+        }
+
+        if (nextSearchIndex < rawTextValue.length) {
+          replacementFragment.appendChild(parsedDocument.createTextNode(rawTextValue.slice(nextSearchIndex)));
+        }
+
+        if (textNode.parentNode) {
+          textNode.parentNode.replaceChild(replacementFragment, textNode);
+        }
+      });
+
+      cleanupStandalonePreviewMarkup(rootNode, parsedDocument);
+
+      return {
+        html: parsedDocument.body && parsedDocument.body.innerHTML ? parsedDocument.body.innerHTML : convertValueToString(sourceMarkup),
+        count: rewrittenNodeCount
+      };
+    }
+
+    // Convert markup into clean plain text for downstream summaries and diagnostics.
+    function htmlToText(sourceMarkup) {
+      const parsedDocument = createHtmlParserDocument(sourceMarkup);
+
+      if (!parsedDocument) {
+        return cleanInputText(convertValueToString(sourceMarkup).replace(/<[^>]+>/g, "\n"));
+      }
+
+      const bodyNode = parsedDocument.body || parsedDocument.documentElement || parsedDocument;
+      return cleanInputText(bodyNode.innerText || bodyNode.textContent || "");
+    }
+
+    // Summarize counts, invalid URLs, and pipeline errors for the diagnostics pane.
+    function buildDiagnostics(items, finalUrls, digestEntries, errors, rawText) {
+      const invalidResolvedUrlCount = (items || []).reduce(function addInvalidResolvedUrls(totalInvalidCount, item) {
+        return totalInvalidCount + ((item.resolved || []).length - (item.validResolved || []).length);
+      }, 0);
+
+      const diagnosticLines = [
+        "INPUT CHARS: " + convertValueToString(rawText).length,
+        "RAW URL TOKENS: " + (items || []).length,
+        "FINAL URL COUNT: " + (finalUrls || []).length,
+        "DIGEST ENTRY COUNT: " + (digestEntries || []).length,
+        "INVALID RESOLVED URLS: " + invalidResolvedUrlCount
+      ];
+
+      if (errors && errors.length) {
+        diagnosticLines.push("", "PIPELINE ERRORS:");
+        errors.forEach(function appendPipelineError(errorMessage) {
+          diagnosticLines.push("- " + errorMessage);
+        });
+      }
+
+      return {
+        invalidCount: invalidResolvedUrlCount,
+        lines: diagnosticLines
+      };
+    }
+
+    // Fill each detected item with normalized, resolved, valid, and replacement URL data.
+    function populateResolvedDataForItems(items) {
+      if (debugApi) {
+        debugApi.functionIn("forensics-inline-pipeline.populateResolvedDataForItems", {
+          itemCount: items ? items.length : 0
+        });
+      }
+      (items || []).forEach(function inspectDetectedItem(item) {
+        if (debugApi && item && item.id <= 3) {
+          debugApi.loop("forensics inline resolving item", { itemId: item.id });
+        }
+        const peeledUrlToken = peel(item.original);
+        item.normalized = peeledUrlToken.value;
+        item.notes.push.apply(item.notes, peeledUrlToken.notes);
+
+        item.resolved = resolveURL(item.normalized);
+        item.validResolved = item.resolved.filter(isValidURL);
+
+        if (!item.validResolved.length) {
+          item.notes.push("NO_VALID_RESOLVED_URL");
+        }
+
+        item.replacementUrl = getPreferredReplacementUrl(item);
+      });
+
+      if (debugApi) {
+        debugApi.functionOut("forensics-inline-pipeline.populateResolvedDataForItems", {
+          itemCount: items ? items.length : 0
+        });
+      }
+      return items;
+    }
+
+    // High-level orchestration entry point for callers that want one combined analysis result.
+    function analyzeInput(input) {
+      if (debugApi) {
+        debugApi.functionIn("forensics-inline-pipeline.analyzeInput");
+      }
+      const payload = input || {};
+      const normalizedRawText = cleanInputText(payload.rawText || payload.text || "");
+      const sourceMarkup = convertValueToString(payload.sourceHtml || payload.html || "");
+      const pipelineErrors = [];
+      let detectedItems = [];
+
+      if (debugApi) {
+        debugApi.variable("forensics inline analyze input summary assigned", {
+          rawTextLength: normalizedRawText.length,
+          sourceHtmlLength: sourceMarkup.length,
+          mode: sourceMarkup ? "html" : "text"
+        });
+      }
+
+      try {
+        detectedItems = sourceMarkup ? detectUrlsFromHtml(sourceMarkup) : detectURLs(normalizedRawText);
+      } catch (detectionError) {
+        pipelineErrors.push("stageDetect: " + detectionError.message);
+        if (debugApi) {
+          debugApi.error("forensics inline pipeline detection failed", { message: detectionError.message });
+        }
+      }
+
+      try {
+        populateResolvedDataForItems(detectedItems);
+      } catch (resolutionError) {
+        pipelineErrors.push("stageResolve: " + resolutionError.message);
+        if (debugApi) {
+          debugApi.error("forensics inline pipeline resolution failed", { message: resolutionError.message });
+        }
+      }
+
+      const finalUrls = detectedItems
+        .map(function mapItemToReplacementUrl(item) {
+          return convertValueToString(item.replacementUrl).trim();
+        })
+        .filter(Boolean);
+      const changedUrls = buildChangedUrls(detectedItems);
+      const digestEntries = buildDigestEntries(normalizedRawText, detectedItems, { useReplacementUrlOnly: true });
+      const rewrittenMarkupResult = rewriteHtml(sourceMarkup || normalizedRawText, detectedItems);
+      const rewrittenText = htmlToText(rewrittenMarkupResult.html);
+      const diagnostics = buildDiagnostics(detectedItems, finalUrls, digestEntries, pipelineErrors, normalizedRawText);
+
+      if (debugApi) {
+        debugApi.pipeline("forensics inline pipeline analysis complete", {
+          itemCount: detectedItems.length,
+          finalUrlCount: finalUrls.length,
+          changedUrlCount: changedUrls.length,
+          digestEntryCount: digestEntries.length,
+          rewrittenCount: rewrittenMarkupResult.count,
+          errorCount: pipelineErrors.length
+        });
+        debugApi.functionOut("forensics-inline-pipeline.analyzeInput", {
+          finalUrlCount: finalUrls.length,
+          errorCount: pipelineErrors.length
+        });
+      }
+
+      return {
+        rawText: normalizedRawText,
+        sourceHtml: sourceMarkup,
+        items: detectedItems,
+        finalUrls: finalUrls,
+        changedUrls: changedUrls,
+        digestEntries: digestEntries,
+        rewrittenHtml: rewrittenMarkupResult.html,
+        rewrittenText: rewrittenText,
+        rewrittenCount: rewrittenMarkupResult.count,
+        diagnostics: diagnostics,
+        errors: pipelineErrors
+      };
+    }
+
+    return {
+      analyzeInput: analyzeInput,
+      buildChangedUrls: buildChangedUrls,
+      buildDiagnostics: buildDiagnostics,
+      buildDigestEntries: buildDigestEntries,
+      buildStandaloneFinalUrls: buildStandaloneFinalUrls,
+      cleanInputText: cleanInputText,
+      classify: classify,
+      decodeRepeated: decodeRepeated,
+      decodeValue: decodeValue,
+      detectURLs: detectURLs,
+      detectUrlsFromHtml: detectUrlsFromHtml,
+      escapeHtml: escapeHtml,
+      extractBaseUrl: extractBaseUrl,
+      extractFirstAbsoluteUrl: extractFirstAbsoluteUrl,
+      extractHost: extractHost,
+      extractOriginUrl: extractOriginUrl,
+      extractTracking: extractTracking,
+      extractTrackingCandidates: extractTrackingCandidates,
+      findNearbyTitle: findNearbyTitle,
+      firstUrlCandidate: firstUrlCandidate,
+      getPreferredReplacementUrl: getPreferredReplacementUrl,
+      htmlToText: htmlToText,
+      isLikelyTrackerHost: isLikelyTrackerHost,
+      isValidURL: isValidURL,
+      locateLineForOriginal: locateLineForOriginal,
+      normalizeLine: normalizeLine,
+      normalizeTextValue: normalizeTextValue,
+      normalizeTitle: normalizeTitle,
+      peel: peel,
+      populateResolvedDataForItems: populateResolvedDataForItems,
+      resolveURL: resolveURL,
+      resolveURLMinimalRecursive: resolveURLMinimalRecursive,
+      rewriteHtml: rewriteHtml,
+      rewriteHtmlForStandalonePreview: rewriteHtmlForStandalonePreview,
+      splitMerged: splitMerged,
+      validateTitle: validateTitle
+    };
+  }
+);
+</script>
+
+<!-- UI controller module: wires the editor, renders results, and keeps the pane interactions in sync. -->
+<script>
+(function initializeMergedLinkLabFromBaseHtml() {
+  "use strict";
+
+  const componentKit = typeof ComponentKit !== "undefined" ? ComponentKit : null;
+  const mergedLinkLabPipeline = typeof MergedLinkLabPipeline !== "undefined" ? MergedLinkLabPipeline : null;
+  const debugApi = typeof globalThis !== "undefined" ? globalThis.mergedLinkLabDebug : null;
+  if (debugApi && typeof debugApi.configure === "function") {
+    debugApi.configure({ context: "forensics-inline-ui", module: "app" });
+    debugApi.runtime("forensics inline UI initialization started");
+  }
+
+  if (!componentKit || !mergedLinkLabPipeline) {
+    if (debugApi) {
+      debugApi.error("forensics inline UI initialization aborted: required modules unavailable", {
+        hasComponentKit: !!componentKit,
+        hasPipeline: !!mergedLinkLabPipeline
+      });
+    }
+    return;
+  }
+
+  // Cache every interactive element once so the rest of the controller can stay focused on behavior.
+  const DOM = {
+    editor: document.getElementById("editor"),
+    runBtn: document.getElementById("runBtn"),
+    useRewrittenBtn: document.getElementById("useRewrittenBtn"),
+    copyFinalBtn: document.getElementById("copyFinalBtn"),
+    copyDigestBtn: document.getElementById("copyDigestBtn"),
+    toggleDebugBtn: document.getElementById("toggleDebugBtn"),
+    closeRewrittenBtn: document.getElementById("closeRewrittenBtn"),
+    detectedPane: document.getElementById("detectedPane"),
+    resolvedPane: document.getElementById("resolvedPane"),
+    finalPane: document.getElementById("finalPane"),
+    digestPane: document.getElementById("digestPane"),
+    rewrittenSidebar: document.getElementById("rewrittenSidebar"),
+    rewrittenPane: document.getElementById("rewrittenPane"),
+    diagnosticsPane: document.getElementById("diagnosticsPane"),
+    debugPane: document.getElementById("debugPane"),
+    inputSummary: document.getElementById("inputSummary"),
+    detectSummary: document.getElementById("detectSummary"),
+    resolveSummary: document.getElementById("resolveSummary"),
+    finalSummary: document.getElementById("finalSummary"),
+    digestSummary: document.getElementById("digestSummary"),
+    rewrittenSummary: document.getElementById("rewrittenSummary"),
+    diagnosticsSummary: document.getElementById("diagnosticsSummary"),
+    columns: Array.from(document.querySelectorAll(".merged-workspace .column"))
+  };
+
+  const sampleInput = [
+    "Weekly Reads",
+    "A better way to debug malformed links",
+    "https://tracker.example.com/?url=https%3A%2F%2Ftarget.example.com%2Farticle).",
+    "",
+    "Release Notes",
+    "https://site.example.com/new-feature>",
+    "",
+    "Broken protocol sample",
+    "https:/broken.example.com/path",
+    "",
+    "Stacked sample",
+    "https://site.com/pagehttps://site.com/page2"
+  ].join("\n");
+
+  // Check whether the editor is currently preserving pasted rich HTML.
+  function isEditorRichMode() {
+    return !!(DOM.editor && DOM.editor.dataset && DOM.editor.dataset.inputMode === "rich-html");
+  }
+
+  // Store the current editor mode so later input handling knows how to interpret content.
+  function setEditorMode(mode) {
+    if (!DOM.editor || !DOM.editor.dataset) {
+      return;
+    }
+
+    DOM.editor.dataset.inputMode = mode;
+  }
+
+  // Pasted HTML is sanitized before it enters the editor so unsafe markup never becomes executable.
+  function sanitizeEditorHtml(htmlMarkup) {
+    if (!htmlMarkup) {
+      return "";
+    }
+
+    const template = document.createElement("template");
+    template.innerHTML = String(htmlMarkup);
+
+    // Remove obviously unsafe container tags before the editor keeps any pasted markup.
+    template.content.querySelectorAll("script, style, link, meta, base, iframe, object, embed, form").forEach(function removeUnsafeNode(node) {
+      node.remove();
+    });
+
+    // Scrub inline event handlers and dangerous URL-bearing attributes from the remaining elements.
+    template.content.querySelectorAll("*").forEach(function sanitizeElement(element) {
+      Array.from(element.attributes).forEach(function sanitizeAttribute(attribute) {
+        const attributeName = String(attribute.name || "").toLowerCase();
+        const attributeValue = String(attribute.value || "");
+
+        if (attributeName.indexOf("on") === 0) {
+          element.removeAttribute(attribute.name);
+          return;
+        }
+
+        if (/^(href|src|action|poster|xlink:href)$/i.test(attribute.name)) {
+          const normalizedValue = attributeValue.trim().toLowerCase();
+          if (/^javascript:/i.test(normalizedValue)) {
+            element.removeAttribute(attribute.name);
+          }
+        }
+      });
+    });
+
+    return template.innerHTML;
+  }
+
+  // Load plain text into the editor and clear any preserved rich HTML source.
+  function setEditorPlainText(text) {
+    if (!DOM.editor) {
+      return;
+    }
+
+    DOM.editor.textContent = text || "";
+    setEditorMode("plain-text");
+
+    if (DOM.editor.dataset) {
+      DOM.editor.dataset.sourceHtml = "";
+    }
+  }
+
+  // Load sanitized rich HTML into the editor and remember the source markup.
+  function setEditorRichHtml(htmlMarkup, fallbackText) {
+    if (!DOM.editor) {
+      return;
+    }
+
+    const sanitizedHtml = sanitizeEditorHtml(htmlMarkup);
+
+    if (sanitizedHtml) {
+      DOM.editor.innerHTML = sanitizedHtml;
+      setEditorMode("rich-html");
+
+      if (DOM.editor.dataset) {
+        DOM.editor.dataset.sourceHtml = DOM.editor.innerHTML || sanitizedHtml;
+      }
+
+      return;
+    }
+
+    setEditorPlainText(fallbackText || "");
+  }
+
+  // Insert pasted HTML at the current cursor position inside the contenteditable editor.
+  function insertHtmlAtSelection(htmlMarkup) {
+    if (!DOM.editor || !htmlMarkup) {
+      return;
+    }
+
+    DOM.editor.focus();
+
+    // Use the built-in rich-text insertion path when available and fall back to direct range manipulation otherwise.
+    if (document.queryCommandSupported && document.queryCommandSupported("insertHTML")) {
+      document.execCommand("insertHTML", false, htmlMarkup);
+      return;
+    }
+
+    const selection = window.getSelection();
+    if (!selection || !selection.rangeCount) {
+      DOM.editor.innerHTML += htmlMarkup;
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
+    range.deleteContents();
+
+    const fragment = range.createContextualFragment(htmlMarkup);
+    const lastNode = fragment.lastChild;
+    range.insertNode(fragment);
+
+    if (lastNode) {
+      range.setStartAfter(lastNode);
+      range.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+  }
+
+  // Determine which pane should start expanded when the workspace loads.
+  function getDefaultExpandedPaneIds() {
+    const defaultExpandedColumn =
+      DOM.columns.find(function findExpandedColumn(column) {
+        return column && column.hasAttribute("data-default-expanded");
+      }) ||
+      DOM.columns.find(Boolean);
+    const paneId = getColumnPaneId(defaultExpandedColumn);
+
+    return paneId ? new Set([paneId]) : new Set();
+  }
+
+  const UIState = {
+    expandedPaneIds: getDefaultExpandedPaneIds()
+  };
+
+  // Convert plain text into safe HTML with line breaks for pane rendering.
+  function toRichText(text) {
+    return mergedLinkLabPipeline.escapeHtml(text).replace(/\n/g, "<br>");
+  }
+
+  // Write escaped rich text into a target pane.
+  function setRichText(targetElement, text) {
+    if (!targetElement) {
+      return;
+    }
+
+    targetElement.innerHTML = toRichText(text || "");
+  }
+
+  // The input payload preserves both plain text and rich HTML so the pipeline can choose the best detection path.
+  function getInputPayload() {
+    const rawText = DOM.editor ? DOM.editor.innerText || "" : "";
+    const rawHtml = DOM.editor ? DOM.editor.innerHTML || "" : "";
+    const preservedSourceHtml = DOM.editor && DOM.editor.dataset ? DOM.editor.dataset.sourceHtml || "" : "";
+    const looksLikeHtmlSource =
+      /<\s*html[\s>]/i.test(rawText) ||
+      /<\s*body[\s>]/i.test(rawText) ||
+      (/<[a-z][^>]*>/i.test(rawText) && /<\/[a-z][^>]*>/i.test(rawText));
+    const richSourceHtml = isEditorRichMode() ? rawHtml : "";
+
+    if (DOM.editor && DOM.editor.dataset && richSourceHtml) {
+      DOM.editor.dataset.sourceHtml = richSourceHtml;
+    }
+
+    return {
+      rawText: rawText,
+      cleanedText: mergedLinkLabPipeline.cleanInputText(rawText),
+      sourceHtml: looksLikeHtmlSource ? rawText : (richSourceHtml || preservedSourceHtml || "")
+    };
+  }
+
+  // Render the raw detected URL list into its output pane.
+  function renderDetected(items) {
+    const lines = items.map(function mapItem(item) {
+      return String(item.id) + ". " + item.original;
+    });
+
+    setRichText(DOM.detectedPane, lines.join("\n"));
+    componentKit.renderCount(DOM.detectSummary, "DETECTED", items.length);
+  }
+
+  // Render normalization, resolution, and notes for each detected item.
+  function renderResolved(items) {
+    const lines = [];
+
+    items.forEach(function addItemLines(item) {
+      lines.push("SOURCE " + item.id + ": " + item.original);
+      lines.push("NORMALIZED: " + item.normalized);
+      lines.push("RESOLVED: " + (item.resolved.length ? item.resolved.join(" | ") : "(none)"));
+      lines.push("VALID: " + (item.validResolved.length ? item.validResolved.join(" | ") : "(none)"));
+      lines.push("NOTES: " + (item.notes.length ? item.notes.join(", ") : "(none)"));
+      lines.push("");
+    });
+
+    setRichText(DOM.resolvedPane, lines.join("\n").trim());
+
+    const resolvedCount = items.reduce(function addResolvedCount(total, item) {
+      return total + item.resolved.length;
+    }, 0);
+
+    componentKit.renderCount(DOM.resolveSummary, "RESOLVED", resolvedCount);
+  }
+
+  // Render the final resolved URL list with compact host classification metadata.
+  function renderFinal(items) {
+    const finalUrls = mergedLinkLabPipeline.buildStandaloneFinalUrls(items);
+
+    if (DOM.finalPane) {
+      DOM.finalPane.innerHTML = finalUrls
+        .map(function mapFinalUrl(url) {
+          const host = mergedLinkLabPipeline.extractHost(url);
+          const linkType = mergedLinkLabPipeline.classify(host);
+          const originUrl = mergedLinkLabPipeline.extractOriginUrl(url);
+          const linkLabel = originUrl + " (" + linkType + ")";
+
+          return (
+            '<a href="' +
+            mergedLinkLabPipeline.escapeHtml(url) +
+            '" target="_blank" rel="noopener noreferrer">' +
+            mergedLinkLabPipeline.escapeHtml(linkLabel) +
+            "</a>"
+          );
+        })
+        .join("<br>");
+    }
+
+    componentKit.renderCount(DOM.finalSummary, "FINAL URLS", finalUrls.length);
+    return finalUrls;
+  }
+
+  // Render the digest summary entries used for email-friendly output.
+  function renderDigest(entries) {
+    if (DOM.digestPane) {
+      DOM.digestPane.innerHTML = entries
+        .map(function mapDigestEntry(entry) {
+          const safeTitle = mergedLinkLabPipeline.escapeHtml(entry.title);
+          const safeHost = mergedLinkLabPipeline.escapeHtml(entry.host || "unknown-host");
+          const safeType = mergedLinkLabPipeline.escapeHtml(entry.type || "destination");
+          const safeHref = mergedLinkLabPipeline.escapeHtml(entry.url);
+
+          return (
+            safeTitle +
+            ' (<a href="' +
+            safeHref +
+            '" target="_blank" rel="noopener noreferrer">' +
+            safeHost +
+            "</a> -> " +
+            safeType +
+            ")"
+          );
+        })
+        .join("<br><br>");
+    }
+
+    componentKit.renderCount(DOM.digestSummary, "DIGEST ITEMS", entries.length);
+  }
+
+  // Render the converted preview panel from the current source markup.
+  function renderRewrittenHtml(sourceMarkup) {
+    const rewrittenResult = mergedLinkLabPipeline.rewriteHtmlForStandalonePreview(sourceMarkup);
+
+    if (DOM.rewrittenPane) {
+      DOM.rewrittenPane.innerHTML = rewrittenResult.html;
+    }
+
+    componentKit.renderCount(DOM.rewrittenSummary, "REWRITTEN URLS", rewrittenResult.count || 0);
+  }
+
+  // Render the diagnostics and debug views from the current pipeline state.
+  function renderDiagnostics(items, finalUrls, digestEntries, errors, rawText) {
+    const diagnostics = mergedLinkLabPipeline.buildDiagnostics(items, finalUrls, digestEntries, errors, rawText);
+
+    setRichText(DOM.diagnosticsPane, diagnostics.lines.join("\n"));
+    componentKit.renderCount(DOM.diagnosticsSummary, "DIAGNOSTICS", diagnostics.lines.length);
+
+    const debugLines = [];
+    items.forEach(function addDebugLines(item) {
+      debugLines.push("ITEM " + item.id);
+      debugLines.push("  ORIGINAL: " + item.original);
+      debugLines.push("  NORMALIZED: " + item.normalized);
+      debugLines.push("  RESOLVED: " + item.resolved.join(" | "));
+      debugLines.push("  VALID: " + item.validResolved.join(" | "));
+      debugLines.push("  NOTES: " + (item.notes.join(", ") || "(none)"));
+    });
+
+    setRichText(DOM.debugPane, debugLines.join("\n"));
+  }
+
+  // This is the main UI workflow: collect input, resolve URLs, render panes, and surface diagnostics.
+  function runPipeline(options) {
+    if (debugApi) {
+      debugApi.functionIn("forensics-inline-ui.runPipeline", {
+        writeCleanedInput: !!(options && options.writeCleanedInput)
+      });
+    }
+    const optionBag = options || {};
+    const shouldWriteCleanedInput = !!optionBag.writeCleanedInput;
+    const payload = getInputPayload();
+    const errors = [];
+    let items = [];
+
+    if (debugApi) {
+      debugApi.variable("forensics inline UI input payload summary assigned", {
+        rawTextLength: payload.rawText.length,
+        cleanedTextLength: payload.cleanedText.length,
+        sourceHtmlLength: payload.sourceHtml.length,
+        mode: payload.sourceHtml ? "html" : "text"
+      });
+    }
+
+    if (shouldWriteCleanedInput && DOM.editor && payload.cleanedText !== payload.rawText && !isEditorRichMode()) {
+      setEditorPlainText(payload.cleanedText);
+      if (debugApi) {
+        debugApi.conditional("forensics inline cleaned input written back to editor", {
+          rawTextLength: payload.rawText.length,
+          cleanedTextLength: payload.cleanedText.length
+        });
+      }
+    }
+
+    componentKit.renderCount(
+      DOM.inputSummary,
+      "INPUT LINES",
+      payload.cleanedText ? payload.cleanedText.split("\n").length : 0
+    );
+
+    // Detection and resolution are isolated so each stage can fail independently and still surface diagnostics.
+    try {
+      items = payload.sourceHtml
+        ? mergedLinkLabPipeline.detectUrlsFromHtml(payload.sourceHtml)
+        : mergedLinkLabPipeline.detectURLs(payload.cleanedText);
+    } catch (error) {
+      errors.push("stageDetect: " + error.message);
+      if (debugApi) {
+        debugApi.error("forensics inline UI detect stage failed", {
+          message: error && error.message ? error.message : "unknown error"
+        });
+      }
+    }
+
+    try {
+      mergedLinkLabPipeline.populateResolvedDataForItems(items);
+    } catch (error) {
+      errors.push("stageResolve: " + error.message);
+      if (debugApi) {
+        debugApi.error("forensics inline UI resolve stage failed", {
+          message: error && error.message ? error.message : "unknown error"
+        });
+      }
+    }
+
+    // Once the pipeline state is ready, render every output pane from the same normalized item list.
+    renderDetected(items);
+    renderResolved(items);
+
+    const finalUrls = renderFinal(items);
+    const digestEntries = mergedLinkLabPipeline.buildDigestEntries(payload.cleanedText, items);
+
+    renderDigest(digestEntries);
+    renderRewrittenHtml(payload.sourceHtml || payload.cleanedText);
+    renderDiagnostics(items, finalUrls, digestEntries, errors, payload.rawText);
+    if (debugApi) {
+      debugApi.pipeline("forensics inline UI pipeline rendered", {
+        itemCount: items.length,
+        finalUrlCount: finalUrls.length,
+        digestEntryCount: digestEntries.length,
+        errorCount: errors.length
+      });
+      debugApi.functionOut("forensics-inline-ui.runPipeline", {
+        itemCount: items.length,
+        errorCount: errors.length
+      });
+    }
+  }
+
+  // Read the main pane ID associated with a workspace column.
+  function getColumnPaneId(column) {
+    const pane = column ? column.querySelector(".pane-edit, .pane-output, .pane-console") : null;
+    return pane ? pane.id : "";
+  }
+
+  // Apply expanded and collapsed CSS classes based on the current UI state.
+  function applyColumnExpansionState() {
+    DOM.columns.forEach(function updateColumnState(column) {
+      const paneId = getColumnPaneId(column);
+      const isExpanded = !!paneId && UIState.expandedPaneIds.has(paneId);
+
+      column.classList.toggle("is-expanded", isExpanded);
+      column.classList.toggle("is-collapsed-horizontal", !isExpanded);
+      column.classList.toggle("is-active", isExpanded);
+    });
+  }
+
+  // Check whether the converted preview sidebar is currently open.
+  function isRewrittenSidebarOpen() {
+    return !!(DOM.rewrittenSidebar && DOM.rewrittenSidebar.classList.contains("is-open"));
+  }
+
+  // Open or close the converted preview sidebar and sync button text.
+  function setRewrittenSidebarOpen(isOpen) {
+    if (!DOM.rewrittenSidebar || !DOM.useRewrittenBtn) {
+      if (debugApi) {
+        debugApi.conditional("forensics inline sidebar visibility skipped: required elements unavailable");
+      }
+      return;
+    }
+
+    DOM.rewrittenSidebar.classList.toggle("is-open", isOpen);
+    DOM.rewrittenSidebar.setAttribute("aria-hidden", String(!isOpen));
+    DOM.useRewrittenBtn.textContent = isOpen ? "Hide Converted Panel" : "Show Converted Panel";
+    if (debugApi) {
+      debugApi.ui("forensics inline rewritten sidebar visibility changed", { isOpen: !!isOpen });
+    }
+  }
+
+  // Close the converted preview sidebar using the shared state helper.
+  function closeRewrittenSidebar() {
+    setRewrittenSidebarOpen(false);
+  }
+
+  // Allow pane headers to control which workspace column is expanded.
+  function bindPaneCollapse() {
+    DOM.columns.forEach(function bindColumn(column) {
+      const title = column.querySelector(".pane-title");
+
+      if (!title) {
+        return;
+      }
+
+      title.addEventListener("click", function handleTitleClick(event) {
+        // Ignore button clicks, skip columns without a pane ID, and keep at least one column expanded at all times.
+        if (event.target && event.target.closest("button")) {
+          return;
+        }
+
+        const paneId = getColumnPaneId(column);
+        if (!paneId) {
+          return;
+        }
+
+        if (UIState.expandedPaneIds.has(paneId) && UIState.expandedPaneIds.size === 1) {
+          return;
+        }
+
+        UIState.expandedPaneIds.clear();
+        UIState.expandedPaneIds.add(paneId);
+        applyColumnExpansionState();
+      });
+    });
+  }
+
+  // Copy rich HTML first when possible and fall back to plain text so clipboard support stays broad.
+  async function copyElementRichThenPlain(target) {
+    if (debugApi) {
+      debugApi.functionIn("forensics-inline-ui.copyElementRichThenPlain", {
+        targetType: typeof target === "string" ? "id" : "element"
+      });
+    }
+    const copiedRich = await componentKit.copyRichFromElement(target);
+
+    if (!copiedRich) {
+      if (debugApi) {
+        debugApi.conditional("forensics inline copy falling back to plain text");
+      }
+      await componentKit.copyFromElement(target);
+    }
+    if (debugApi) {
+      debugApi.ui("forensics inline copy requested", { usedRichText: !!copiedRich });
+      debugApi.functionOut("forensics-inline-ui.copyElementRichThenPlain", { copied: true });
+    }
+  }
+
+  // Event bindings are collected here so startup remains easy to trace and maintain.
+  function bindEvents() {
+    if (debugApi) {
+      debugApi.functionIn("forensics-inline-ui.bindEvents");
+    }
+    if (DOM.runBtn) {
+      DOM.runBtn.addEventListener("click", function handleRunClick() {
+        if (debugApi) {
+          debugApi.ui("forensics inline run pipeline clicked");
+        }
+        runPipeline({ writeCleanedInput: true });
+      });
+    }
+
+    if (DOM.useRewrittenBtn) {
+      DOM.useRewrittenBtn.addEventListener("click", function handleSidebarToggle() {
+        const willOpen = !isRewrittenSidebarOpen();
+        if (debugApi) {
+          debugApi.ui("forensics inline rewritten sidebar toggled", { willOpen: willOpen });
+        }
+
+        if (willOpen) {
+          runPipeline({ writeCleanedInput: false });
+        }
+
+        setRewrittenSidebarOpen(willOpen);
+      });
+    }
+
+    if (DOM.closeRewrittenBtn) {
+      DOM.closeRewrittenBtn.addEventListener("click", function handleCloseRewrittenClick() {
+        if (debugApi) {
+          debugApi.ui("forensics inline rewritten sidebar close clicked");
+        }
+        closeRewrittenSidebar();
+      });
+    }
+
+    if (DOM.copyFinalBtn) {
+      DOM.copyFinalBtn.addEventListener("click", function handleCopyFinalClick() {
+        if (debugApi) {
+          debugApi.ui("forensics inline copy final clicked");
+        }
+        copyElementRichThenPlain(DOM.finalPane);
+      });
+    }
+
+    if (DOM.copyDigestBtn) {
+      DOM.copyDigestBtn.addEventListener("click", function handleCopyDigestClick() {
+        if (debugApi) {
+          debugApi.ui("forensics inline copy digest clicked");
+        }
+        copyElementRichThenPlain(DOM.digestPane);
+      });
+    }
+
+    if (DOM.toggleDebugBtn) {
+      DOM.toggleDebugBtn.addEventListener("click", function handleDebugToggleClick() {
+        if (debugApi) {
+          debugApi.ui("forensics inline legacy debug pane toggled");
+        }
+        componentKit.toggle(DOM.debugPane);
+      });
+    }
+
+    document.querySelectorAll("[data-copy]").forEach(function bindCopyButton(button) {
+      button.addEventListener("click", function handleCopyClick() {
+        const targetId = button.getAttribute("data-copy");
+        if (debugApi) {
+          debugApi.ui("forensics inline pane copy clicked", { targetId: targetId || "" });
+        }
+        copyElementRichThenPlain(targetId);
+      });
+    });
+
+    componentKit.bindLiveInput(DOM.editor, function handleLiveInput() {
+      if (debugApi) {
+        debugApi.ui("forensics inline editor input changed", {
+          isRichMode: isEditorRichMode(),
+          textLength: DOM.editor && DOM.editor.innerText ? DOM.editor.innerText.length : 0
+        });
+      }
+      if (isEditorRichMode() && DOM.editor && DOM.editor.dataset) {
+        DOM.editor.dataset.sourceHtml = DOM.editor.innerHTML || "";
+        if (debugApi) {
+          debugApi.variable("forensics inline source html snapshot length assigned", {
+            sourceHtmlLength: DOM.editor.dataset.sourceHtml.length
+          });
+        }
+      }
+
+      runPipeline({ writeCleanedInput: false });
+    });
+
+    if (DOM.editor) {
+      DOM.editor.addEventListener("paste", function handleEditorPaste(event) {
+        const clipboardData = event.clipboardData;
+        const htmlMarkup = clipboardData ? clipboardData.getData("text/html") : "";
+
+        if (!htmlMarkup) {
+          if (debugApi) {
+            debugApi.conditional("forensics inline paste skipped rich-html handling: no html markup");
+          }
+          return;
+        }
+
+        if (debugApi) {
+          debugApi.ui("forensics inline rich html pasted", { htmlMarkupLength: htmlMarkup.length });
+        }
+        event.preventDefault();
+        setEditorMode("rich-html");
+        insertHtmlAtSelection(sanitizeEditorHtml(htmlMarkup));
+
+        if (DOM.editor.dataset) {
+          DOM.editor.dataset.sourceHtml = DOM.editor.innerHTML || "";
+        }
+
+        runPipeline({ writeCleanedInput: false });
+      });
+    }
+
+    document.addEventListener("keydown", function handleEscape(event) {
+      if (event.key === "Escape") {
+        if (debugApi) {
+          debugApi.ui("forensics inline escape pressed");
+        }
+        closeRewrittenSidebar();
+      }
+    });
+    if (debugApi) {
+      debugApi.functionOut("forensics-inline-ui.bindEvents", { bound: true });
+    }
+  }
+
+  // Bootstrap seeds the editor, wires the UI, restores the default layout, and performs the first analysis.
+  function bootstrap() {
+    if (debugApi) {
+      debugApi.functionIn("forensics-inline-ui.bootstrap");
+    }
+    if (!DOM.editor) {
+      if (debugApi) {
+        debugApi.error("forensics inline bootstrap aborted: editor unavailable");
+        debugApi.functionOut("forensics-inline-ui.bootstrap", { bootstrapped: false });
+      }
+      return;
+    }
+
+    setEditorPlainText(sampleInput);
+    bindEvents();
+    bindPaneCollapse();
+    setRewrittenSidebarOpen(!!(DOM.rewrittenSidebar && DOM.rewrittenSidebar.hasAttribute("data-default-open")));
+    applyColumnExpansionState();
+    runPipeline({ writeCleanedInput: true });
+    if (debugApi) {
+      debugApi.runtime("forensics inline UI bootstrap complete", {
+        columnCount: DOM.columns.length,
+        hasRewrittenSidebar: !!DOM.rewrittenSidebar
+      });
+      debugApi.functionOut("forensics-inline-ui.bootstrap", { bootstrapped: true });
+    }
+  }
+
+  bootstrap();
+})();
+</script>
+</body>
+</html>

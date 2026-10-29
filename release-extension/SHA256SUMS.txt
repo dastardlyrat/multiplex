@@ -1,0 +1,3 @@
+# Source repository: https://github.com/dastardlyrat/multiplex
+# Source directory: lab/firefox-extension/
+ad3ef0c80d88466b7c2dded0824eb9520cbc638924312accea860c0b2835ba3a  url-forensics-workbench-0.3.0-firefox.zip
