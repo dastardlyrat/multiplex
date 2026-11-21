@@ -263,3 +263,11 @@ The three bundled Material Symbols fonts retain their embedded Google LLC
 copyright notices. Google's [Material Symbols guide](https://developers.google.com/fonts/docs/material_symbols)
 documents the upstream collection under Apache License 2.0. Those upstream
 notices remain separate from the project's package metadata.
+
+## Project directory and related work
+
+[Browse the dastardlyrat project directory](https://dastardlyrat.github.io/).
+
+- [modular-recursive-plugin-pipeline](https://github.com/dastardlyrat/modular-recursive-plugin-pipeline)
+- [WindowsFirewallDashboard](https://github.com/dastardlyrat/WindowsFirewallDashboard)
+- [this-repository-machine-interface](https://github.com/dastardlyrat/this-repository-machine-interface)
