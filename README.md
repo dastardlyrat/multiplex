@@ -271,3 +271,7 @@ notices remain separate from the project's package metadata.
 - [modular-recursive-plugin-pipeline](https://github.com/dastardlyrat/modular-recursive-plugin-pipeline)
 - [WindowsFirewallDashboard](https://github.com/dastardlyrat/WindowsFirewallDashboard)
 - [this-repository-machine-interface](https://github.com/dastardlyrat/this-repository-machine-interface)
+
+## Public cross-repository discovery
+
+**Public research directory:** [topic map](https://dastardlyrat.github.io/research.html) · [machine-oriented navigation](https://dastardlyrat.github.io/machine.html) · [dated structured catalog](https://dastardlyrat.github.io/research-index.json). The directory indexes public entry points for source-led study; it is not a license override, consent to personal-methodology fingerprinting, or runtime authorization.
